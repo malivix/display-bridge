@@ -3,6 +3,10 @@
 Change monitor inputs normally. The menu reports the current profile, speaker, rotation,
 and recovery state. Physical switching and DDC delays vary; it is not an instantaneous switch.
 
+The status window is resizable. Choose Standard, Large, or Largest status text; this
+changes only this app, not monitor resolution or other applications. Long status content
+remains scrollable.
+
 ## Controls
 
 - **Pause / Resume:** temporarily stop automatic reconciliation, including a timed pause.
@@ -22,7 +26,9 @@ request. Preference acknowledgement does not claim physical effects or audible s
 Results survive a menu restart; the last 20 observed requests are retained locally.
 A newer request supersedes unfinished older settings work. Last-known
 labels and report age identify details that may be stale. Clicking a failure notification
-opens the status window.
+opens the status window. Repeated alerts for the same incident are suppressed until
+recovery; distinct failure categories can alert separately. An outdated repair notification
+opens status instead of issuing repair.
 
 Closing the menu does not stop the controller. A command timeout is not proof that no changes
 occurred; check status before retrying. Avoid manual configuration edits during a preview.

@@ -2,6 +2,7 @@
 import AppKit
 import UserNotifications
 import Darwin
+import CryptoKit
 
 struct CommandResult {
     let output: String
@@ -208,10 +209,33 @@ func timingSummary(_ json:String)->String {
     return lines.joined(separator:"\n")
 }
 
-func notificationDecision(_ state:String,_ fresh:Bool,_ sent:Bool)->String {
-    if !fresh{return "none"}
-    if state=="ready" || state=="inactive-setup" {return "clear"}
-    return (state=="degraded" || state=="state-error" || state=="preview-needs-repair") && !sent ? "send":"none"
+func failureIncident(_ health:[String:Any])->String? {
+    let state=health["status"] as? String ?? ""
+    guard ["degraded","state-error","preview-needs-repair"].contains(state) else{return nil}
+    let recovery=health["recovery"] as? [String:Any] ?? [:]
+    let preview=health["preview"] as? [String:Any] ?? [:]
+    // Do not fingerprint timestamps or attempt counters: retries are the same incident.
+    let origin=(health["error"] as? String ?? "").components(separatedBy:":").first ?? ""
+    let fields=[state,health["profile"] as? String ?? "",recovery["reason"] as? String ?? "",
+                state=="state-error" ? origin:"",preview["token"] as? String ?? ""]
+    let data=(try? JSONSerialization.data(withJSONObject:fields)) ?? Data()
+    return SHA256.hash(data:data).map{String(format:"%02x",$0)}.joined()
+}
+struct FailureAlerts {
+    struct Attempt {let id:UUID;let incident:String}
+    var sent:[String]=[]
+    var pending:Attempt?
+    mutating func reserve(_ incident:String)->Attempt? {
+        guard pending==nil,!sent.contains(incident),sent.count<16 else{return nil}
+        let attempt=Attempt(id:UUID(),incident:incident);pending=attempt;return attempt
+    }
+    func current(_ attempt:Attempt)->Bool {pending?.id==attempt.id}
+    mutating func finish(_ attempt:Attempt,success:Bool) {
+        guard current(attempt) else{return}
+        if success {sent.append(attempt.incident)}
+        pending=nil
+    }
+    mutating func clear() {sent=[];pending=nil}
 }
 if CommandLine.arguments.contains("--self-test") {
     let commandStarted=ProcessInfo.processInfo.systemUptime
@@ -266,14 +290,31 @@ if CommandLine.arguments.contains("--self-test") {
     precondition(ddcSummary("{\"episodes\":[],\"ddc_interruptions\":0}").contains("No interruptions recorded"))
     let ddc=ddcSummary("{\"ddc_interruptions\":1,\"episodes\":[{\"started\":\"now\",\"monitor\":\"benq\",\"seconds\":1.25,\"recovered\":\"later\"}]}")
     precondition(ddc.contains("Read recovered · 1.25 s") && ddc.contains("benq"))
-    precondition(notificationDecision("degraded",true,false)=="send")
-    precondition(notificationDecision("state-error",true,false)=="send")
-    precondition(notificationDecision("state-error",true,true)=="none")
-    precondition(notificationDecision("degraded",true,true)=="none")
-    precondition(notificationDecision("degraded",false,false)=="none")
-    for state in ["recovering","settling","paused","waiting-for-ddc"] {precondition(notificationDecision(state,true,false)=="none")}
-    precondition(notificationDecision("ready",true,true)=="clear")
-    precondition(notificationDecision("inactive-setup",true,true)=="clear")
+    var alerts=FailureAlerts()
+    let broken:[String:Any]=["status":"degraded","profile":"pg","recovery":["reason":"audio"]]
+    let first=failureIncident(broken)!
+    var retry=broken;retry["updated_at"]=123;retry["recovery"]=["reason":"audio","attempts":3]
+    precondition(failureIncident(retry)==first)
+    for state in ["ready","recovering","settling","paused","waiting-for-ddc","inactive-setup"] {
+        precondition(failureIncident(["status":state])==nil)
+    }
+    let attempt=alerts.reserve(first)!
+    precondition(alerts.reserve(first)==nil)
+    alerts.finish(attempt,success:false)
+    let retryAttempt=alerts.reserve(first)!
+    alerts.finish(retryAttempt,success:true)
+    precondition(alerts.reserve(first)==nil)
+    let different=failureIncident(["status":"state-error","error":"control.json: invalid"])!
+    precondition(different != first)
+    let second=alerts.reserve(different)!
+    alerts.clear()
+    let afterRecovery=alerts.reserve(first)!
+    alerts.finish(second,success:true)
+    precondition(alerts.current(afterRecovery) && alerts.sent.isEmpty)
+    alerts.finish(afterRecovery,success:true)
+    var restartedAlerts=FailureAlerts(sent:alerts.sent)
+    precondition(restartedAlerts.reserve(first)==nil)
+    print("PASS distinct incidents, retry deduplication, failed delivery and late callbacks")
     precondition(timingSummary("{\"profiles\":{}}").contains("No completed transitions"))
     precondition(timingSummary("invalid").contains("could not be read"))
     let timing=timingSummary("{\"profiles\":{\"extended\":{\"count\":4,\"seconds\":{\"total\":{\"median\":2,\"max\":5,\"count\":3}}}}}")
@@ -296,6 +337,7 @@ if CommandLine.arguments.contains("--test-notification") {
 final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotificationCenterDelegate {
     let root=FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".config/display-auto")
     let command=FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".local/bin/display-auto.sh")
+    let demo=CommandLine.arguments.contains("--demo") || Bundle.main.object(forInfoDictionaryKey:"DisplayBridgeDemo") as? Bool == true
     var item:NSStatusItem!
     var timer:Timer?
     var panel:NSWindow?
@@ -308,15 +350,23 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
     var operationName=""
     var operationResult=""
     var menuOpen=false
+    var failureAlerts=FailureAlerts(sent:Array((UserDefaults.standard.stringArray(forKey:"failureIncidents") ?? []).prefix(16)))
     func applicationShouldHandleReopen(_ sender:NSApplication,hasVisibleWindows flag:Bool)->Bool {showPanel();return true}
     func showPanel() {
         if panel==nil {
-            let window=NSWindow(contentRect:NSRect(x:0,y:0,width:600,height:480),styleMask:[.titled,.closable],backing:.buffered,defer:false)
-            window.title="Display Auto";window.isReleasedWhenClosed=false;window.center()
-            let scroll=NSScrollView(frame:NSRect(x:20,y:96,width:560,height:362));scroll.hasVerticalScroller=true;scroll.autohidesScrollers=true
-            let text=NSTextView(frame:scroll.bounds);text.isEditable=false;text.isSelectable=true;text.font=NSFont.systemFont(ofSize:14)
+            let window=NSWindow(contentRect:NSRect(x:0,y:0,width:640,height:600),styleMask:[.titled,.closable,.resizable,.miniaturizable],backing:.buffered,defer:false)
+            window.title=demo ? "Display Bridge — Demo":"Display Auto";window.isReleasedWhenClosed=false;window.minSize=NSSize(width:600,height:480);window.center()
+            let scroll=NSScrollView(frame:NSRect(x:20,y:138,width:600,height:440));scroll.hasVerticalScroller=true;scroll.autohidesScrollers=true
+            scroll.autoresizingMask=[.width,.height]
+            let text=NSTextView(frame:scroll.bounds);text.isEditable=false;text.isSelectable=true;text.font=NSFont.systemFont(ofSize:CGFloat([16,20,24][textSizeIndex()]))
             text.drawsBackground=false;text.isVerticallyResizable=true;text.isHorizontallyResizable=false;text.textContainer?.widthTracksTextView=true
+            text.setAccessibilityLabel("Display status and command results")
             scroll.documentView=text;window.contentView?.addSubview(scroll);panelText=text;panel=window
+            let label=NSTextField(labelWithString:"Text size")
+            label.frame=NSRect(x:20,y:103,width:130,height:24);window.contentView?.addSubview(label)
+            let sizes=NSSegmentedControl(labels:["Standard","Large","Largest"],trackingMode:.selectOne,target:self,action:#selector(changeTextSize(_:)))
+            sizes.frame=NSRect(x:170,y:98,width:350,height:32);sizes.selectedSegment=textSizeIndex()
+            sizes.setAccessibilityLabel("Status text size");window.contentView?.addSubview(sizes)
             let button=NSButton(title:"Open controls",target:self,action:#selector(openControls(_:)))
             button.frame=NSRect(x:20,y:16,width:140,height:28);window.contentView?.addSubview(button)
             for (index,title,action) in [(0,"Check health","doctor"),(1,"Save diagnostics","diagnostics")] {
@@ -332,25 +382,40 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
         }
         refresh();panel?.makeKeyAndOrderFront(nil);NSApp.activate(ignoringOtherApps:true)
     }
+    func textSizeIndex()->Int {min(2,max(0,UserDefaults.standard.integer(forKey:"statusTextSize")))}
+    @objc func changeTextSize(_ sender:NSSegmentedControl) {
+        let index=min(2,max(0,sender.selectedSegment))
+        if !demo {UserDefaults.standard.set(index,forKey:"statusTextSize")}
+        panelText?.font=NSFont.systemFont(ofSize:CGFloat([16,20,24][index]))
+    }
     @objc func openControls(_ sender:NSButton){refresh();item.menu?.popUp(positioning:nil,at:NSPoint(x:0,y:sender.bounds.height),in:sender)}
     @objc func panelAction(_ sender:NSButton){if let action=sender.identifier?.rawValue {
         if action=="preview-keep" || action=="preview-revert" {if let token=previewToken {execute([action,"--token",token])}}
         else {execute([action])}
     }}
     func read(_ name:String)->[String:Any] {
+        if demo {
+            if name=="health.json" {return ["host":"A","version":"Demo","updated_at":Date().timeIntervalSince1970,
+                "status":"ready","profile":"extended","inputs":["pg":17,"benq":19],
+                "rotation":["enabled":true,"sensor_degrees":90],"audio":["selected":["name":"Example monitor speakers"]]]}
+            return [:]
+        }
         guard let data=try? Data(contentsOf:root.appendingPathComponent(name)),let value=try? JSONSerialization.jsonObject(with:data) as? [String:Any] else{return [:]};return value
     }
     func applicationDidFinishLaunching(_ notification:Notification) {
         NSApp.setActivationPolicy(.accessory)
         item=NSStatusBar.system.statusItem(withLength:NSStatusItem.variableLength)
         item.button?.image=NSImage(systemSymbolName:"display.2",accessibilityDescription:"Display Auto")
+        if !demo {
         UNUserNotificationCenter.current().delegate=self
         let repair=UNNotificationAction(identifier:"repair",title:"Repair audio",options:[])
         let inspect=UNNotificationAction(identifier:"inspect",title:"Check health",options:[])
         UNUserNotificationCenter.current().setNotificationCategories([UNNotificationCategory(identifier:"failure",actions:[repair],intentIdentifiers:[],options:[]),UNNotificationCategory(identifier:"state-failure",actions:[inspect],intentIdentifiers:[],options:[])])
+        }
         timer=Timer(timeInterval:2,repeats:true){[weak self] _ in self?.refresh()}
         if let timer=timer {RunLoop.main.add(timer,forMode:.common)}
         refresh()
+        if demo {showPanel();return}
         UNUserNotificationCenter.current().getNotificationSettings { settings in
             if settings.authorizationStatus == .notDetermined {
                 UNUserNotificationCenter.current().requestAuthorization(options:[.alert]){_,error in
@@ -381,7 +446,14 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
         if !progress.isEmpty {detail=progress+"\n\n"+detail}
         let lastPreview=read("preview-status.json")
         if !state.hasPrefix("preview-"),let error=lastPreview["error"] as? String {detail += "\n\nLast size preview: \(error)"}
-        if panelText?.string != detail {panelText?.string=detail}
+        if let text=panelText,text.string != detail {
+            let selection=text.selectedRange()
+            let origin=text.enclosingScrollView?.contentView.bounds.origin
+            text.string=detail
+            let length=(detail as NSString).length
+            if selection.location<=length {text.setSelectedRange(NSRange(location:selection.location,length:min(selection.length,length-selection.location)))}
+            if let origin=origin {text.enclosingScrollView?.contentView.scroll(to:origin)}
+        }
         for button in panelActions {button.isEnabled = !busy}
         let preview=health["preview"] as? [String:Any] ?? [:]
         previewToken=preview["token"] as? String
@@ -390,10 +462,12 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
             if action=="preview-options" {button.isEnabled = !busy && fresh && state=="ready" && health["profile"] as? String == "extended" && !automationPaused(control)}
             else {button.isEnabled = !busy && fresh && previewToken != nil && preview["state"] as? String == "preview" && previewRemaining(health)>0}
         }
+        if !demo {
         notify(health,fresh:fresh)
         UNUserNotificationCenter.current().getNotificationSettings { settings in
             let data:[String:Any]=["updated_at":Date().timeIntervalSince1970,"pid":ProcessInfo.processInfo.processIdentifier,"app_version":Bundle.main.object(forInfoDictionaryKey:"CFBundleShortVersionString") as? String ?? "unknown","notification_authorization":settings.authorizationStatus.rawValue,"status":state]
             if let bytes=try? JSONSerialization.data(withJSONObject:data){try? bytes.write(to:self.root.appendingPathComponent("menu-health.json"),options:.atomic)}
+        }
         }
         if menuOpen{return}
         let menu=NSMenu();menu.delegate=self
@@ -476,6 +550,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
     func execute(_ args:[String]) {
         if args==["panel"]{showPanel();return}
         if args==["quit"]{NSApp.terminate(nil);return}
+        if demo {message("Hardware-free demo","This preview uses synthetic status. Monitor, audio, diagnostic and notification actions are disabled.");return}
         if args==["notifications"] {
             UNUserNotificationCenter.current().requestAuthorization(options:[.alert]){granted,error in
                 DispatchQueue.main.async {self.message(granted ? "Failure notifications enabled":"Notifications are disabled",error?.localizedDescription ?? "You can change this in System Settings → Notifications → Display Auto.")}
@@ -554,25 +629,44 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
         guard fresh else{return}
         let defaults=UserDefaults.standard
         let state=health["status"] as? String ?? ""
-        let decision=notificationDecision(state,fresh,defaults.string(forKey:"failureNotified") != nil)
-        if decision=="clear" {defaults.removeObject(forKey:"failureNotified");return}
-        guard decision=="send" else{return}
+        let center=UNUserNotificationCenter.current()
+        if state=="ready" || state=="inactive-setup" {
+            if !failureAlerts.sent.isEmpty || failureAlerts.pending != nil {
+                failureAlerts.clear();defaults.removeObject(forKey:"failureIncidents")
+                center.removePendingNotificationRequests(withIdentifiers:["display-recovery"])
+                center.removeDeliveredNotifications(withIdentifiers:["display-recovery"])
+            }
+            return
+        }
+        guard let incident=failureIncident(health),let attempt=failureAlerts.reserve(incident) else{return}
         let r=health["recovery"] as? [String:Any] ?? [:]
         let content=UNMutableNotificationContent();content.title="Display Auto needs attention"
         content.body=health["error"] as? String ?? r["error"] as? String ?? "Recovery stopped after three attempts. Open the display menu for details."
         content.categoryIdentifier=state=="state-error" || state=="preview-needs-repair" ? "state-failure":"failure"
-        UNUserNotificationCenter.current().getNotificationSettings{settings in
-            guard settings.authorizationStatus == .authorized else{return}
-            defaults.set("sent",forKey:"failureNotified")
-            UNUserNotificationCenter.current().add(UNNotificationRequest(identifier:"display-recovery",content:content,trigger:nil)){error in
-                if error != nil {defaults.removeObject(forKey:"failureNotified")}
+        content.userInfo=["incident":incident]
+        center.getNotificationSettings{settings in
+            DispatchQueue.main.async {
+                guard self.failureAlerts.current(attempt) else{return}
+                let current=self.read("health.json")
+                guard settings.authorizationStatus == .authorized,statusFresh(current),failureIncident(current)==incident else {
+                    self.failureAlerts.finish(attempt,success:false);return
+                }
+                center.add(UNNotificationRequest(identifier:"display-recovery",content:content,trigger:nil)){error in
+                    DispatchQueue.main.async {
+                        self.failureAlerts.finish(attempt,success:error==nil)
+                        defaults.set(self.failureAlerts.sent,forKey:"failureIncidents")
+                    }
+                }
             }
         }
     }
     func userNotificationCenter(_ center:UNUserNotificationCenter,didReceive response:UNNotificationResponse,withCompletionHandler completionHandler:@escaping ()->Void){
         if let command=notificationCommand(response.actionIdentifier) {
             DispatchQueue.main.async {
-                if self.busy {self.showPanel()}
+                let health=self.read("health.json")
+                let incident=response.notification.request.content.userInfo["incident"] as? String
+                let staleRepair=command=="repair-audio" && (incident==nil || !statusFresh(health) || failureIncident(health) != incident)
+                if self.busy || staleRepair {self.showPanel()}
                 else {self.execute([command])}
                 completionHandler()
             }

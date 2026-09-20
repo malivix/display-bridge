@@ -50,3 +50,12 @@ is not a physical display/audio test. Preserve upstream attribution when editing
 machine and are excluded from Git. Diagnostic reports, backups, and hardware inventories stay
 local. Review release archives independently; Git ignore rules do not sanitize arbitrary ZIPs.
 See [security](../SECURITY.md), [installation](install.md), and [qualification](qualification.md).
+
+## UI preview
+
+The compiled menu executable accepts `--demo` (or a test bundle with `DisplayBridgeDemo`
+set to true). It uses synthetic status, blocks all backend commands and notification
+requests, and does not write the controller heartbeat or save text preferences. This
+allows layout/accessibility inspection without installing or controlling monitors. Build
+with the same macOS 13 deployment target used by `scripts/verify`; the compiler default
+may target a newer OS than the development machine. Local preview bundles stay ignored.

@@ -128,3 +128,8 @@ and Support summary. Select a report and choose **Refresh**. Read-only reports r
 timestamped, selectable snapshots until refreshed or replaced; they are not polled in the
 background. Live status continues updating when selected. Support summaries still require
 review before sharing; no report is uploaded automatically.
+
+Transition timing shows median, nearest-rank p95, slowest value, and each phase's own sample
+count. Profiles with only failed attempts remain visible. Failed attempts may include retries;
+they are not a count of failed physical switches. Small samples and application-only timing
+cannot establish overall physical switching performance. Missing older fields stay unavailable.

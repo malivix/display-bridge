@@ -319,18 +319,24 @@ func ddcSummary(_ json:String)->String {
 func timingSummary(_ json:String)->String {
     guard let data=json.data(using:.utf8),let report=(try? JSONSerialization.jsonObject(with:data)) as? [String:Any],let profiles=report["profiles"] as? [String:[String:Any]] else{return "Timing report could not be read. Save a diagnostic report for details."}
     if report["history_available"] as? Bool == false {return "Transition history is unavailable or exceeds the read limit. Save private diagnostics to inspect it; no timing conclusion can be drawn."}
-    var lines=["Measured application time — median / slowest"]
+    var lines=["Measured application time — median / p95 / slowest"]
     for (key,label) in [("extended","Both monitors here"),("pg","Only PG here"),("benq","Only BenQ here"),("away","Both monitors away")] {
         guard let profile=profiles[key],let phases=profile["seconds"] as? [String:[String:Any]] else{continue}
         lines.append("\n\(label)")
+        if let count=profile["count"] as? Int,count>=0 {lines.append("Completed records: \(count)")}
+        if let failed=profile["failed_attempts"] as? Int,failed>=0 {lines.append("Failed attempts: \(failed) (may include retries)")}
+        if phases.isEmpty {lines.append("No completed phase timings available.")}
         for (phase,name) in [("total","Application total"),("rotation_check","Rotation check and change"),("layout_apply","Layout application"),("input_confirmation","Input recheck"),("audio","Audio recovery"),("settling","Initial stable-read interval")] {
-            guard let stats=phases[phase],let median=stats["median"] as? Double,let maximum=stats["max"] as? Double else{continue}
-            let count=stats["count"] as? Int ?? profile["count"] as? Int ?? 0
-            lines.append(String(format:"%@: %.2f / %.2f s (%d samples)",name,median,maximum,count))
+            guard let stats=phases[phase],let median=stats["median"] as? Double,let maximum=stats["max"] as? Double,median.isFinite,maximum.isFinite,median>=0,maximum>=0 else{continue}
+            let count=stats["count"] as? Int
+            let sampleText=count.map{$0>=0 ? "\($0) samples":"sample count unavailable"} ?? "sample count unavailable"
+            let percentile=stats["p95"] as? Double
+            let p95=percentile.map{$0.isFinite && $0>=0 ? String(format:"%.2f",$0):"unavailable"} ?? "unavailable"
+            lines.append(String(format:"%@: %.2f / %@ / %.2f s (%@)",name,median,p95,maximum,sampleText))
         }
     }
     if profiles.isEmpty{lines.append("\nNo completed transitions recorded yet.")}
-    lines.append("\nPhysical input-switch time before the first valid reading is not measured. The stable-read interval is separate from application time. Older records lack the rotation/layout breakdown. Sound still requires listening.")
+    lines.append("\nPhysical input-switch time before the first valid reading is not measured. The stable-read interval is separate from application time. p95 is the nearest-rank 95th percentile; small samples are not a reliable performance baseline. Older records lack the rotation/layout breakdown. Sound still requires listening.")
     return lines.joined(separator:"\n")
 }
 
@@ -510,7 +516,11 @@ if CommandLine.arguments.contains("--self-test") {
     precondition(timingSummary("{\"history_available\":false,\"profiles\":{}}").contains("no timing conclusion"))
     precondition(timingSummary("invalid").contains("could not be read"))
     let timing=timingSummary("{\"profiles\":{\"extended\":{\"count\":4,\"seconds\":{\"total\":{\"median\":2,\"max\":5,\"count\":3}}}}}")
-    precondition(timing.contains("Both monitors here") && timing.contains("2.00 / 5.00 s (3 samples)"))
+    precondition(timing.contains("Both monitors here") && timing.contains("2.00 / unavailable / 5.00 s (3 samples)"))
+    let failures=timingSummary("{\"profiles\":{\"benq\":{\"count\":0,\"failed_attempts\":3,\"seconds\":{}}}}")
+    precondition(failures.contains("Failed attempts: 3") && failures.contains("No completed phase timings"))
+    let percentiles=timingSummary("{\"profiles\":{\"pg\":{\"count\":5,\"seconds\":{\"total\":{\"median\":2,\"p95\":4,\"max\":5,\"count\":4}}}}}")
+    precondition(percentiles.contains("2.00 / 4.00 / 5.00 s (4 samples)"))
     print("PASS notification policy: persistent failure only, deduplication, freshness and re-arm")
     exit(0)
 }

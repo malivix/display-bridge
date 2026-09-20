@@ -123,6 +123,18 @@ class Features(unittest.TestCase):
             o.record(root,{'profile':'pg','result':'failed','seconds':{'total':100}})
             result=o.summary(root);self.assertEqual(result['retained_events'],200)
             self.assertEqual(result['profiles']['pg']['count'],199);self.assertEqual(result['profiles']['pg']['seconds']['total']['mean'],2)
+    def test_timing_summary_retains_failures_and_phase_sample_counts(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root=Path(temp)
+            o.record(root,{'profile':'benq','result':'failed'})
+            for total in [1,2,3,4]:o.record(root,{'profile':'pg','result':'ready','seconds':{'total':total}})
+            o.record(root,{'profile':'pg','result':'ready','seconds':{'audio':1}})
+            report=o.summary(root)['profiles']
+            self.assertEqual(report['benq'],{'count':0,'failed_attempts':1,'seconds':{}})
+            self.assertEqual(report['pg']['seconds']['total']['count'],4)
+            self.assertEqual(report['pg']['seconds']['audio']['count'],1)
+            self.assertEqual(report['pg']['seconds']['total']['p95'],4)
+
     def test_diagnostics_are_local_private_and_tolerate_missing_files(self):
         with tempfile.TemporaryDirectory() as temp:
             root=Path(temp);path=o.diagnostics(root,root)

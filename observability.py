@@ -26,12 +26,13 @@ def summary(root):
     result={}
     for profile in ('pg','benq','extended','away'):
         samples=[r for r in rows if r.get('profile')==profile and r.get('result')=='ready']
-        if not samples:continue
+        failed=sum(r.get('profile')==profile and r.get('result')=='failed' for r in rows)
+        if not samples and not failed:continue
         phases={}
         for phase in ('settling','rotation_check','layout_apply','layout','input_confirmation','audio','total'):
             values=sorted(v for r in samples if isinstance(r.get('seconds'),dict) for v in [r['seconds'].get(phase)] if type(v) in (int,float) and math.isfinite(v) and v>=0)
             if values:phases[phase]={'count':len(values),'mean':round(statistics.mean(values),3),'max':round(max(values),3),'median':round(statistics.median(values),3),'p95':round(values[math.ceil(.95*len(values))-1],3)}
-        result[profile]={'count':len(samples),'seconds':phases}
+        result[profile]={'count':len(samples),'failed_attempts':failed,'seconds':phases}
     return {'history_available':isinstance(source,list),'retained_events':len(rows),'profiles':result,'note':'Total is application time only. Settling measures first valid candidate to its second matching read; physical switching and time before the first valid read are unmeasured. Rotation check includes preflight and any rotation; Layout application includes its fresh input preflight; layout includes rotation check plus layout application. Each phase has its own sample count; p95 uses nearest rank. Software readback does not prove sound.'}
 
 def diagnostics(root, bin_dir):

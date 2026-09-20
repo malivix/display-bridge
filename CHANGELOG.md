@@ -5,6 +5,7 @@
 - Separate native sources, unit tests, native tests, and physical tests.
 - Share an isolated test command with the import-safe installer.
 - Bound menu commands by deadline and output size.
+- Show command progress, status age, and last-known labels; open status from failure notifications.
 - Reject oversized request timestamps without blocking preview restoration.
 - Validate backup payloads before restoration and roll back controller/menu together.
 - Clarify installation, usage, troubleshooting, development, and qualification docs.

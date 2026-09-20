@@ -66,14 +66,44 @@ func automationPaused(_ control:[String:Any],_ now:Double=Date().timeIntervalSin
     let until=control["pause_until"] as? Double ?? 0
     return control["paused"] as? Bool == true && (until==0 || until>now)
 }
+// Presentation only: hardware authorization remains in the controller.
+func statusFresh(_ health:[String:Any],_ now:Double=Date().timeIntervalSince1970)->Bool {
+    guard let updated=health["updated_at"] as? Double,updated.isFinite,now.isFinite else{return false}
+    return now>=updated && now-updated<15
+}
+func statusAge(_ health:[String:Any],_ now:Double=Date().timeIntervalSince1970)->String {
+    guard let updated=health["updated_at"] as? Double,updated.isFinite,now.isFinite,now>=updated else{return "Status age unavailable"}
+    let age=min(now-updated,31536000)
+    return "Last report: \(Int(age)) seconds ago"
+}
+func detailPrefix(_ health:[String:Any],_ control:[String:Any],_ now:Double=Date().timeIntervalSince1970)->String {
+    statusFresh(health,now) && health["status"] as? String == "ready" && !automationPaused(control,now) ? "":"Last known · "
+}
+func operationTitle(_ action:String)->String {
+    let names=["doctor":"Checking health","diagnostics":"Saving diagnostics","history":"Reading transition history",
+        "ddc-history":"Reading monitor history","preview-options":"Inspecting size choices","monitor-settings":"Reading monitor settings",
+        "monitor-adjust":"Adjusting monitor settings","preview-start":"Requesting size preview","preview-keep":"Requesting saved size",
+        "preview-revert":"Requesting size restoration","preview-repair":"Requesting restoration retry",
+        "repair-audio":"Requesting audio repair","pause":"Requesting pause","pause-for":"Requesting timed pause",
+        "resume":"Requesting resume","audio-manual":"Saving audio override","audio-auto":"Requesting automatic audio",
+        "speaker":"Saving speaker preference","rotation-auto":"Enabling automatic rotation","rotation-manual":"Disabling automatic rotation"]
+    return names[action] ?? "Running command"
+}
+func notificationCommand(_ identifier:String)->String? {
+    switch identifier {
+    case UNNotificationDefaultActionIdentifier:return "panel"
+    case "repair":return "repair-audio"
+    case "inspect":return "doctor"
+    default:return nil
+    }
+}
 func previewRemaining(_ health:[String:Any],_ now:Double=Date().timeIntervalSince1970)->Int {
     let age=now-(health["updated_at"] as? Double ?? 0)
     guard age>=0 && age<15,let preview=health["preview"] as? [String:Any],preview["state"] as? String == "preview",let remaining=preview["remaining_seconds"] as? Double,remaining.isFinite else{return 0}
     return Int(max(0,min(20,ceil(remaining-age))))
 }
 func dashboard(_ health:[String:Any],_ control:[String:Any],_ now:Double=Date().timeIntervalSince1970)->String {
-    let age=now-(health["updated_at"] as? Double ?? 0)
-    let fresh=age>=0 && age<15
+    let fresh=statusFresh(health,now)
     let state=fresh ? health["status"] as? String ?? "unknown":"unavailable"
     let titles=["ready":"Ready","waiting-for-ddc":"Waiting for monitor response","inactive-setup":"Saved monitor pair is not connected","paused":"Paused","degraded":"Recovery needs attention","state-error":"Saved settings need attention","unavailable":"Controller status unavailable","settling":"Waiting for stable inputs","recovering":"Recovering"]
     var lines=["\(titles[state] ?? state) · Mac \(health["host"] as? String ?? "?") · v\(health["version"] as? String ?? "—")"]
@@ -86,26 +116,28 @@ func dashboard(_ health:[String:Any],_ control:[String:Any],_ now:Double=Date().
         lines.append("\nKeep applies to the current orientation only. Closing this window does not cancel automatic rollback. If inputs or orientation change, restoration waits until they return.")
         return lines.joined(separator:"\n")
     }
-    let trusted=fresh && state=="ready" && !automationPaused(control,now)
+    let prefix=detailPrefix(health,control,now)
+    let trusted=prefix.isEmpty
+    lines.append(statusAge(health,now))
     if !trusted {lines.append("\nLast reported details below may be out of date. Run Check health for a fresh inspection.")}
     let inputs=health["inputs"] as? [String:Int] ?? [:]
     for (key,label,a,b) in [("pg","PG42UQ",17,18),("benq","BenQ RD280UG",19,15)] {
         let input=inputs[key]
         let owner=input==a ? "Mac A":input==b ? "Mac B":"Unknown input"
-        lines.append("\n\(label): \(owner)")
+        lines.append("\n\(prefix)\(label): \(owner)")
     }
     let profile=health["profile"] as? String ?? "unknown"
     let profiles=["extended":"Two independent desktops","pg":"PG desktop; hidden BenQ mirrors PG","benq":"BenQ desktop; hidden PG mirrors BenQ","away":"Both away; previous desktop layout preserved"]
-    lines.append("\nDesktop: \(profiles[profile] ?? "Not confirmed")")
+    lines.append("\n\(prefix)Desktop: \(profiles[profile] ?? "Not confirmed")")
     let rotation=health["rotation"] as? [String:Any] ?? [:]
     let automatic=control["auto_rotate"] as? Bool ?? true
     let angle=(rotation["sensor_degrees"] as? Int).map{"\($0)°"} ?? "not currently reported"
-    lines.append("BenQ rotation: \(automatic ? "automatic":"manual") · sensor \(angle)")
+    lines.append("\(prefix)BenQ rotation: \(automatic ? "automatic":"manual") · sensor \(angle)")
     let audio=health["audio"] as? [String:Any] ?? [:],selected=audio["selected"] as? [String:Any] ?? [:]
-    lines.append("Selected speaker: \(selected["name"] as? String ?? "Not reported")")
+    lines.append("\(prefix)Selected speaker: \(selected["name"] as? String ?? "Not reported")")
     let recovery=health["recovery"] as? [String:Any] ?? [:]
     let pending=recovery["pending"] as? Bool == true || health["audio_journal_pending"] as? Bool == true
-    lines.append("Recovery: \(pending ? "pending (\(recovery["attempts"] as? Int ?? 0)/3 attempts)":"no pending recovery reported")")
+    lines.append("\(prefix)Recovery: \(pending ? "pending (\(recovery["attempts"] as? Int ?? 0)/3 attempts)":"no pending recovery reported")")
     if let error=health["error"] as? String ?? recovery["error"] as? String {lines.append("\n\(error)")}
     if automationPaused(control,now) {
         if let until=control["pause_until"] as? Double,until>now {lines.append("\nAutomation resumes at \(Date(timeIntervalSince1970:until).formatted(date:.omitted,time:.shortened)).")}
@@ -186,9 +218,25 @@ if CommandLine.arguments.contains("--self-test") {
     precondition(dashboard(live,[:],101).contains("BenQ RD280UG: Mac B"))
     precondition(!dashboard(live,[:],101).contains("may be out of date"))
     precondition(dashboard(live,[:],120).contains("may be out of date"))
+    precondition(dashboard(live,[:],120).contains("Last known · PG42UQ"),"Stale monitor ownership must be labeled at the value")
+    precondition(dashboard(live,[:],120).contains("Last known · Selected speaker"))
     precondition(dashboard(live,[:],99).contains("Controller status unavailable"))
     var waiting=live;waiting["status"]="waiting-for-ddc"
     precondition(dashboard(waiting,[:],101).contains("may be out of date"))
+    precondition(statusFresh(live,101))
+    precondition(!statusFresh(live,115) && !statusFresh(live,99))
+    precondition(!statusFresh([:],0))
+    precondition(!statusFresh(["updated_at":Double.infinity],101))
+    precondition(statusAge(["updated_at":Double.nan],101)=="Status age unavailable")
+    precondition(statusAge(live,120)=="Last report: 20 seconds ago")
+    precondition(!detailPrefix(live,["paused":true],101).isEmpty)
+    precondition(notificationCommand(UNNotificationDefaultActionIdentifier)=="panel")
+    precondition(notificationCommand("inspect")=="doctor")
+    precondition(notificationCommand("repair")=="repair-audio")
+    precondition(notificationCommand(UNNotificationDismissActionIdentifier)==nil)
+    precondition(notificationCommand("unknown")==nil)
+    precondition(operationTitle("preview-options")=="Inspecting size choices")
+    print("PASS status freshness, stale labels, progress labels and notification routing")
     precondition(automationPaused(["paused":true,"pause_until":200.0],100))
     precondition(!automationPaused(["paused":true,"pause_until":200.0],200))
     precondition(automationPaused(["paused":true],200))
@@ -235,6 +283,9 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
     var previewActions:[NSButton]=[]
     var previewToken:String?
     var busy=false
+    var operationStarted:Double?
+    var operationName=""
+    var operationResult=""
     var menuOpen=false
     func applicationShouldHandleReopen(_ sender:NSApplication,hasVisibleWindows flag:Bool)->Bool {showPanel();return true}
     func showPanel() {
@@ -276,7 +327,8 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
         let repair=UNNotificationAction(identifier:"repair",title:"Repair audio",options:[])
         let inspect=UNNotificationAction(identifier:"inspect",title:"Check health",options:[])
         UNUserNotificationCenter.current().setNotificationCategories([UNNotificationCategory(identifier:"failure",actions:[repair],intentIdentifiers:[],options:[]),UNNotificationCategory(identifier:"state-failure",actions:[inspect],intentIdentifiers:[],options:[])])
-        timer=Timer.scheduledTimer(withTimeInterval:2,repeats:true){[weak self] _ in self?.refresh()}
+        timer=Timer(timeInterval:2,repeats:true){[weak self] _ in self?.refresh()}
+        if let timer=timer {RunLoop.main.add(timer,forMode:.common)}
         refresh()
         UNUserNotificationCenter.current().getNotificationSettings { settings in
             if settings.authorizationStatus == .notDetermined {
@@ -292,12 +344,18 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
     }
     func refresh() {
         let health=read("health.json"),control=read("control.json")
-        let age=Date().timeIntervalSince1970-(health["updated_at"] as? Double ?? 0)
-        let fresh=age>=0 && age<15
+        let fresh=statusFresh(health)
+        let prefix=detailPrefix(health,control)
         let state=fresh ? health["status"] as? String ?? "Unknown" : "Controller unavailable"
         item.button?.title=state == "degraded" || state == "state-error" || !fresh ? " !" : ""
         item.button?.toolTip="Display Auto: \(state)"
+        var progress=operationResult
+        if let started=operationStarted {
+            let elapsed=Int(max(0,ProcessInfo.processInfo.systemUptime-started))
+            progress="\(operationName)… \(elapsed)s elapsed. Command deadline: 45s."
+        }
         var detail=dashboard(health,control)
+        if !progress.isEmpty {detail=progress+"\n\n"+detail}
         let lastPreview=read("preview-status.json")
         if !state.hasPrefix("preview-"),let error=lastPreview["error"] as? String {detail += "\n\nLast size preview: \(error)"}
         if panelText?.string != detail {panelText?.string=detail}
@@ -318,17 +376,19 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
         let menu=NSMenu();menu.delegate=self
         add(menu,"Display Auto \(health["version"] as? String ?? "—") · Mac \(health["host"] as? String ?? "?")")
         add(menu,"Status: \(state)")
+        add(menu,statusAge(health))
+        if !progress.isEmpty {add(menu,progress)}
         if state=="waiting-for-ddc" {add(menu,"Waiting for monitor response; layout changes held")}
-        add(menu,"Profile: \(health["profile"] as? String ?? "—")")
+        add(menu,"\(prefix)Profile: \(health["profile"] as? String ?? "—")")
         let rotation=health["rotation"] as? [String:Any] ?? [:]
         if rotation["enabled"] as? Bool == true {
             let angle=(rotation["sensor_degrees"] as? Int).map { "\($0)°" } ?? (rotation["state"] as? String ?? "Checking")
-            add(menu,"BenQ rotation: \(angle)")
+            add(menu,"\(prefix)BenQ rotation: \(angle)")
         }
         let audio=health["audio"] as? [String:Any] ?? [:],selected=audio["selected"] as? [String:Any] ?? [:]
-        add(menu,"Speaker: \(selected["name"] as? String ?? "—")")
+        add(menu,"\(prefix)Speaker: \(selected["name"] as? String ?? "—")")
         let recovery=health["recovery"] as? [String:Any] ?? [:]
-        add(menu,"Recovery: \(recovery["attempts"] as? Int ?? 0)/3 attempts")
+        add(menu,"\(prefix)Recovery: \(recovery["attempts"] as? Int ?? 0)/3 attempts")
         if let error=recovery["error"] as? String {add(menu,String(error.prefix(150)))}
         if let error=health["error"] as? String {add(menu,String(error.prefix(150)))}
         menu.addItem(.separator())
@@ -345,7 +405,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
         let manual=(control["audio_manual_until"] as? Double ?? 0)>Date().timeIntervalSince1970
         add(menu,"Preserve current audio for 30 minutes",["audio-manual","--minutes","30"],checked:manual)
         add(menu,"Resume automatic audio",["audio-auto"])
-        add(menu,"Repair audio",paused || manual || state=="state-error" ? nil:["repair-audio"])
+        add(menu,"Repair audio",!fresh || paused || manual || state=="state-error" ? nil:["repair-audio"])
         let preferences=control["speaker_preferences"] as? [String:String] ?? [:]
         for (profile,label,defaultSpeaker) in [("extended","Both monitors here","pg"),("pg","Only PG here","pg"),("benq","Only BenQ here","benq"),("away","Both monitors away","fallback")] {
             let entry=NSMenuItem(title:"Speaker: \(label)",action:nil,keyEquivalent:"");let sub=NSMenu()
@@ -359,7 +419,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
         menu.addItem(.separator())
         add(menu,"Open status window",["panel"])
         add(menu,"Preview display size…",fresh && state=="ready" && health["profile"] as? String == "extended" && !paused ? ["preview-options"]:nil)
-        if let token=previewToken,preview["state"] as? String == "needs-repair" {add(menu,"Retry size restoration",["preview-repair","--token",token])}
+        if fresh,let token=previewToken,preview["state"] as? String == "needs-repair" {add(menu,"Retry size restoration",["preview-repair","--token",token])}
         if let token=previewToken,previewRemaining(health)>0 {
             add(menu,"Keep preview size (\(previewRemaining(health))s)",["preview-keep","--token",token])
             add(menu,"Revert preview size",["preview-revert","--token",token])
@@ -398,12 +458,20 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
                 DispatchQueue.main.async {self.message(granted ? "Failure notifications enabled":"Notifications are disabled",error?.localizedDescription ?? "You can change this in System Settings → Notifications → Display Auto.")}
             };return
         }
-        guard !busy else{return};busy=true
+        guard !busy else{return}
+        busy=true;operationStarted=ProcessInfo.processInfo.systemUptime
+        operationName=operationTitle(args.first ?? "");operationResult=""
+        showPanel()
         DispatchQueue.global().async {
             let response=runMenuCommand(self.command,args)
             let result=response.output,code=response.code
             DispatchQueue.main.async {
-                self.busy=false
+                self.busy=false;self.operationStarted=nil
+                if code != 0 {self.operationResult=code==124 ? "Command timed out; inspect status before retrying.":"Command failed; see the error for details."}
+                else if let data=result.data(using:.utf8),let response=(try? JSONSerialization.jsonObject(with:data)) as? [String:Any],response["requested"] != nil {
+                    self.operationResult="Request saved; controller completion is not tracked for this command. Check the latest status."
+                } else {self.operationResult="Command returned. See the result and current status below."}
+                self.refresh()
                 if code != 0 {self.message("Action could not complete",result)}
                 else if args.first=="diagnostics" {NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath:result.trimmingCharacters(in:.whitespacesAndNewlines))])}
                 else if args.first=="history" {self.message("Transition timing summary",timingSummary(result))}
@@ -479,8 +547,13 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
         }
     }
     func userNotificationCenter(_ center:UNUserNotificationCenter,didReceive response:UNNotificationResponse,withCompletionHandler completionHandler:@escaping ()->Void){
-        if response.actionIdentifier=="repair"{DispatchQueue.main.async{self.execute(["repair-audio"])}};completionHandler()
-        if response.actionIdentifier=="inspect"{DispatchQueue.main.async{self.execute(["doctor"])}}
+        if let command=notificationCommand(response.actionIdentifier) {
+            DispatchQueue.main.async {
+                if self.busy {self.showPanel()}
+                else {self.execute([command])}
+                completionHandler()
+            }
+        } else {completionHandler()}
     }
     func userNotificationCenter(_ center:UNUserNotificationCenter,willPresent notification:UNNotification,withCompletionHandler completionHandler:@escaping (UNNotificationPresentationOptions)->Void){completionHandler([.banner,.list])}
 }

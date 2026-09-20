@@ -15,6 +15,11 @@ and recovery state. Physical switching and DDC delays vary; it is not an instant
 - **Check health:** read-only inspection. **Save diagnostics:** writes a private local report.
 - **Repair audio / Retry size restoration:** explicit retry after the cause of failure is resolved.
 
+The status window opens when a command starts and shows its operation and elapsed time.
+A saved request is not confirmation that the controller finished applying it. Last-known
+labels and report age identify details that may be stale. Clicking a failure notification
+opens the status window.
+
 Closing the menu does not stop the controller. A command timeout is not proof that no changes
 occurred; check status before retrying. Avoid manual configuration edits during a preview.
 

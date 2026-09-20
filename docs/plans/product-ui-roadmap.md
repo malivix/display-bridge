@@ -4,6 +4,13 @@ Reviewed 2026-09-20 against source `b50cd91` (2.10.2, unreleased). Live UI obser
 2.10.1; the checkout was not installed. This document is a plan, not a claim that the
 features below have been implemented or physically qualified.
 
+## Implementation progress
+
+The first source changes add command progress, per-group last-known labels, status age,
+and default notification-click routing. They do not yet add durable controller completion
+acknowledgements, incident-specific deduplication, or the dashboard redesign. Live deployment
+and UI qualification remain separate.
+
 ## Decision
 
 Make the existing handoff clear, readable, and recoverable first. The next work item is

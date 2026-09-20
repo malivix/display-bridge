@@ -4,6 +4,23 @@ import UserNotifications
 import Darwin
 
 func runMenuSelfTests() {
+    precondition(enrollmentHost(0)==nil && enrollmentHost(1)=="A" && enrollmentHost(2)=="B" && enrollmentHost(3)==nil)
+    let enrollmentRows:[[String:Any]]=["pg","benq"].map{role in ["monitor":role,"local_input":role=="pg" ? 18:15,"width":1280,"height":720,"pixelWidth":2560,"pixelHeight":1440,"rotation":0]}
+    let enrollment:[String:Any]=["read_only":true,"status":"review-ready","host":"B","monitors":enrollmentRows,"audio_routes":["pg","benq","built-in"]]
+    func enrollmentJSON(_ report:[String:Any])->String {String(decoding:try! JSONSerialization.data(withJSONObject:report),as:UTF8.self)}
+    precondition(enrollmentReviewSummary(enrollmentJSON(enrollment),"B").contains("local input 18"))
+    precondition(enrollmentReviewSummary(enrollmentJSON(enrollment),"A").contains("could not be validated"))
+    for (key,value) in [("read_only",1 as Any),("monitors",[]),("host","unknown"),("audio_routes",["pg"])] {
+        var invalid=enrollment;invalid[key]=value
+        precondition(enrollmentReviewSummary(enrollmentJSON(invalid),"B").contains("could not be validated"))
+    }
+    var enrollmentCalls:[[String]]=[]
+    let unsupportedReview=runCompatibleMenuCommand(["capture-review","--host","B"]){args,_,_ in
+        enrollmentCalls.append(args);return CommandResult(output:"{}",code:0)
+    }
+    precondition(unsupportedReview.code==78 && enrollmentCalls==[["capabilities"]])
+    precondition(safeWithoutControls("capture-review") && safeWithoutControls("enrollment-review"))
+
     let unknownInputs:[String:Any]=["updated_at":100.0,"status":"waiting-for-known-input","inputs":["pg":15,"benq":19]]
     let guidance=unknownInputGuidance(unknownInputs,105)!
     precondition(guidance.contains("PG42UQ reports input 15"))
@@ -164,9 +181,9 @@ func runMenuSelfTests() {
     precondition(audioRepairReason(audioHealth,["audio_manual_until":Date().timeIntervalSince1970+60],false) != nil)
     let sectionHealth:[String:Any]=["status":"ready","updated_at":Date().timeIntervalSince1970,"inputs":["pg":17,"benq":15],"profile":"pg"]
     let sections=statusSections(sectionHealth,[:])
-    precondition(sections.map{$0.title}==["Overview","PG42UQ","BenQ RD280UG","Audio","Recovery"])
-    precondition(sections[1].body=="Showing Mac A" && sections[2].body.contains("Showing Mac B"))
-    precondition(statusSections([:],[:])[1].body.contains("Last known"))
+    precondition(sections.map{$0.title}==["Overview","Recovery","PG42UQ","BenQ RD280UG","Audio"])
+    precondition(sections[2].body=="Showing Mac A" && sections[3].body.contains("Showing Mac B"))
+    precondition(statusSections([:],[:])[2].body.contains("Last known"))
     let previewSections=statusSections(["updated_at":Date().timeIntervalSince1970,"status":"preview-active","preview":["state":"preview","remaining_seconds":20.0]],[:])
     precondition(previewSections[0].body.contains("Keep within"))
     let retryHealth:[String:Any]=["updated_at":100.0,"status":"recovering","retry_in_seconds":8.0,"recovery":["pending":true,"attempts":2]]

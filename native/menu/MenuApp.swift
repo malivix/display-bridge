@@ -12,7 +12,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
     var timer:Timer?
     var panel:NSWindow?
     var scalableControls:[NSControl]=[]
-    let detailReports=[("status","Live status"),("setup","Setup readiness"),("doctor","Health check"),("history","Transition timing"),("ddc-history","Monitor communication"),("support-summary","Support summary")]
+    let detailReports=[("status","Live status"),("setup","Setup readiness"),("enrollment-review","Review enrollment…"),("doctor","Health check"),("history","Transition timing"),("ddc-history","Monitor communication"),("support-summary","Support summary")]
     var detailReport="status"
     var reportSelector:NSPopUpButton?
     var reportStatus:NSTextField?
@@ -111,7 +111,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
                 overviewFields.append((heading,body))
                 if section.title=="Recovery" {
                     let button=NSButton(title:"Check health",target:self,action:#selector(runRecoveryAction(_:)))
-                    group.addArrangedSubview(button);recoveryButton=button;scalableControls.append(button)
+                    group.insertArrangedSubview(button,at:1);recoveryButton=button;scalableControls.append(button)
                 }
             }
             overview.view=overviewScroll;tabs.addTabViewItem(overview)
@@ -161,6 +161,13 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
             audioStack.topAnchor.constraint(equalTo:audioScroll.contentView.topAnchor).isActive=true
             let info=NSTextField(wrappingLabelWithString:"Speaker preferences apply to each monitor profile. External headsets remain under your control.")
             audioStack.addArrangedSubview(info);info.widthAnchor.constraint(equalTo:audioStack.widthAnchor,constant:-32).isActive=true;audioInfo=info
+            for (title,action) in [("Repair audio","repair-audio"),("Preserve output for 30 minutes","audio-manual"),("Resume automatic audio","audio-auto")] {
+                let button=NSButton(title:title,target:self,action:#selector(panelAction(_:)));button.identifier=NSUserInterfaceItemIdentifier(action)
+                audioStack.addArrangedSubview(button);scalableControls.append(button)
+                if action=="repair-audio" {audioRepair=button} else {panelActions.append(button)}
+            }
+            let reason=NSTextField(wrappingLabelWithString:"");audioStack.insertArrangedSubview(reason,at:2)
+            reason.widthAnchor.constraint(equalTo:audioStack.widthAnchor,constant:-32).isActive=true;audioReason=reason
             for (profile,label) in [("extended","Both monitors here"),("pg","Only PG here"),("benq","Only BenQ here"),("away","Both monitors away")] {
                 let title=NSTextField(wrappingLabelWithString:label);scalableControls.append(title)
                 let popup=NSPopUpButton();popup.identifier=NSUserInterfaceItemIdentifier(profile)
@@ -169,13 +176,6 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
                 speakerPopups[profile]=popup;scalableControls.append(popup)
                 let row=NSStackView(views:[title,popup]);row.orientation = .vertical;row.alignment = .leading;row.spacing=6;audioStack.addArrangedSubview(row)
             }
-            for (title,action) in [("Preserve output for 30 minutes","audio-manual"),("Resume automatic audio","audio-auto"),("Repair audio","repair-audio")] {
-                let button=NSButton(title:title,target:self,action:#selector(panelAction(_:)));button.identifier=NSUserInterfaceItemIdentifier(action)
-                audioStack.addArrangedSubview(button);scalableControls.append(button)
-                if action=="repair-audio" {audioRepair=button} else {panelActions.append(button)}
-            }
-            let reason=NSTextField(wrappingLabelWithString:"");audioStack.addArrangedSubview(reason)
-            reason.widthAnchor.constraint(equalTo:audioStack.widthAnchor,constant:-32).isActive=true;audioReason=reason
             audioTab.view=audioScroll;tabs.addTabViewItem(audioTab)
             let controlsTab=NSTabViewItem(identifier:"monitor-controls");controlsTab.label="Controls"
             let controlsScroll=NSScrollView();controlsScroll.hasVerticalScroller=true
@@ -577,6 +577,18 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
         }
         if args==["panel"]{showPanel();return}
         if args==["quit"]{NSApp.terminate(nil);return}
+        if args==["enrollment-review"] {
+            guard !busy else{return}
+            let chooser=EnrollmentReviewDialog(fontSize:CGFloat([16,20,24][textSizeIndex()]))
+            if let host=chooser.run() {execute(["capture-review","--host",host])}
+            return
+        }
+        if demo,args.first=="capture-review",let host=args.last {
+            let monitors:[[String:Any]]=["pg","benq"].map{role in ["monitor":role,"width":1280,"height":720,"pixelWidth":2560,"pixelHeight":1440,"rotation":0,"local_input":role=="pg" ? (host=="A" ? 17:18):(host=="A" ? 19:15)]}
+            let report:[String:Any]=["read_only":true,"status":"review-ready","host":host,"monitors":monitors,"audio_routes":["pg","benq","built-in"]]
+            if let data=try? JSONSerialization.data(withJSONObject:report),let json=String(data:data,encoding:.utf8) {showReport("enrollment-review","Synthetic review; no hardware inspected.\n\n"+enrollmentReviewSummary(json,host))}
+            return
+        }
         if demo,demoScenario=="monitor-response-error",args.first=="monitor-settings" {
             let fixture=#"{"monitor":"pg","read_only":true,"settings":{"luminance":{"value":30,"maximum":100,"percent":30},"volume":{"value":40,"maximum":100,"percent":40}}}"#
             presentMonitorResponse(CommandResult(output:fixture,code:0),["monitor-settings","--monitor","pg"])
@@ -652,6 +664,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
                     if code != 0 {self.message("Action could not complete",result)}
                 }
                 else if code != 0 {self.message("Action could not complete",result)}
+                else if args.first=="capture-review" {self.showReport("enrollment-review",enrollmentReviewSummary(result,args.last ?? ""))}
                 else if args.first=="diagnostics" {NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath:result.trimmingCharacters(in:.whitespacesAndNewlines))])}
                 else if args.first=="support-summary" {self.showReport("support-summary","Review before sharing. This report is not uploaded automatically.\n\n"+result)}
                 else if args.first=="history" {self.showReport("history",timingSummary(result))}

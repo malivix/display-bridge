@@ -27,7 +27,7 @@ First-party comparison and product judgments: [current research](../research/dis
 | Brightness/volume and brightness presets | Implemented, with typed result validation | Continuous adjustment and physical pacing remain unqualified. |
 | Enlarged interface, window shortcuts, contextual repair | Implemented | Partial keyboard/visual checks; no complete VoiceOver, appearance or state matrix. |
 | Failure notifications, history, diagnostics, reviewed copy | Implemented | Notification delivery and incident lifecycle need installed-session qualification; raw diagnostics remain private. |
-| Setup readiness and prospective enrollment | Read-only CLI implemented; native host-choice review exists in the working tree | Mutable graphical setup is not implemented. This review does not mark the uncommitted UI shipped. |
+| Setup readiness and prospective enrollment | Read-only CLI implemented; native host-choice review implemented | Mutable graphical setup is not implemented. Source implementation does not establish installed qualification. |
 
 See [qualification](../qualification.md) for exact historical deployment evidence. A source
 build, an installed heartbeat and a physically usable/audible outcome are different results.
@@ -49,9 +49,10 @@ contain synthetic data and remain local; the evidence above records the scenario
 
 ## Ordered implementation slices
 
-### 1. Recovery-first interface — next code change
+### 1. Recovery-first interface — implemented in source
 
-Reorder Overview by current incident priority and bring Audio's current route/action ahead of
+[Implementation and validation](../log/recovery-first-ui.md) keep Recovery in a stable position
+after the summary and bring Audio's current route/action ahead of
 preferences. Use existing `recoveryAction`/availability decisions; presentation must not start
 repair automatically. Show pending retry versus exhausted failure, last-known output versus
 fresh readback, and manual preservation separately. Avoid moving keyboard focus on heartbeat

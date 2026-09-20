@@ -12,11 +12,20 @@ or rotation calibration, use the [installation guide](install.md).
 | Location | What you can do |
 | --- | --- |
 | Overview | See monitor ownership, selected speaker and recovery; use the relevant repair action when available. |
-| Details | Select Live status, Setup readiness, Health check, Transition timing, Monitor communication or Support summary. Choose Refresh for a new report. |
+| Details | Select Live status, Setup readiness, Review enrollment…, Health check, Transition timing, Monitor communication or Support summary. Choose Refresh for a new report. |
 | Displays | Refresh the logical-layout schematic and current/saved display modes. |
 | Audio | Set speaker preferences for all four profiles, preserve a manual output, resume automatic audio or request repair. |
 | Controls | Choose a monitor, read or adjust brightness/volume, manage brightness presets and check preset-command support. |
 | Window footer | Pause/Resume, change this app's text size, preview display size, and Keep/Revert an active preview. |
+
+Overview keeps recovery near the top, with its action before long error details. Audio puts
+the current output, repair reason and manual controls before profile preferences.
+
+For a read-only prospective enrollment check, select **Details → Review enrollment…**, then
+**Refresh**. Choose Mac A or Mac B explicitly. Compatible helpers must already be installed;
+both enrolled-model monitors must show this Mac in extended mode with fixed 120-Hz HiDPI
+and HDR off. The report saves no enrollment and changes no services. Use the
+[coordinated installer](install.md) for activation, which rechecks hardware independently.
 
 More controls opens the compact menu. Advanced contains rotation, timed pause, audio
 preferences, monitor controls and reports. Active preview and restoration actions remain

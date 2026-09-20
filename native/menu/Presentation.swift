@@ -6,7 +6,7 @@ import UserNotifications
 
 func controlsAvailable(_ control:[String:Any])->Bool {control["_read_unavailable"] as? Bool != true}
 func safeWithoutControls(_ action:String)->Bool {
-    ["panel","quit","status","doctor","setup","brightness-list","diagnostics","support-summary","history","ddc-history","display-info","monitor-settings","notifications","preview-revert","preview-repair"].contains(action)
+    ["panel","quit","status","doctor","setup","enrollment-review","capture-review","brightness-list","diagnostics","support-summary","history","ddc-history","display-info","monitor-settings","notifications","preview-revert","preview-repair"].contains(action)
 }
 func automationPaused(_ control:[String:Any],_ now:Double=Date().timeIntervalSince1970)->Bool {
     let until=control["pause_until"] as? Double ?? 0
@@ -225,10 +225,10 @@ func statusSections(_ health:[String:Any],_ control:[String:Any])->[StatusSectio
     let routing = !controlsAvailable(control) ? "Saved audio preferences are unavailable":automationPaused(control) ? "Automation is paused":audioOverride ? "Manual output preservation is active":"Automatic routing follows profile preferences"
     return [
         StatusSection(title:"Overview",body:(health["status"] as? String ?? "").hasPrefix("preview-") ? dashboard(health,control):headline+"\n"+statusAge(health)+"\n"+prefix+(layouts[profile] ?? "Desktop not confirmed")+(unknownInputGuidance(health).map{"\n\n"+$0} ?? "")),
+        StatusSection(title:"Recovery",body:recoverySummary(health,control)),
         StatusSection(title:"PG42UQ",body:prefix+owner("pg",17,18)),
         StatusSection(title:"BenQ RD280UG",body:prefix+owner("benq",19,15)+"\n\(prefix)Rotation: \(rotationMode) · sensor \(sensor)"),
-        StatusSection(title:"Audio",body:prefix+(selected["name"] as? String ?? "Output not reported")+"\n"+routing+"\nSpeaker selection does not prove audible sound."),
-        StatusSection(title:"Recovery",body:recoverySummary(health,control))
+        StatusSection(title:"Audio",body:prefix+(selected["name"] as? String ?? "Output not reported")+"\n"+routing+"\nSpeaker selection does not prove audible sound.")
     ]
 }
 func writeReviewedSummary(_ body:String,to pasteboard:NSPasteboard)->Bool {

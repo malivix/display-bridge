@@ -186,3 +186,20 @@ selected local monitor's brightness/volume, and Overview/Audio reread controller
 These shortcuts do not change display settings. Held-key repeats are ignored, and the
 shortcuts do not apply inside modal preview/preset dialogs or other applications.
 No global keyboard monitoring or Accessibility permission is added.
+
+Brightness presets currently have a CLI interface; the Controls chooser is pending.
+On the enrolled setup, use these commands through `~/.local/bin/display-auto.sh` after
+installing a source revision that includes this feature:
+
+```sh
+~/.local/bin/display-auto.sh brightness-save --monitor benq --preset Reading
+~/.local/bin/display-auto.sh brightness-list --monitor benq
+```
+
+Save reads only the selected local monitor's brightness. Use `--replace` explicitly to
+replace the same name for that monitor. List returns a revision for each entry; pass that
+exact revision to `brightness-apply` or `brightness-remove` using `--fingerprint`, together
+with `--monitor` and `--preset`. List/removal do not access monitor hardware. Apply checks
+ownership and the saved hardware range, writes at most once, and verifies readback. It
+never schedules brightness changes or changes speaker volume. Presets are per monitor
+and enrollment, not portable across Macs; equal percentages need not look equally bright.

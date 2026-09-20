@@ -642,7 +642,7 @@ def main():
 
 def run_main(resources):
     parser = argparse.ArgumentParser()
-    parser.add_argument('action', choices=['capture', 'check', 'run', 'once', 'test-layouts', 'restore','status','pause','pause-for','resume','repair-audio','audio-manual','audio-auto','speaker','diagnostics','support-summary','history','hidpi','doctor','display-info','ddc-history','monitor-adjust','monitor-settings','preset-save','preset-remove','preview-options','preview-start','preview-keep','preview-revert','preview-repair','rotation-auto','rotation-manual'])
+    parser.add_argument('action', choices=['capture', 'check', 'run', 'once', 'test-layouts', 'restore','status','pause','pause-for','resume','repair-audio','audio-manual','audio-auto','speaker','diagnostics','support-summary','history','hidpi','doctor','display-info','ddc-history','monitor-adjust','monitor-settings','brightness-list','brightness-save','brightness-apply','brightness-remove','preset-save','preset-remove','preview-options','preview-start','preview-keep','preview-revert','preview-repair','rotation-auto','rotation-manual'])
     parser.add_argument('--host', choices=['A', 'B'])
     parser.add_argument('--m1ddc', default=str(Path.home() / '.local/bin/display-ddc'))
     parser.add_argument('--minutes',type=int,default=30)
@@ -674,18 +674,37 @@ def run_main(resources):
         from types import SimpleNamespace
         from preview_service import enqueue
         print(json.dumps(enqueue(SimpleNamespace(**globals()),args.action.removeprefix('preview-'),args.size,args.token,args.fingerprint,args.preset)));return
-    if args.action in ('monitor-adjust','monitor-settings'):
-        if args.action=='monitor-adjust':
+    if args.action in ('brightness-list','brightness-remove'):
+        import brightness_presets as presets
+        if args.monitor is None:parser.error('--monitor is required')
+        if args.action=='brightness-remove':
             from preview_service import mutation_guard
             resources.enter_context(mutation_guard(__import__('types').SimpleNamespace(**globals())))
-        from monitor_controls import adjust,inspect
+        with (ROOT/'maintenance.lock').open('a') as maintenance:
+            try:fcntl.flock(maintenance,fcntl.LOCK_SH | fcntl.LOCK_NB)
+            except BlockingIOError:raise RuntimeError('Installation in progress; try again later')
+            config=startup_config();path=ROOT/'brightness-presets.json'
+            if args.action=='brightness-list':
+                entries=presets.read(path,config)['presets']
+                result={'read_only':True,'monitor':args.monitor,'presets':[dict(e,revision=presets.revision(e)) for e in entries if e['monitor']==args.monitor]}
+            else:
+                with (ROOT/'brightness-presets.lock').open('a') as lock:
+                    acquire_lock(lock,2)
+                    result={'removed':True,**presets.remove(path,config,args.preset,args.monitor,args.fingerprint)}
+        print(json.dumps(result));return
+    if args.action in ('monitor-adjust','monitor-settings','brightness-save','brightness-apply'):
+        changing=args.action!='monitor-settings'
+        if changing:
+            from preview_service import mutation_guard
+            resources.enter_context(mutation_guard(__import__('types').SimpleNamespace(**globals())))
+        from monitor_controls import adjust,inspect,inspect_brightness,apply_brightness
         if args.monitor is None:parser.error('--monitor is required')
         if args.action=='monitor-adjust' and (args.feature is None or args.step is None):parser.error('--feature and --step are required')
-        config=json.loads(CONFIG.read_text());validate_config(config)
-        if args.action=='monitor-adjust' and automation_paused(read_control()):raise RuntimeError('Resume automation before using monitor controls')
         with (ROOT/'maintenance.lock').open('a') as maintenance, (ROOT/'ddc.lock').open('a') as lock:
             try:fcntl.flock(maintenance,fcntl.LOCK_SH | fcntl.LOCK_NB)
             except BlockingIOError:raise RuntimeError('Installation in progress; try again later')
+            config=json.loads(CONFIG.read_text());validate_config(config)
+            if changing and automation_paused(read_control()):raise RuntimeError('Resume automation before using monitor controls')
             verify_setup(config);acquire_lock(lock,2)
             def request(action,feature,value=None):
                 args=[config['m1ddc'],'display',config['ddc_identifiers'][args_monitor],action,feature]
@@ -696,7 +715,21 @@ def run_main(resources):
                 if action=='set':time.sleep(2)
                 return result
             args_monitor=args.monitor
-            result=inspect(config,args.monitor,request) if args.action=='monitor-settings' else adjust(config,args.monitor,args.feature,args.step,request)
+            if args.action.startswith('brightness-'):
+                import brightness_presets as presets
+                with (ROOT/'brightness-presets.lock').open('a') as preset_lock:
+                    acquire_lock(preset_lock,2);path=ROOT/'brightness-presets.json'
+                    if args.action=='brightness-save':
+                        presets.name(args.preset)
+                        reading=inspect_brightness(config,args.monitor,request)
+                        if startup_config()!=config:raise RuntimeError('Configuration changed while inspecting brightness; retry')
+                        result={'saved':True,**presets.save(path,config,args.preset,args.monitor,reading,args.replace)}
+                    else:
+                        entry=presets.find(presets.read(path,config),args.preset,args.monitor,args.fingerprint)
+                        result=apply_brightness(config,args.monitor,entry['value'],entry['maximum'],request)
+                        result.update(preset=entry['name'])
+            else:
+                result=inspect(config,args.monitor,request) if args.action=='monitor-settings' else adjust(config,args.monitor,args.feature,args.step,request)
         print(json.dumps(result));return
     if args.action=='display-info':
         from display_snapshot import report

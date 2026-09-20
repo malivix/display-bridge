@@ -17,6 +17,7 @@ RUNTIME_MODULES = (
     "persisted_state.py",
     "ddc_log_report.py",
     "monitor_controls.py",
+    "brightness_presets.py",
     "scaling_choices.py",
     "size_presets.py",
     "scaling_proposal.py",

@@ -3,7 +3,7 @@
 This is local hardware-control software, not a security-certified application. Runtime
 stores device identities, layout, audio routes, and diagnostics under the user's account.
 Treat diagnostic bundles, backups, logs, and screenshots as private until manually reviewed.
-Private diagnostics include named size presets. State-file reads are capped at 1 MiB each;
+Private diagnostics include named size and brightness presets. State-file reads are capped at 1 MiB each;
 oversized files retain a 64 KiB sample with a sample hash, not a claimed full-file hash.
 Do not attach raw bundles to public issues. Use a minimal synthetic reproduction instead.
 `support-summary` creates a separate allowlisted overview without identifiers, names, paths,

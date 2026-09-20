@@ -37,7 +37,7 @@ def summary(root):
 
 def diagnostics(root, bin_dir):
     report={'created_at':time.time(),'os':platform.platform(),'files':{},'file_sha256':{},'unreadable_files':{},'helper_sha256':{},'timings':summary(root)}
-    for name in ('size-presets.json','command-results.json','config.json','baseline.json','manifest.json','health.json','recovery.json','control.json','audio-refresh.json','transitions.json','menu-health.json','rotation-active.json','scaling-preview.json','preview-status.json','preview-request.json'):
+    for name in ('size-presets.json','brightness-presets.json','command-results.json','config.json','baseline.json','manifest.json','health.json','recovery.json','control.json','audio-refresh.json','transitions.json','menu-health.json','rotation-active.json','scaling-preview.json','preview-status.json','preview-request.json'):
         report['files'][name]=None
         try:
             with (root/name).open('rb') as stream:

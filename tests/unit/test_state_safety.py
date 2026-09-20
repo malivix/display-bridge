@@ -59,10 +59,12 @@ class SavedStateSafety(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             root=Path(temp)
             (root/'size-presets.json').write_text('{"schema":1,"presets":[]}')
+            (root/'brightness-presets.json').write_text('{"schema":1,"presets":[]}')
             raw=b'{"large":"'+b'x'*(2*1024*1024)+b'"}'
             (root/'control.json').write_bytes(raw)
             result=json.loads(observability.diagnostics(root,root).read_text())
             self.assertEqual(result['files']['size-presets.json']['schema'],1)
+            self.assertEqual(result['files']['brightness-presets.json']['schema'],1)
             self.assertIsNone(result['files']['control.json'])
             self.assertNotIn('control.json',result['file_sha256'])
             captured=result['unreadable_files']['control.json']

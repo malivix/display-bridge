@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 import AppKit
 import CryptoKit
+import CoreFoundation
 import UserNotifications
 
 func controlsAvailable(_ control:[String:Any])->Bool {control["_read_unavailable"] as? Bool != true}
@@ -355,10 +356,32 @@ func ddcSummary(_ json:String)->String {
     return lines.joined(separator:"\n")
 }
 
+func recentTimingSummary(_ value:Any?)->String {
+    guard let events=value as? [[String:Any]],events.count<=10 else{return "Recent event details are unavailable in this report."}
+    if events.isEmpty {return "No recent recognized transitions recorded."}
+    let profiles=["pg":"Only PG here","benq":"Only BenQ here","extended":"Both monitors here","away":"Both monitors away"]
+    var lines=["Recent attempts · newest first"]
+    for (index,event) in events.enumerated() {
+        guard let profile=event["profile"] as? String,let label=profiles[profile],
+              let result=event["result"] as? String,["ready","failed"].contains(result),
+              let phases=event["seconds"] as? [String:Any] else {lines.append("\(index+1). Event details unavailable.");continue}
+        lines.append("\(index+1). \(label) · \(result=="ready" ? "Completed":"Failed attempt")")
+        var missing:[String]=[]
+        for (key,title) in [("total","Application total"),("rotation_check","Rotation"),("layout_apply","Layout application"),("input_confirmation","Input recheck"),("audio","Audio"),("settling","Stable-read interval")] {
+            if let number=phases[key] as? NSNumber,CFGetTypeID(number) != CFBooleanGetTypeID(),number.doubleValue.isFinite,number.doubleValue>=0 {
+                lines.append(String(format:"  %@: %.2f s",title,number.doubleValue))
+            } else if key=="total" {lines.append("  Application total: not recorded")} else {missing.append(title)}
+        }
+        if !missing.isEmpty {lines.append("  Not recorded: "+missing.joined(separator:", "))}
+    }
+    lines.append("Failed attempts may include retries. Missing phases are not zero; phase times may overlap and must not be added together.")
+    return lines.joined(separator:"\n")
+}
+
 func timingSummary(_ json:String)->String {
     guard let data=json.data(using:.utf8),let report=(try? JSONSerialization.jsonObject(with:data)) as? [String:Any],let profiles=report["profiles"] as? [String:[String:Any]] else{return "Timing report could not be read. Save a diagnostic report for details."}
     if report["history_available"] as? Bool == false {return "Transition history is unavailable or exceeds the read limit. Save private diagnostics to inspect it; no timing conclusion can be drawn."}
-    var lines=["Measured application time — median / p95 / slowest"]
+    var lines=[recentTimingSummary(report["recent_events"]),"\nAggregate application time — median / p95 / slowest"]
     for (key,label) in [("extended","Both monitors here"),("pg","Only PG here"),("benq","Only BenQ here"),("away","Both monitors away")] {
         guard let profile=profiles[key],let phases=profile["seconds"] as? [String:[String:Any]] else{continue}
         lines.append("\n\(label)")

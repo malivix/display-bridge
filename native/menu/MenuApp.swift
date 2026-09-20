@@ -595,6 +595,11 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
             if let data=try? JSONSerialization.data(withJSONObject:report),let json=String(data:data,encoding:.utf8) {showReport("setup",setupSummary(json,["BetterDisplay.app","Unrelated.app"]))}
             return
         }
+        if demo,args==["history"] {
+            let report:[String:Any]=["history_available":true,"profiles":["pg":["count":1,"failed_attempts":0,"seconds":["total":["count":1,"median":2.5,"max":2.5,"p95":2.5]]],"benq":["count":0,"failed_attempts":1,"seconds":[:]]],"recent_events":[["profile":"benq","result":"failed","seconds":[:]], ["profile":"pg","result":"ready","seconds":["total":2.5,"audio":1.2,"layout_apply":0.8]]]]
+            if let data=try? JSONSerialization.data(withJSONObject:report),let json=String(data:data,encoding:.utf8) {showReport("history","Synthetic examples; not measurements.\n\n"+timingSummary(json))}
+            return
+        }
         if demo,args.count==1,detailReports.contains(where:{$0.0==args[0]}) {
             showReport(args[0],"Synthetic report for interface inspection. No hardware or local diagnostic data was read.\n\nExample: two completed transitions; application time 2.0 seconds. These are demo values, not measurements.")
             return

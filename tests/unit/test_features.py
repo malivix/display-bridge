@@ -141,6 +141,20 @@ class Features(unittest.TestCase):
             self.assertEqual(report['pg']['seconds']['audio']['count'],1)
             self.assertEqual(report['pg']['seconds']['total']['p95'],4)
 
+    def test_recent_transitions_are_bounded_ordered_and_allowlisted(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root=Path(temp)
+            for n in range(12):o.record(root,{'profile':'pg','result':'ready','seconds':{'total':n,'audio':True,'private':12},'error':'private text','inputs':{'pg':17}})
+            o.record(root,{'profile':'benq','result':'failed','attempt':2,'error':'private error'})
+            o.record(root,{'profile':'unknown','result':'ready'})
+            recent=o.summary(root)['recent_events']
+            self.assertEqual(len(recent),10)
+            self.assertEqual(recent[0],{'profile':'benq','result':'failed','seconds':{},'attempt':2})
+            self.assertEqual(recent[1],{'profile':'pg','result':'ready','seconds':{'total':11}})
+            self.assertNotIn('private',json.dumps(recent))
+            self.assertNotIn('inputs',json.dumps(recent))
+            self.assertEqual(o.summary(root)['recent_events'],recent)
+
     def test_diagnostics_are_local_private_and_tolerate_missing_files(self):
         with tempfile.TemporaryDirectory() as temp:
             root=Path(temp);path=o.diagnostics(root,root)

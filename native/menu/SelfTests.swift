@@ -4,6 +4,14 @@ import UserNotifications
 import Darwin
 
 func runMenuSelfTests() {
+    let recentText=recentTimingSummary([["profile":"benq","result":"failed","seconds":["total":true]],["profile":"pg","result":"ready","seconds":["total":2.5]]])
+    precondition(recentText.contains("1. Only BenQ here · Failed attempt"))
+    precondition(recentText.contains("Application total: not recorded"))
+    precondition(recentText.contains("2. Only PG here · Completed"))
+    precondition(recentText.contains("Application total: 2.50 s"))
+    precondition(recentTimingSummary(nil).contains("unavailable"))
+    precondition(recentTimingSummary([]).contains("No recent"))
+
     let warning:[String:Any]=["name":"Rotation enrollment","status":"warning","detail":"Portrait is missing.","action":"Capture the missing orientation on this Mac."]
     let failure:[String:Any]=["name":"Configuration","status":"error","detail":"Configuration is invalid.","action":"Restore a known-good backup."]
     func healthJSON(_ fields:[String:Any])->String {String(decoding:try! JSONSerialization.data(withJSONObject:fields),as:UTF8.self)}

@@ -20,3 +20,7 @@ and physical readability checks remain separate; rollback uses the existing prev
 Sources checked 2026-09-21:
 - [ASUS PG42UQ specifications](https://rog.asus.com/ph/monitors/above-34-inches/rog-swift-oled-pg42uq-model/spec/): active area 919.68 × 517.32 mm.
 - [BenQ RD280UG specifications](https://www.benq.com/en-us/monitor/programming/rd280ug/spec.html): 28.2-inch diagonal, 3:2 aspect ratio. Inferred long dimension is diagonal × 25.4 × 3 / sqrt(13), not a measured unit-specific width.
+
+The reference can now be either monitor: match-benq keeps BenQ fixed; match-pg keeps PG fixed.
+Both directions use the same selector, estimate and transaction. Changing BenQ also retains
+the saved vertical center relationship through the existing layout proposal builder.

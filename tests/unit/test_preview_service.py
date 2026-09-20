@@ -25,13 +25,15 @@ class ServiceTests(unittest.TestCase):
         enqueue(self.c,'start','current')
         self.assertEqual(self.service.step(),'preview', self.health)
         return self.service.journal.read()['token']
-    def test_physical_match_uses_fingerprint_and_existing_rollback(self):
+    def check_physical_match_preview(self, reference_role):
         from preview_service import options
-        pg=self.fixture.public[0]
-        reference=max(self.fixture.public[1]['current'][f] for f in ('width','height'))
-        width=round(reference*1.54/16)*16;height=width*9//16
-        pg['modes'].append(dict(pg['modes'][0],modeID=3,width=width,height=height,pixelWidth=2*width,pixelHeight=2*height))
-        self.fixture.metadata['displays'][0]['modes'].append({'modeID':3,'variableRefresh':False,'proMotion':False})
+        target=0 if reference_role=='benq' else 1
+        display=self.fixture.public[target]
+        reference=max(self.fixture.public[1-target]['current'][f] for f in ('width','height'))
+        width=round(reference*1.54/16)*16 if target==0 else round(reference/1.54/3)*3
+        height=width*9//16 if target==0 else width*2//3
+        display['modes'].append(dict(display['modes'][0],modeID=3,width=width,height=height,pixelWidth=2*width,pixelHeight=2*height))
+        self.fixture.metadata['displays'][target]['modes'].append({'modeID':3,'variableRefresh':False,'proMotion':False})
         original_command=self.c.command
         def applied_readback(args,*extra):
             result=original_command(args,*extra)
@@ -42,11 +44,17 @@ class ServiceTests(unittest.TestCase):
                     self.fixture.metadata['displays'][index].update(screen)
             return result
         self.c.command=applied_readback
-        option=next(row for row in options(self.c)['options'] if row['size']=='match-benq')
+        option=next(row for row in options(self.c)['options'] if row['size']=='match-'+reference_role)
         self.assertLess(abs(option['physical_size_percent']-100),5)
-        enqueue(self.c,'start','match-benq',fingerprint=option['fingerprint'])
+        enqueue(self.c,'start','match-'+reference_role,fingerprint=option['fingerprint'])
         self.assertEqual(self.service.step(),'preview',self.health)
         self.assertEqual(Service(self.c).step(),'reverted')
+
+    def test_physical_match_uses_fingerprint_and_existing_rollback(self):
+        self.check_physical_match_preview('benq')
+
+    def test_reverse_match_uses_existing_preview_and_rollback(self):
+        self.check_physical_match_preview('pg')
 
     def test_duration_options_reach_journal_and_restart_restores(self):
         from preview_service import options

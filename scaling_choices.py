@@ -71,8 +71,9 @@ def paired_sizes(report):
             pair[role]=copy.deepcopy(choice)
         if len(pair)==2 and abs(pair['pg']['interface_percent']-pair['benq']['interface_percent'])<=6:
             proposals.append({'label':label,'target_interface_percent':target,'modes':pair})
-    match = physical_match(report)
-    if match is not None:proposals.append(match)
+    for reference in ("benq", "pg"):
+        match = physical_match(report, reference)
+        if match is not None:proposals.append(match)
     return proposals
 
 
@@ -89,21 +90,23 @@ def physical_size_percent(modes):
     return round(100 * lengths['pg'] / lengths['benq'], 1)
 
 
-def physical_match(report):
+def physical_match(report, reference="benq"):
+    if reference not in ("pg", "benq"):raise ValueError("Unknown reference monitor")
+    target = "benq" if reference == "pg" else "pg"
     displays = report['displays']
     current = {r: displays[r].get('current', {}) for r in ('pg', 'benq')}
     before = physical_size_percent(current)
     if before is None:
         return None
-    references = [mode for mode in displays['benq']['choices'] if mode.get('current') is True]
+    references = [mode for mode in displays[reference]['choices'] if mode.get('current') is True]
     if len(references) != 1:return None
     choices = []
-    for pg in displays['pg']['choices']:
-        pair = {'pg': pg, 'benq': references[0]}
+    for mode in displays[target]['choices']:
+        pair = {target: mode, reference: references[0]}
         estimate = physical_size_percent(pair)
         if estimate is not None and abs(estimate - 100) <= 5 and abs(estimate - 100) + .5 < abs(before - 100):
-            choices.append((abs(estimate - 100), pg['modeID'], pair))
+            choices.append((abs(estimate - 100), mode['modeID'], pair))
     if not choices:
         return None
     pair = min(choices, key=lambda item: item[:2])[2]
-    return {'label': 'Match PG size to BenQ', 'modes': copy.deepcopy(pair)}
+    return {'label': 'Match PG size to BenQ' if reference == 'benq' else 'Match BenQ size to PG', 'modes': copy.deepcopy(pair)}

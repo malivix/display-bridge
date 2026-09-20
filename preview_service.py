@@ -9,7 +9,7 @@ from scaling_choices import candidates,paired_sizes,physical_size_percent
 from scaling_proposal import build
 import size_presets
 
-LABELS={'larger':'Larger interface','current':'Current size','more-space':'More space','match-benq':'Match PG size to BenQ'}
+LABELS={'larger':'Larger interface','current':'Current size','more-space':'More space','match-benq':'Match PG size to BenQ','match-pg':'Match BenQ size to PG'}
 
 
 def unresolved(root):

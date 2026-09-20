@@ -71,6 +71,25 @@ class ScalingChoices(unittest.TestCase):
         self.assertIsNone(physical_match(report))
         self.assertIsNone(physical_size_percent({'pg':{},'benq':{}}))
 
+    def test_match_can_preserve_pg_in_either_benq_orientation(self):
+        for portrait in (False,True):
+            a,b,k=self.fixture()
+            mode=dict(a[1]['modes'][0],modeID=3,width=1248,height=832,pixelWidth=2496,pixelHeight=1664)
+            a[1]['modes'].append(mode)
+            b['displays'][1]['modes'].append({'modeID':3,'variableRefresh':False,'proMotion':False})
+            if portrait:
+                for item in [a[1]['current'],*a[1]['modes']]:
+                    item['width'],item['height']=item['height'],item['width']
+                    item['pixelWidth'],item['pixelHeight']=item['pixelHeight'],item['pixelWidth']
+                a[1]['current']['rotation']=90
+                b['displays'][1].update({f:a[1]['current'][f] for f in ('width','height','pixelWidth','pixelHeight','rotation')})
+            report=candidates(a,b,k);match=physical_match(report,'pg')
+            self.assertEqual(match['label'],'Match BenQ size to PG')
+            self.assertEqual(match['modes']['benq']['modeID'],3)
+            self.assertEqual(match['modes']['pg'],report['displays']['pg']['choices'][0])
+            self.assertLess(abs(physical_size_percent(match['modes'])-100),5)
+        with self.assertRaises(ValueError):physical_match(report,'other')
+
     def test_non_hidpi_and_wrong_refresh_excluded(self):
         a,b,k=self.fixture()
         for i,values in enumerate([{'pixelWidth':1920},{'hz':60},{'hz':float('nan')},{'usableForDesktop':False}],3):

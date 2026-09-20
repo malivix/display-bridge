@@ -70,8 +70,9 @@ and an estimated interface-size change for each monitor. It compares each monito
 itself, without promising equal physical size across monitors or native pixel sharpness.
 Escape closes the chooser without applying a preview.
 
-**Match PG size to BenQ** appears when a qualified PG mode improves the model-estimated
-physical match and gets within 5%. BenQ keeps its current mode. The comparison shows PG's
+**Match PG size to BenQ** keeps BenQ at its current size; **Match BenQ size to PG** keeps PG
+at its current size. Each appears only when a qualified mode for the other monitor improves
+the model-estimated physical match and gets within 5%. The comparison shows PG's
 estimated physical UI size as a percentage of BenQ's: 100% means approximately equal physical
 size, not equal resolution. The estimate uses [published panel specifications](plans/physical-size-match.md)
 and works in either supported BenQ orientation. It does not account for viewing distance or

@@ -1,234 +1,216 @@
 # Everyday use and troubleshooting
 
-Change monitor inputs normally. The menu reports the current profile, speaker, rotation,
-and recovery state. Physical switching and DDC delays vary; it is not an instantaneous switch.
+Change monitor inputs normally. Display Bridge observes which screens show this Mac and
+reconciles its desktop and speakers. Physical switching and DDC delays vary.
 
-Overview groups monitor ownership, audio, and recovery. Details keeps the full report.
-Displays → Refresh display details reads current and saved modes without changing settings.
-It labels logical/framebuffer size, refresh, HiDPI, and HDR preference separately. Refresh
-after input or display changes; these are timestamped snapshots, not continuous monitoring.
-Audio shows the selected output and all four profile preferences. It also provides manual
-output preservation, resume, and repair, with an explanation when repair is unavailable.
-Pause/Resume is available directly in the window. More controls opens the compact menu:
-status, monitor ownership, speaker, Open Display Bridge, Pause/Resume, and Quit.
-Advanced contains rotation, timed pause, audio preferences, monitor controls and reports.
-Active preview Keep/Revert and restoration retry remain at the top level.
-Keep/Revert buttons appear only during a size preview. The Recovery group explains pending,
-paused, ownership-held and exhausted work, including the trigger, last error and reported
-retry eligibility. Stale status never presents a current retry countdown.
+Open `~/Applications/Display Auto.app` for the menu and status window. Closing the window
+or quitting the menu does not stop the background controller. For initial setup, upgrades
+or rotation calibration, use the [installation guide](install.md).
 
-The status window is resizable. Choose Standard, Large, or Largest interface size. Window tabs,
-buttons, speaker selectors and status text enlarge together; this changes only this app,
-not monitor resolution or other applications. Long content remains scrollable. Separate
-alerts and the menu still use their native system sizing.
+## Find a control
 
-## Controls
+| Location | What you can do |
+| --- | --- |
+| Overview | See monitor ownership, selected speaker and recovery; use the relevant repair action when available. |
+| Details | Select Live status, Setup readiness, Health check, Transition timing, Monitor communication or Support summary. Choose Refresh for a new report. |
+| Displays | Refresh the logical-layout schematic and current/saved display modes. |
+| Audio | Set speaker preferences for all four profiles, preserve a manual output, resume automatic audio or request repair. |
+| Controls | Choose a monitor, read or adjust brightness/volume, manage brightness presets and check preset-command support. |
+| Window footer | Pause/Resume, change this app's text size, preview display size, and Keep/Revert an active preview. |
 
-- **Pause / Resume:** temporarily stop automatic reconciliation, including a timed pause.
-- **Speaker preferences:** choose the preferred available output for each profile. External
-  headsets remain under your control; manual audio preservation suspends automatic routing.
-- **Brightness / volume:** the Controls tab offers monitor selection, readback, and explicit
-  steps for a monitor currently showing this Mac. Confirmed values appear inline. Buttons
-  explain unavailable states and wait for each command before accepting another adjustment.
-- **Preview display size:** available when both displays are local and healthy. Keep within
-  the countdown or the controller restores the previous size. This saves only the current
-  orientation. If inputs or orientation change, restoration waits for the original context.
-- **Check health:** read-only inspection. **Save diagnostics:** writes a private local report.
-- **Repair audio / Retry size restoration:** explicit retry after the cause of failure is resolved.
+More controls opens the compact menu. Advanced contains rotation, timed pause, audio
+preferences, monitor controls and reports. Active preview and restoration actions remain
+at the top level. Repair actions explain why they are unavailable and recheck status when
+clicked; they do not override manual audio preservation.
 
-The status window opens when a command starts and shows its operation and elapsed time.
-A saved request is not confirmation that the controller finished applying it. The window
-shows acknowledgement, applying, deferred, verified, or failed for the latest settings
-request. Preference acknowledgement does not claim physical effects or audible sound.
-Results survive a menu restart; the last 20 observed requests are retained locally.
-A newer request supersedes unfinished older settings work. Last-known
-labels and report age identify details that may be stale. Clicking a failure notification
-opens the status window. Repeated alerts for the same incident are suppressed until
-recovery; distinct failure categories can alert separately. An outdated repair notification
-opens status instead of issuing repair.
+## Readable interface and keyboard navigation
 
-Closing the menu does not stop the controller. A command timeout is not proof that no changes
-occurred; check status before retrying. Avoid manual configuration edits during a preview.
+Resize the window or choose **Standard**, **Large** or **Largest**. Status text, tabs,
+buttons, selectors and preset forms scale together; long content scrolls. This changes
+only Display Bridge, not monitor resolution or other apps. Alerts and the menu retain
+native system sizing.
 
-## Useful commands
+With the main window focused, **⌘1–⌘5** select Overview, Details, Displays, Audio and
+Controls. **⌘R** refreshes the selected view: Details reruns its selected report, Displays
+reads modes, Controls reads the selected local monitor's brightness/volume, and
+Overview/Audio reread controller state. These shortcuts change no settings, ignore held-key
+repeats, and do not intercept keys in other apps or modal dialogs. No global keyboard
+monitoring or Accessibility permission is added.
 
-All commands below use the installed controller:
+## Display snapshots
 
-```sh
-python3 ~/.local/bin/display-auto.py status
-python3 ~/.local/bin/display-auto.py doctor
-python3 ~/.local/bin/display-auto.py pause-for --minutes 15
-python3 ~/.local/bin/display-auto.py resume
-python3 ~/.local/bin/display-auto.py support-summary
-python3 ~/.local/bin/display-auto.py history
-python3 ~/.local/bin/display-auto.py --help
-```
+**Displays → Refresh display details** reads modes without changing settings. The schematic
+arrow runs from desktop source to mirror on this Mac. Input ownership and macOS rotation
+are shown separately. It is not a physical placement diagram or an inspection of another
+Mac's desktop. Older helpers without topology information report it unavailable.
 
-`status` reads the latest heartbeat; `doctor` performs fresh read-only checks. `check` exposes
-raw display/audio inventory and identifiers for local debugging. None uploads information.
+The report distinguishes logical resolution, framebuffer dimensions, refresh rate, HiDPI,
+HDR preference and saved-mode match. It is a timestamped snapshot, not continuous monitoring
+or proof of optical sharpness. A notice above it identifies changed inputs, unavailable
+controller status and refresh failures. Failed or malformed refreshes retain the last valid
+reading and explicitly mark it as old. Even matching inputs do not prove unchanged size,
+rotation or other settings; refresh after changing them.
+
+## Display size and named presets
+
+With both enrolled monitors local, extended and healthy, choose **Preview size…**. Select
+a relative size or available named preset, then **Preview selected size**. Selection alone
+changes nothing. The comparison shows current/proposed logical and framebuffer dimensions
+and an estimated interface-size change for each monitor. It compares each monitor with
+itself, without promising equal physical size across monitors or native pixel sharpness.
+Escape closes the chooser without applying a preview.
+
+Choose **Keep size** within the 20-second countdown or the controller restores the previous
+size. Keep saves only the current orientation. If inputs or orientation change, restoration
+waits for the original context. Preserve recovery journals and avoid manual configuration
+edits while a preview or restoration is pending.
+
+**Save current as preset…** captures the displayed, qualified fixed-120-Hz/HDR-off HiDPI
+pair, not the highlighted proposed choice. It changes no display settings. Names apply
+separately to landscape and portrait. Replacement is unchecked by default and must be
+explicit. Invalid names stay in the form with a correction message. Names allow up to
+48 Unicode code points; combined accents and emoji can consume more than one.
+
+**Remove a saved preset…** shows the name and orientation and requires its explicit Remove
+button. It changes saved choices only; current sizes and the other orientation remain.
+Concurrent replacement causes removal to fail until you inspect again.
+
+Size presets are limited to 20 name/orientation pairs and stay local to the enrolled setup.
+Changed enrollment, missing modes and damaged preset data are reported; the original store
+is preserved. Ordinary relative-size previews remain available when only the preset store
+is unreadable. Named presets remain unavailable until valid data is restored.
+
+## Brightness and monitor volume
+
+In **Controls**, select PG or BenQ, then read its brightness and volume or use the explicit
+±5% steps. The monitor must be showing this Mac. Each adjustment waits for confirmation;
+confirmed values appear inline. Equal brightness percentages need not produce equal light
+output. Monitor volume does not select the Mac's audio output.
+
+Open **Brightness presets…** for the selected monitor:
+
+- **Save current brightness…** reads its current hardware brightness under a name. It does
+  not apply the highlighted preset. Replacing the same name requires the explicit checkbox.
+- **Apply selected brightness** checks ownership and the saved hardware range, writes at
+  most once, then checks readback. It does not retry automatically.
+- **Remove selected preset** deletes that saved entry without accessing monitor hardware.
+
+Saved values are labeled separately from live readings. An empty list offers Save.
+Brightness presets belong to a monitor and enrollment, not an orientation, and cannot be
+copied between Macs. They are separate from size presets and do not schedule brightness
+changes or change speaker volume.
+
+### Preset support after upgrades
+
+Controls shows the last support check and **Check preset support**. A read-only probe runs
+once at menu launch. Unsupported brightness presets and named size-preset save/removal
+are disabled; ordinary size preview and recovery remain independent. Update the menu and
+controller together, then recheck. Each newer preset command also probes support before
+use, with a deadline of five seconds. This verifies CLI support, not daemon/helper integrity.
+
+## Speakers, pause and recovery
+
+Choose preferred available speakers per profile in Audio. Automatic routing preserves an
+external headset; **Preserve output for 30 minutes** suspends automatic routing while you
+use a manual selection. Resume automatic audio when wanted. Selection readback alone does
+not establish audible sound—listen to verify a repair.
+
+Pause temporarily stops automatic reconciliation; timed pause is also available in Advanced.
+The Overview recovery section distinguishes pending, paused, ownership-held and exhausted
+work. It shows the trigger, last error and retry eligibility without showing a current
+countdown from stale status. Normal switching does not offer repeated repair.
+
+A command opens the status window with its operation and elapsed time. A saved request is
+not confirmation that work finished. The latest settings request can be acknowledged,
+applying, deferred, verified or failed. The last 20 observed requests persist locally; newer
+requests supersede unfinished older settings work. A command timeout does not prove that
+no changes occurred or cancel work already queued in the controller. Check status before
+retrying.
+
+Persistent-failure notifications suppress repeats for the same incident until recovery;
+distinct failures may alert separately. Clicking opens the status window. An outdated
+repair notification opens status instead of issuing repair.
+
+## Setup checks, reports and privacy
+
+**Details → Setup readiness → Refresh** inspects this Mac's configured inputs, stored
+landscape/portrait profiles, sensor mapping, controller health, installed files and monitor
+responses. Missing facts from older controllers are unreported rather than assumed ready.
+This is a checklist; enrollment and orientation capture still use the installer.
+
+Setup readiness also recognizes standard BetterDisplay, MonitorControl, Lunar and Display
+Pilot bundle names among running apps. Presence does not prove a conflict; review overlapping
+settings manually. Display Bridge never stops another tool. Renamed bundles, background
+services and command-line tools are outside this check; an empty list does not prove exclusivity.
+
+Details reports remain timestamped, selectable snapshots until refreshed or replaced.
+Live status updates when selected. Transition timing shows median, nearest-rank p95, slowest
+value and each phase's own sample count. Failed attempts can include retries and are not
+counts of failed physical switches. Small samples and application-only timing cannot establish
+overall physical switching performance; missing metrics remain unavailable.
+
+Health checks inspect menu heartbeat/version and saved preset stores. A closed menu is
+informational because the controller can continue. Valid stored data does not establish
+current mode availability. An unreadable controls file disables setting changes rather than
+showing default preferences; health, diagnostics and preview reversion remain available.
+A missing optional controls file uses normal defaults. The menu never resets damaged files.
+
+**Support summary** produces an allowlisted report excluding raw logs/errors, names,
+identifiers, paths and exact timestamps. Review before sharing. **Diagnostics** saves a
+separate private local artifact containing device and configuration information. Neither
+uploads anything. Do not post raw configurations, logs, diagnostic bundles or screenshots
+with device information in public issues. See [security and privacy](../SECURITY.md).
 
 ## When something is wrong
 
 | Symptom | Next step |
 | --- | --- |
-| Waiting for monitor response | Let input switching settle, verify cables/input selection and DDC availability, then run `doctor`. No valid read means no layout change. |
+| Waiting for monitor response or unknown input | Let switching settle; verify cables, selected inputs and DDC availability, then check health. No valid read means no layout change. |
 | Inactive setup | Return to the enrolled pair. Extra or replacement monitors are intentionally unmanaged. |
-| Recovery exhausted | Keep the intended inputs stable, check health, then use the appropriate explicit repair action. |
-| Sound selected but silent | Confirm the visible monitor, resume automatic audio if wanted, and use Repair audio. Listen to verify success. |
-| Preview awaiting restoration | Return both inputs and BenQ orientation to their original state. Preserve its journal. |
+| Recovery exhausted | Keep intended inputs stable, check health, then use the appropriate explicit repair action. |
+| Selected sound output is silent | Confirm the visible monitor, resume automatic audio if wanted, then Repair audio and listen. |
+| Preview awaiting restoration | Return both inputs and BenQ orientation to their original state. Preserve the journal. |
 | Saved settings need attention | Save private diagnostics and restore a known-good local backup. Deleting a damaged journal is not a repair. |
+| Preset controls unavailable after upgrade | Update menu/controller together, then use Controls → Check preset support. |
+| Display snapshot marked old | Refresh display details after switching/recovery settles; the retained reading is for comparison. |
 | Menu unavailable | Open `~/Applications/Display Auto.app`; inspect controller status separately. |
 
-More controls → Preview support summary produces a small allowlisted report for review.
-It excludes raw logs, error text, device/audio names, identifiers, paths, and exact timestamps.
-Copy only the reviewed summary when sharing; private diagnostics remain a different artifact.
+Rollback with `python3 rollback.py BACKUP_TIMESTAMP` from the repository restores controller
+and menu together from newer snapshots. Older backups lacking menu coverage are rejected.
+Read [installation](install.md) and [qualification](qualification.md) before deployment or rollback.
 
-Configuration and recovery are private state, not repository files. Rollback via `rollback.py BACKUP_TIMESTAMP` restores controller and menu together from
-new snapshots. Older backups without menu coverage are rejected; use a compatible installer. See [qualification](qualification.md) for deployment limits. Do not post raw logs,
-configurations, diagnostics, or screenshots containing device information in public issues.
+## Terminal reference
 
-## Named size presets
-
-In the window, choose **Preview size…**. Select a relative size or an available named
-preset, then **Preview selected size**. The comparison lists both logical resolutions and
-explains unavailable presets. **Save current as preset…** saves the sizes currently displayed,
-not the highlighted proposed choice. Replacement requires checking the explicit option.
-
-With both enrolled monitors showing this Mac, extended and stable, you can also save the
-currently qualified fixed-120-Hz/HDR-off HiDPI pair from Terminal:
+Use the installed launcher so commands run with the installation's selected Python:
 
 ```sh
-display-auto.sh preset-save --preset Reading
-display-auto.sh preview-options
-display-auto.sh preview-start --preset Reading
+~/.local/bin/display-auto.sh status
+~/.local/bin/display-auto.sh doctor
+~/.local/bin/display-auto.sh pause-for --minutes 15
+~/.local/bin/display-auto.sh resume
+~/.local/bin/display-auto.sh support-summary
+~/.local/bin/display-auto.sh history
+~/.local/bin/display-auto.sh --help
 ```
 
-Saving changes no display settings. Names apply separately to portrait and landscape.
-Use `preset-save --preset Reading --replace` to deliberately update an existing name in
-this orientation. The chooser report includes preset availability, reasons, and fingerprints;
-pass its `--fingerprint` to `preview-start` when recalling a previously inspected choice.
-The normal timed Keep/Revert flow applies. Presets are limited to 20 name/orientation pairs,
-stay local to this enrollment, and never silently substitute another mode. Changed enrollment
-or damaged preset data is reported and preserved. Ordinary relative-size previews remain
-available if only the preset store is unreadable; saving/recalling named presets stays blocked
-until valid data for this enrollment is restored. The native chooser uses the same
-preview transaction and fresh fingerprint checks as the CLI.
+`status` reads the latest heartbeat; `doctor` makes fresh read-only checks. `check` exposes
+raw display/audio inventory and identifiers for local debugging. Nothing is uploaded.
 
-To free a preset slot, open **Preview size… → Remove a saved preset…**, select the name
-and orientation, and confirm **Remove selected preset**. This changes saved choices only,
-not your current monitor sizes. The other orientation is preserved. If the preset changed
-while the dialog was open, removal fails and you must inspect it again.
+For size presets, `preset-save --preset Reading` saves current sizes; add `--replace` only
+to replace that name in the current orientation. `preview-options` lists availability and
+fingerprints. Pass the inspected layout's `fingerprint` to
+`preview-start --preset Reading --fingerprint VALUE`; the normal Keep/Revert flow applies.
+For removal, use `preset-remove --preset Reading --orientation 0 --fingerprint VALUE`
+(or orientation `90`). Removal needs the entry's `revision`, not the preview-layout fingerprint.
+Append these arguments to `~/.local/bin/display-auto.sh`.
 
-For CLI removal, pass the selected preset's `revision` from `preview-options` as
-`--fingerprint`, plus `--preset NAME --orientation 0` (landscape) or `90` (portrait), to
-`preset-remove`. This revision is distinct from the proposed-layout fingerprint for preview.
-
-The **Details** tab offers Live status, Health check, Transition timing, Monitor communication,
-and Support summary. Select a report and choose **Refresh**. Read-only reports remain as
-timestamped, selectable snapshots until refreshed or replaced; they are not polled in the
-background. Live status continues updating when selected. Support summaries still require
-review before sharing; no report is uploaded automatically.
-
-Transition timing shows median, nearest-rank p95, slowest value, and each phase's own sample
-count. Profiles with only failed attempts remain visible. Failed attempts may include retries;
-they are not a count of failed physical switches. Small samples and application-only timing
-cannot establish overall physical switching performance. Missing older fields stay unavailable.
-
-Health checks also inspect the menu heartbeat/version and any saved preset store. A closed
-menu is informational because the controller can continue without it. Stale/mismatched menu
-state and unusable preset data include corrective guidance; no file is reset. A valid preset
-store does not establish current mode availability—that is checked by the size chooser.
-
-If the menu cannot read an existing controls file, it marks preferences unavailable and
-disables setting changes instead of showing default speaker choices. Health, diagnostics,
-and preview reversion remain available. A missing optional controls file still uses the
-normal defaults. Restore valid settings through the documented recovery process; the menu
-never resets the file itself.
-
-The Overview recovery section offers the relevant action beside its explanation:
-Check health for unavailable state, Retry size restoration for a repairable preview,
-or Repair audio after exhausted recovery when policy permits. Normal switching does
-not offer repeated repair. Actions recheck current status when clicked; if it changed,
-review the refreshed action before retrying. Manual audio preservation is not overridden.
-
-Preview size opens a resizable comparison window. Selecting a choice updates current
-and proposed logical dimensions, framebuffer dimensions and the estimated interface-size
-change for each monitor. The estimate compares that monitor with itself; it does not
-promise matching physical size across monitors or native pixel sharpness. The window's
-text, selector and buttons follow your interface size. Escape cancels without applying.
-Unavailable named presets include their orientation. The existing 20-second Keep/Revert
-transaction still controls any preview; opening or selecting a choice changes nothing.
-
-Save and Remove preset forms also follow the selected interface size. Invalid names stay
-in the Save form with an inline correction message. Names use the backend's limit of
-48 Unicode code points; combined accents or emoji may use more than one. Replacement is
-unchecked by default. Remove displays the name and orientation and requires its explicit
-button; keyboard selection alone does not remove a preset. Backend errors such as a
-concurrent replacement or changed ownership still reject the submitted command.
-
-For setup review, open Details → Setup readiness → Refresh. This runs the existing
-read-only health inspection once. Enrollment findings show this Mac's configured input
-map and whether matching landscape/portrait profiles and a sensor mapping are stored.
-The remaining checks cover controller health, installed files and monitor responses.
-Missing facts from an older controller are explicitly unreported, not assumed ready.
-This is an inspection checklist; enrollment and orientation capture still use the installer.
-
-Setup readiness also lists recognized running display apps when refreshed in the menu
-window. It recognizes standard BetterDisplay, MonitorControl, Lunar and Display Pilot
-bundle names. Presence alone does not establish a conflict. Review overlapping settings
-manually if needed; the app never stops another tool. Renamed bundles, background services
-and command-line tools are outside this check, so an empty list does not prove exclusivity.
-
-With the main Display Bridge window focused, use ⌘1 for Overview, ⌘2 for Details,
-⌘3 for Displays, ⌘4 for Audio and ⌘5 for Controls. ⌘R refreshes the current view:
-Details reruns its selected report, Displays reads mode details, Controls reads the
-selected local monitor's brightness/volume, and Overview/Audio reread controller state.
-These shortcuts do not change display settings. Held-key repeats are ignored, and the
-shortcuts do not apply inside modal preview/preset dialogs or other applications.
-No global keyboard monitoring or Accessibility permission is added.
-
-In Controls, select the monitor, then open **Brightness presets…**. Save captures its
-current hardware brightness under a name; Apply recalls the selected saved value; Remove
-deletes only that saved entry. The chooser labels saved values separately from live
-readings. An empty list offers Save. Apply and Save require the selected monitor to be
-available locally; stale selections are checked again by the controller. Replacement
-requires the explicit checkbox. These controls require a coordinated menu/controller
-installation that includes this feature.
-
-The equivalent CLI commands are available through `~/.local/bin/display-auto.sh` after
-installing a source revision that includes this feature:
+For brightness:
 
 ```sh
 ~/.local/bin/display-auto.sh brightness-save --monitor benq --preset Reading
 ~/.local/bin/display-auto.sh brightness-list --monitor benq
 ```
 
-Save reads only the selected local monitor's brightness. Use `--replace` explicitly to
-replace the same name for that monitor. List returns a revision for each entry; pass that
-exact revision to `brightness-apply` or `brightness-remove` using `--fingerprint`, together
-with `--monitor` and `--preset`. List/removal do not access monitor hardware. Apply checks
-ownership and the saved hardware range, writes at most once, and verifies readback. It
-never schedules brightness changes or changes speaker volume. Presets are per monitor
-and enrollment, not portable across Macs; equal percentages need not look equally bright.
-
-Before newer size-preset and brightness commands, the menu checks the installed CLI for
-support. An unavailable or incompatible reply stops the requested command and recommends
-a coordinated update. Status and existing recovery commands remain accessible. This probe
-can take up to five seconds; it does not prove daemon or helper build integrity.
-
-Controls shows the last preset-support check and a **Check preset support** button. The
-menu checks once at launch without accessing monitor hardware. After a coordinated
-update, recheck to enable newly supported controls. Unsupported brightness presets and
-named size-preset save/removal are disabled; ordinary size preview and recovery remain
-independent. This display is a snapshot, so command-time checks still run before use.
-
-Displays now includes a read-only logical-layout schematic in the refreshed snapshot.
-The arrow runs from desktop source to mirror on this Mac. Each monitor lists input
-ownership and macOS rotation, followed by current/saved size details. This is not a
-physical placement diagram or an inspection of the other Mac's desktop. Missing topology
-from an older helper reports unavailable; refresh after input or layout changes.
-
-A notice above Displays identifies changed inputs, unavailable controller status, and
-refresh failures. Failed or malformed refreshes preserve the last valid reading for
-comparison and explicitly mark it as old. Matching input reports do not establish that
-size, rotation or other display settings are unchanged; refresh after changing them.
+Use `--replace` explicitly to replace an existing name for that monitor. Pass the list entry's
+`revision` to `brightness-apply` or `brightness-remove` with `--fingerprint VALUE`, together
+with `--monitor benq --preset Reading`. List and removal access no monitor hardware.

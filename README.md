@@ -12,7 +12,8 @@ which screens show this Mac and adjusts its desktop.
 | Neither | Preserve the layout and continue observing |
 
 The menu app provides status, pause/resume, speaker preferences, brightness and volume,
-local diagnostics, and reversible size previews. BenQ auto-rotation requires calibration.
+local diagnostics, named brightness presets, and reversible size previews with saved presets.
+BenQ auto-rotation requires calibration.
 Speaker selection preserves an external headset. Runtime stays local and does not call BetterDisplay.
 
 **Early, hardware-specific software.** Apple-silicon macOS 13+, Python 3.10+, and Xcode
@@ -45,12 +46,14 @@ The installed app retains this name for compatibility. The background controller
 if you close the menu app.
 
 ```sh
-python3 ~/.local/bin/display-auto.py status
-python3 ~/.local/bin/display-auto.py doctor
+~/.local/bin/display-auto.sh status
+~/.local/bin/display-auto.sh doctor
 ```
 
-See [everyday use and troubleshooting](docs/usage.md). Diagnostics contain private device
-information; keep them local. Read [SECURITY.md](SECURITY.md) before sharing any report.
+Start with the [control map](docs/usage.md#find-a-control), [readable interface](docs/usage.md#readable-interface-and-keyboard-navigation),
+and [troubleshooting](docs/usage.md#when-something-is-wrong). Source checkout updates do not
+update the installed app; use the [coordinated upgrade](docs/install.md#upgrade-or-replace-a-saved-baseline).
+Diagnostics contain private device information; keep them local. Read [SECURITY.md](SECURITY.md) before sharing any report.
 
 ## Develop
 

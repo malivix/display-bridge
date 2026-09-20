@@ -10,8 +10,8 @@
 | Share reports or report a vulnerability | [Security](../SECURITY.md) |
 | See release changes | [Changelog](../CHANGELOG.md) |
 | Inspect the initial adversarial review | [Code review](code-review.md) |
-| Review UI findings and feature delivery order | [Product roadmap](plans/product-ui-roadmap.md) |
-| Compare display utilities and source evidence | [App comparison](research/display-app-comparison-2026-09-20.md) |
+| Review UI findings and feature delivery order | [Current milestone](plans/ui-next-milestone.md) |
+| Compare display utilities and source evidence | [Current app comparison](research/display-tools-next-features.md) |
 | Understand the repository workflow choices | [Research](repository-research.md) |
 
 Work logs live in `log/`; scoped plans live in `plans/`. Logs describe what was actually

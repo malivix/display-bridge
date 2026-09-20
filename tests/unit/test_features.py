@@ -179,6 +179,38 @@ class Features(unittest.TestCase):
             self.assertEqual(report['profiles']['pg']['seconds']['total']['median'],1e308)
             json.dumps(report,allow_nan=False)
 
+    def test_record_preserves_damaged_history_and_rejects_oversized_event(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root=Path(temp);path=root/'transitions.json'
+            for content in (b'{damaged',b'{}',b'null',b'['+b' '*o.STATE_READ_LIMIT+b']'):
+                path.write_bytes(content)
+                with self.assertRaises(ValueError):o.record(root,{'profile':'pg','result':'ready'})
+                self.assertEqual(path.read_bytes(),content)
+            path.write_text('[]');original=path.read_bytes()
+            with self.assertRaises(ValueError):o.record(root,{'error':'x'*o.STATE_READ_LIMIT})
+            self.assertEqual(path.read_bytes(),original)
+            o.record(root,{'profile':'pg','result':'ready'})
+            self.assertEqual(path.stat().st_mode&0o777,0o600)
+            self.assertFalse(list(root.glob('.transitions-*')))
+
+    def test_history_pipe_and_links_do_not_block_or_overwrite_targets(self):
+        import os,subprocess,sys
+        with tempfile.TemporaryDirectory() as temp:
+            root=Path(temp);path=root/'transitions.json';os.mkfifo(path)
+            code="""from pathlib import Path
+import sys,observability as o
+root=Path(sys.argv[1])
+assert o.summary(root)['history_available'] is False
+try:o.record(root,{'profile':'pg','result':'ready'})
+except ValueError:pass
+else:raise AssertionError('Unexpected overwrite')
+"""
+            subprocess.run([sys.executable,'-c',code,str(root)],check=True,timeout=5)
+            self.assertTrue(path.exists());path.unlink()
+            target=root/'target';target.write_text('[]');path.symlink_to(target)
+            subprocess.run([sys.executable,'-c',code,str(root)],check=True,timeout=5)
+            self.assertTrue(path.is_symlink());self.assertEqual(target.read_text(),'[]')
+
     def test_diagnostics_are_local_private_and_tolerate_missing_files(self):
         with tempfile.TemporaryDirectory() as temp:
             root=Path(temp);path=o.diagnostics(root,root)

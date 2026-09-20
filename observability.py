@@ -1,23 +1,36 @@
 # SPDX-License-Identifier: MIT
 """Bounded local history and diagnostics; never contacts a server."""
-import hashlib,json,os,platform,time,math,statistics,base64
+import hashlib,json,os,platform,time,math,statistics,base64,stat,tempfile
 from pathlib import Path
 
 STATE_READ_LIMIT=1024*1024
 
-def read_json(path, default=None, max_bytes=None):
+def read_json(path, default=None, max_bytes=STATE_READ_LIMIT):
     try:
-        if max_bytes is None:return json.loads(path.read_text())
-        with path.open('rb') as stream:raw=stream.read(max_bytes+1)
+        descriptor=os.open(path,os.O_RDONLY|os.O_NONBLOCK|os.O_NOFOLLOW)
+        with os.fdopen(descriptor,'rb') as stream:
+            info=os.fstat(stream.fileno())
+            if not stat.S_ISREG(info.st_mode) or info.st_size>max_bytes:return default
+            raw=stream.read(max_bytes+1)
         return json.loads(raw) if len(raw)<=max_bytes else default
     except (OSError,ValueError):return default
 
 def record(root, event):
     path=root/'transitions.json'
-    rows=read_json(path,[])
-    if not isinstance(rows,list):rows=[]
+    rows=read_json(path)
+    if rows is None and not path.exists() and not path.is_symlink():rows=[]
+    if not isinstance(rows,list):raise ValueError('Existing transition history is unreadable; original preserved')
     rows=(rows+[dict(event,at=time.time())])[-200:]
-    temporary=path.with_suffix('.tmp');temporary.write_text(json.dumps(rows,indent=2)+'\n');temporary.replace(path)
+    payload=(json.dumps(rows,indent=2,allow_nan=False)+'\n').encode()
+    if len(payload)>STATE_READ_LIMIT:raise ValueError('Transition history exceeds the write limit; original preserved')
+    temporary=None
+    try:
+        with tempfile.NamedTemporaryFile(mode='wb',dir=root,prefix='.transitions-',delete=False) as stream:
+            temporary=Path(stream.name);stream.write(payload)
+        temporary.replace(path)
+    finally:
+        if temporary is not None:temporary.unlink(missing_ok=True)
+
 
 def valid_duration(value):
     if type(value) not in (int,float):return False

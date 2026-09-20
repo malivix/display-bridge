@@ -640,7 +640,7 @@ def main():
 
 def run_main(resources):
     parser = argparse.ArgumentParser()
-    parser.add_argument('action', choices=['capture', 'check', 'run', 'once', 'test-layouts', 'restore','status','pause','pause-for','resume','repair-audio','audio-manual','audio-auto','speaker','diagnostics','support-summary','history','hidpi','doctor','display-info','ddc-history','monitor-adjust','monitor-settings','preview-options','preview-start','preview-keep','preview-revert','preview-repair','rotation-auto','rotation-manual'])
+    parser.add_argument('action', choices=['capture', 'check', 'run', 'once', 'test-layouts', 'restore','status','pause','pause-for','resume','repair-audio','audio-manual','audio-auto','speaker','diagnostics','support-summary','history','hidpi','doctor','display-info','ddc-history','monitor-adjust','monitor-settings','preset-save','preview-options','preview-start','preview-keep','preview-revert','preview-repair','rotation-auto','rotation-manual'])
     parser.add_argument('--host', choices=['A', 'B'])
     parser.add_argument('--m1ddc', default=str(Path.home() / '.local/bin/display-ddc'))
     parser.add_argument('--minutes',type=int,default=30)
@@ -652,7 +652,13 @@ def run_main(resources):
     parser.add_argument('--size',choices=['larger','current','more-space'])
     parser.add_argument('--token')
     parser.add_argument('--fingerprint')
+    parser.add_argument('--preset')
+    parser.add_argument('--replace',action='store_true')
     args = parser.parse_args()
+    if args.action=='preset-save':
+        from types import SimpleNamespace
+        from preview_service import save_preset
+        print(json.dumps(save_preset(SimpleNamespace(**globals()),args.preset,args.replace)));return
     if args.action=='preview-options':
         from types import SimpleNamespace
         from preview_service import options
@@ -660,7 +666,7 @@ def run_main(resources):
     if args.action in ('preview-start','preview-keep','preview-revert','preview-repair'):
         from types import SimpleNamespace
         from preview_service import enqueue
-        print(json.dumps(enqueue(SimpleNamespace(**globals()),args.action.removeprefix('preview-'),args.size,args.token,args.fingerprint)));return
+        print(json.dumps(enqueue(SimpleNamespace(**globals()),args.action.removeprefix('preview-'),args.size,args.token,args.fingerprint,args.preset)));return
     if args.action in ('monitor-adjust','monitor-settings'):
         if args.action=='monitor-adjust':
             from preview_service import mutation_guard

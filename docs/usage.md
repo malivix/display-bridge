@@ -84,3 +84,23 @@ Copy only the reviewed summary when sharing; private diagnostics remain a differ
 Configuration and recovery are private state, not repository files. Rollback via `rollback.py BACKUP_TIMESTAMP` restores controller and menu together from
 new snapshots. Older backups without menu coverage are rejected; use a compatible installer. See [qualification](qualification.md) for deployment limits. Do not post raw logs,
 configurations, diagnostics, or screenshots containing device information in public issues.
+
+## Named size presets (CLI)
+
+With both enrolled monitors showing this Mac, extended and stable, save the currently
+qualified fixed-120-Hz/HDR-off HiDPI pair:
+
+```sh
+display-auto.sh preset-save --preset Reading
+display-auto.sh preview-options
+display-auto.sh preview-start --preset Reading
+```
+
+Saving changes no display settings. Names apply separately to portrait and landscape.
+Use `preset-save --preset Reading --replace` to deliberately update an existing name in
+this orientation. The chooser report includes preset availability, reasons, and fingerprints;
+pass its `--fingerprint` to `preview-start` when recalling a previously inspected choice.
+The normal timed Keep/Revert flow applies. Presets are limited to 20 name/orientation pairs,
+stay local to this enrollment, and never silently substitute another mode. Changed enrollment
+or damaged preset data is reported and preserved. The native preset chooser is not implemented
+yet; the menu's existing relative-size chooser remains unchanged.

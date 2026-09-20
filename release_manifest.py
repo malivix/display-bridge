@@ -18,6 +18,7 @@ RUNTIME_MODULES = (
     "ddc_log_report.py",
     "monitor_controls.py",
     "scaling_choices.py",
+    "size_presets.py",
     "scaling_proposal.py",
     "scaling_preview.py",
     "preview_runner.py",

@@ -7,6 +7,7 @@ from preview_runner import Runner
 from preview_hardware import ControllerHardware
 from scaling_choices import candidates,paired_sizes
 from scaling_proposal import build
+import size_presets
 
 LABELS={'larger':'Larger interface','current':'Current size','more-space':'More space'}
 
@@ -27,9 +28,13 @@ def mutation_guard(controller):
         yield
 
 
-def enqueue(controller,action,size=None,token=None,fingerprint=None):
+def enqueue(controller,action,size=None,token=None,fingerprint=None,preset=None):
     if action not in ('start','keep','revert','repair'):raise ValueError('Invalid preview action')
-    if action=='start' and size not in LABELS:raise ValueError('Unknown scaling option')
+    if action=='start':
+        if preset is not None:
+            size_presets.name(preset)
+            if size is not None:raise ValueError('Choose a preset or a relative size, not both')
+        elif size not in LABELS:raise ValueError('Unknown scaling option')
     if action!='start' and (not isinstance(token,str) or not token):raise ValueError('Preview token required')
     root=controller.ROOT
     with (root/'install.lock').open('a') as install,(root/'preview-request.lock').open('a') as lock:
@@ -38,23 +43,57 @@ def enqueue(controller,action,size=None,token=None,fingerprint=None):
         controller.acquire_lock(lock,2)
         path=root/'preview-request.json'
         if path.exists():raise RuntimeError('A preview request is already waiting for the controller')
-        request={'id':uuid.uuid4().hex,'action':action,'size':size,'token':token,'fingerprint':fingerprint,'created_at':time.time(),'created_monotonic':time.monotonic()}
+        request={'id':uuid.uuid4().hex,'action':action,'size':size,'preset':preset,'token':token,'fingerprint':fingerprint,'created_at':time.time(),'created_monotonic':time.monotonic()}
         with path.open('x') as stream:
             os.chmod(path,0o600);json.dump(request,stream);stream.flush();os.fsync(stream.fileno())
     return request
 
 
-def options(c):
+def inspect(c):
     config=c.startup_config();hardware=ControllerHardware(c,config)
     context=hardware.context()
     public=json.loads(c.command([c.HELPER,'modes']));metadata=json.loads(c.command([c.MODE_INFO,'modes']))
-    report=candidates(public,metadata,config['keys']);result=[]
+    report=candidates(public,metadata,config['keys'])
+    return config,hardware,context,report
+
+
+def options(c):
+    config,hardware,context,report=inspect(c);result=[]
     for pair in paired_sizes(report):
         files=build(config,report,pair)
         result.append({'size':next(k for k,v in LABELS.items() if v==pair['label']),
                        'label':pair['label'],'modes':pair['modes'],'fingerprint':hashlib.sha256(files['config.json']).hexdigest()})
+    presets=[]
+    for entry in size_presets.read(c.ROOT/'size-presets.json',config)['presets']:
+        item={'name':entry['name'],'rotation':entry['rotation'],'available':False}
+        try:
+            pair=size_presets.resolve(entry,context['rotation'],report);files=build(config,report,pair)
+            item.update(available=True,modes=pair['modes'],fingerprint=hashlib.sha256(files['config.json']).hexdigest())
+        except ValueError as error:item['reason']=str(error)
+        presets.append(item)
     if hardware.context()!=context:raise RuntimeError('Inputs or orientation changed during inspection')
-    return {'read_only':True,'rotation':context['rotation'],'options':result}
+    return {'read_only':True,'rotation':context['rotation'],'options':result,'presets':presets}
+
+
+def save_preset(c,label,replace=False):
+    size_presets.name(label)
+    with mutation_guard(c),(c.ROOT/'install.lock').open('a') as install,(c.ROOT/'size-presets.lock').open('a') as lock:
+        try:fcntl.flock(install,fcntl.LOCK_SH|fcntl.LOCK_NB)
+        except BlockingIOError:raise RuntimeError('Installation in progress')
+        c.acquire_lock(lock,2)
+        if c.automation_paused(c.read_control()):raise RuntimeError('Resume automation before saving a size preset')
+        if c.new_recovery().data['pending'] or c.JOURNAL.exists():raise RuntimeError('Finish recovery before saving a size preset')
+        config,hardware,context,report=inspect(c)
+        entry=size_presets.capture(label,context['rotation'],report)
+        pair=size_presets.resolve(entry,context['rotation'],report)
+        build(config,report,pair)  # Validate supported desk geometry without changing it.
+        fields=('key','modeID','width','height','pixelWidth','pixelHeight','rotation')
+        expected={role:tuple(report['displays'][role]['current'][field] for field in fields) for role in ('pg','benq')}
+        latest={screen['key']:tuple(screen.get(field) for field in fields) for screen in c.layout()}
+        if any(latest.get(config['keys'][role])!=expected[role] for role in expected):raise RuntimeError('Current display size changed during preset inspection')
+        if hardware.context()!=context or c.startup_config()!=config:raise RuntimeError('Settings or orientation changed during preset inspection')
+        size_presets.save(c.ROOT/'size-presets.json',config,entry,replace)
+        return {'saved':True,'name':label,'rotation':context['rotation'],'modes':entry['modes']}
 
 
 class Service:
@@ -97,10 +136,17 @@ class Service:
             public=json.loads(c.command([c.HELPER,'modes']))
             metadata=json.loads(c.command([c.MODE_INFO,'modes']))
             report=candidates(public,metadata,config['keys'])
-            label=LABELS.get(request.get('size'))
-            options=[p for p in paired_sizes(report) if p['label']==label]
-            if len(options)!=1:raise RuntimeError('Requested size is not available with fixed 120-Hz HiDPI')
-            proposed=build(config,report,options[0])
+            if request.get('preset') is not None:
+                if request.get('size') is not None:raise ValueError('Conflicting size request')
+                store=size_presets.read(self.root/'size-presets.json',config)
+                entry=size_presets.find(store,request['preset'],context['rotation'])
+                pair=size_presets.resolve(entry,context['rotation'],report)
+            else:
+                label=LABELS.get(request.get('size'))
+                choices=[p for p in paired_sizes(report) if p['label']==label]
+                if len(choices)!=1:raise RuntimeError('Requested size is not available with fixed 120-Hz HiDPI')
+                pair=choices[0]
+            proposed=build(config,report,pair)
             if request.get('fingerprint') and request['fingerprint']!=hashlib.sha256(proposed['config.json']).hexdigest():
                 raise RuntimeError('Size choices changed; reopen the chooser before previewing')
             if hardware.context()!=context:raise RuntimeError('Inputs or orientation changed during preview preparation')

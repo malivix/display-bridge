@@ -25,6 +25,38 @@ class ServiceTests(unittest.TestCase):
         enqueue(self.c,'start','current')
         self.assertEqual(self.service.step(),'preview', self.health)
         return self.service.journal.read()['token']
+    def test_named_preset_uses_existing_preview_and_restart_rollback(self):
+        from preview_service import save_preset,options
+        saved=save_preset(self.c,'Reading')
+        self.assertTrue(saved['saved'])
+        choice=options(self.c)['presets'][0]
+        self.assertTrue(choice['available'])
+        enqueue(self.c,'start',preset='Reading',fingerprint=choice['fingerprint'])
+        self.assertEqual(self.service.step(),'preview',self.health)
+        self.assertEqual(Service(self.c).step(),'reverted')
+        self.assertTrue((self.root/'size-presets.json').exists())
+
+    def test_preset_writer_lock_prevents_concurrent_save(self):
+        from preview_service import save_preset
+        with (self.root/'size-presets.lock').open('a') as lock:
+            fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
+            with self.assertRaises(BlockingIOError):save_preset(self.c,'Reading')
+        self.assertFalse((self.root/'size-presets.json').exists())
+
+    def test_preset_stale_fingerprint_rejects_before_hardware_write(self):
+        from preview_service import save_preset
+        save_preset(self.c,'Reading')
+        enqueue(self.c,'start',preset='Reading',fingerprint='stale')
+        self.assertEqual(self.service.step(),'request-rejected')
+        self.assertEqual(self.fixture.writes,[])
+
+    def test_preset_save_is_blocked_during_preview_and_conflicting_request_rejected(self):
+        from preview_service import save_preset
+        with self.assertRaisesRegex(ValueError,'not both'):enqueue(self.c,'start',size='current',preset='Reading')
+        self.start()
+        with self.assertRaisesRegex(RuntimeError,'Finish or revert'):save_preset(self.c,'Reading')
+        self.assertFalse((self.root/'size-presets.json').exists())
+
     def test_preview_lifetime_accepts_fractional_clock_across_float_boundary(self):
         with patch('preview_service.time.monotonic', return_value=200.1):
             self.start()

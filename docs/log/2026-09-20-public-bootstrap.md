@@ -30,3 +30,16 @@ for undefined names and syntax errors passed. Raw command output remains local.
 
 Publication/history checks and remote CI are recorded separately after execution. Physical
 hardware tests and reinstallation were not performed for this public-source revision.
+
+## Remote qualification follow-up
+
+The first GitHub CI run failed during preview setup. A deterministic regression using a
+fractional monotonic clock reproduced the same rejection: subtracting timestamps could
+round a valid 120-second lifetime slightly above 120. Deadline validation now compares
+against `started + 120`, preserving the limit without a fuzzy tolerance. The regression
+failed before the fix. The suite now contains 161 Python tests.
+
+An additional isolated publication test proved that private staged bytes are rejected even
+when the working-tree file has already been cleaned. Personal agent override files and
+runtime-state filenames are now explicitly blocked as well. Initial history scanning passed;
+GitHub secret scanning, push protection, and private vulnerability reporting are enabled.

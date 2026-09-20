@@ -9,8 +9,15 @@ import subprocess
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
-BLOCKED_PARTS = {'.local-only', 'evidence', '__pycache__', '.objects', '.env', '.claude', '.codex'}
+BLOCKED_PARTS = {'.local-only', 'evidence', '__pycache__', '.objects', '.env', '.claude', '.codex', '.harness', '.ssh'}
 BLOCKED_SUFFIXES = {'.zip', '.dmg', '.log', '.jsonl', '.pyc', '.pem', '.key', '.p12', '.pfx', '.o'}
+BLOCKED_NAMES = {
+    'CLAUDE.local.md', 'AGENTS.local.md', 'config.json', 'baseline.json',
+    'manifest.json', 'health.json', 'recovery.json', 'control.json',
+    'audio-refresh.json', 'transitions.json', 'menu-health.json',
+    'rotation-active.json', 'scaling-preview.json', 'preview-status.json',
+    'preview-request.json',
+}
 PATTERNS = {
     'concrete home path': re.compile(r'/(?:Users|home)/[A-Za-z0-9_.-]+/'),
     'device UUID': re.compile(r'\b[0-9A-Fa-f]{8}(?:-[0-9A-Fa-f]{4}){3}-[0-9A-Fa-f]{12}\b'),
@@ -27,7 +34,7 @@ def check_blob(name, mode, data):
     errors = []
     if (path.is_absolute() or '..' in path.parts or
             set(path.parts) & BLOCKED_PARTS or path.suffix in BLOCKED_SUFFIXES or
-            path.name.startswith('.env') or name in ('display-layout', 'vendor/m1ddc/m1ddc')):
+            path.name.startswith('.env') or path.name in BLOCKED_NAMES or name in ('display-layout', 'vendor/m1ddc/m1ddc')):
         errors.append('private/generated artifact')
     if mode not in ('100644', '100755'):
         errors.append('symlink, submodule, or unsupported file mode')

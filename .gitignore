@@ -24,3 +24,14 @@ __pycache__/
 .coverage
 .claude/
 .codex/
+CLAUDE.local.md
+AGENTS.local.md
+.harness/
+.ruff_cache/
+.pytest_cache/
+/config.json
+/baseline.json
+/manifest.json
+/health.json
+/control.json
+/recovery.json

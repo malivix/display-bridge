@@ -154,3 +154,45 @@ class InstallerEntryTests(unittest.TestCase):
             before=preview.path.read_bytes()
             module.require_install_idle(root)
             self.assertEqual(preview.path.read_bytes(),before)
+
+    def exercise_service_failure(self, lock_error):
+        import subprocess
+        module=self.load()
+        with tempfile.TemporaryDirectory() as directory:
+            home=Path(directory);root=home/'.config/display-auto';root.mkdir(parents=True)
+            (root/'config.json').write_text('original configuration')
+            events=[]
+            def run(args,**kwargs):
+                if args[0]=='/usr/bin/xcrun':return subprocess.CompletedProcess(args,0,directory,'')
+                if args[0] in ('/usr/bin/swiftc','/usr/bin/clang'):
+                    Path(args[args.index('-o')+1]).write_text('synthetic helper')
+                elif args[0]=='/usr/bin/make':
+                    (Path(args[args.index('-C')+1])/'m1ddc').write_text('synthetic ddc')
+                elif args[0]=='launchctl':
+                    events.append(args[1])
+                    if args[1]=='bootstrap':
+                        self.assertTrue(kwargs.get('check'))
+                        self.assertEqual(kwargs.get('timeout'),10)
+                        raise subprocess.CalledProcessError(5,args)
+                elif not (str(args[0]).endswith('/test-ddc') or len(args)>1 and str(args[1]).endswith('/scripts/test')):
+                    self.fail('Unexpected subprocess')
+                return subprocess.CompletedProcess(args,0,'','')
+            original_open=Path.open
+            def opened(path,*args,**kwargs):
+                if lock_error and path==root/'controller.lock':raise PermissionError('injected controller lock open failure')
+                return original_open(path,*args,**kwargs)
+            with patch('pathlib.Path.home',return_value=home),patch('platform.system',return_value='Darwin'),patch('platform.machine',return_value='arm64'),patch.object(module,'run',side_effect=run),patch.object(Path,'open',opened),patch.object(module,'atomic_link',side_effect=RuntimeError('injected activation failure')),contextlib.redirect_stderr(io.StringIO()):
+                expected=PermissionError if lock_error else subprocess.CalledProcessError
+                with self.assertRaises(expected) as caught:
+                    module.main(['A'])
+            self.assertEqual((root/'config.json').read_text(),'original configuration')
+            if lock_error:self.assertEqual(events,[])
+            else:
+                self.assertEqual(caught.exception.cmd[1],'bootstrap')
+                self.assertEqual(events,['print','bootout','bootout','bootstrap'])
+
+    def test_controller_lock_prepared_before_stopping_service(self):
+        self.exercise_service_failure(lock_error=True)
+
+    def test_failed_rollback_restart_is_reported(self):
+        self.exercise_service_failure(lock_error=False)

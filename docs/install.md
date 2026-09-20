@@ -86,6 +86,10 @@ back up `~/.config/display-auto`, identify the old controller and menu plists in
 new installation works. The installer rejects conflicting plists; it does not automatically
 migrate them or permit two controllers to run together.
 
+If rollback after a failed upgrade reports a bootstrap error, the prior files may already
+be restored but the service did not restart successfully. Inspect controller status and
+LaunchAgent errors before retrying; do not delete the backup or recovery journals.
+
 If an upgrade reports that the menu is still running, quit the older menu-bar app and retry.
 The installer checks the exact executable path before replacement; it does not kill unrelated
 processes. New menu builds also use a per-user ownership lock to prevent duplicate heartbeats.

@@ -275,12 +275,12 @@ def run_install(argv, resources):
             runtime_file.chmod(0o555 if os.access(runtime_file, os.X_OK) else 0o444)
         child_env = dict(os.environ, DISPLAY_AUTO_INSTALLER_PID=str(os.getpid()))
         maintenance = resources.enter_context((root / "maintenance.lock").open("a"))
+        controller_lock = resources.enter_context((root / "controller.lock").open("a"))
         running = (
             run(["launchctl", "print", service], capture_output=True).returncode == 0
         )
         if running:
             run(["launchctl", "bootout", service], check=True)
-        controller_lock = resources.enter_context((root / "controller.lock").open("a"))
         activated = False
         try:
             stop_deadline = time.monotonic() + 8
@@ -537,9 +537,10 @@ def run_install(argv, resources):
                 fcntl.flock(controller_lock, fcntl.LOCK_UN)
             fcntl.flock(maintenance, fcntl.LOCK_UN)
             if running:
-                run(["launchctl", "bootstrap", f"gui/{os.getuid()}", str(plist)])
+                run(["launchctl", "bootstrap", f"gui/{os.getuid()}", str(plist)], check=True, timeout=10)
             print(
-                f"Installation failed; prior files restored from {backup}",
+                (f"Installation failed; prior files restored from {backup}" if activated else
+                 "Installation failed before activation; the active release was not changed."),
                 file=sys.stderr,
             )
             raise

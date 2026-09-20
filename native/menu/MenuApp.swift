@@ -16,6 +16,8 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
     var detailReport="status"
     var reportSelector:NSPopUpButton?
     var reportStatus:NSTextField?
+    var reportRefreshButton:NSButton?
+    var enrollmentReviewButton:NSButton?
     var copySummaryButton:NSButton?
     var reviewedSummary=ReviewedSupportSummary()
     var copySummaryNotice=""
@@ -122,7 +124,12 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
             reportPicker.target=self;reportPicker.action=#selector(selectReport(_:));reportPicker.setAccessibilityLabel("Detail report")
             reportSelector=reportPicker;selectionRow.addArrangedSubview(reportPicker);scalableControls.append(reportPicker)
             let refreshReport=NSButton(title:"Refresh",target:self,action:#selector(refreshReport))
-            selectionRow.addArrangedSubview(refreshReport);scalableControls.append(refreshReport);panelActions.append(refreshReport)
+            selectionRow.addArrangedSubview(refreshReport);scalableControls.append(refreshReport);panelActions.append(refreshReport);reportRefreshButton=refreshReport
+            let reviewEnrollment=NSButton(title:"Review this Mac…",target:self,action:#selector(panelAction(_:)))
+            reviewEnrollment.identifier=NSUserInterfaceItemIdentifier("enrollment-review")
+            reviewEnrollment.toolTip="Choose Mac A or Mac B for a read-only enrollment review. No enrollment is saved."
+            reportRow.addArrangedSubview(reviewEnrollment);enrollmentReviewButton=reviewEnrollment
+            scalableControls.append(reviewEnrollment);panelActions.append(reviewEnrollment)
             let copySummary=NSButton(title:"Copy reviewed summary",target:self,action:#selector(copyReviewedSummary))
             copySummary.toolTip="Copy only the displayed support-summary body. Review it before sharing."
             reportRow.addArrangedSubview(copySummary);copySummaryButton=copySummary;scalableControls.append(copySummary)
@@ -266,7 +273,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
         detailReport=detailReports[index].0
         reviewedSummary.clear();copySummaryNotice=""
         panelText?.setAccessibilityLabel(detailReports[index].1+" report")
-        panelText?.string=detailReport=="status" ? "":"Choose Refresh to read this report. Reports are snapshots and do not update in the background."
+        panelText?.string=detailReport=="status" ? "":detailReport=="enrollment-review" ? "Choose Review this Mac to select its role and inspect prospective enrollment. No enrollment is saved; compatible helpers must already be installed.":"Choose Refresh to read this report. Reports are snapshots and do not update in the background."
         refresh()
     }
     @objc func refreshReport() {
@@ -277,8 +284,8 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
         detailReport=action;reportSelector?.selectItem(at:index)
         reviewedSummary.show(action,text);copySummaryNotice=""
         panelText?.setAccessibilityLabel(detailReports[index].1+" report")
-        reportStatus?.stringValue="Snapshot report; use Refresh to inspect again."
-        panelText?.string="\(detailReports[index].1) · Snapshot at \(Date().formatted(date:.omitted,time:.standard))\nRefresh to inspect again.\n\n"+text
+        reportStatus?.stringValue="Snapshot report; inspect again for current information."
+        panelText?.string="\(detailReports[index].1) · Snapshot at \(Date().formatted(date:.omitted,time:.standard))\n\(action=="enrollment-review" ? "Choose Review this Mac to inspect again.":"Refresh to inspect again.")\n\n"+text
         contentTabs?.selectTabViewItem(withIdentifier:"details")
         refresh()
     }
@@ -439,10 +446,12 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
         if !progress.isEmpty {detail=progress+"\n\n"+detail}
         let lastPreview=read("preview-status.json")
         if !state.hasPrefix("preview-"),let error=lastPreview["error"] as? String {detail += "\n\nLast size preview: \(error)"}
+        reportRefreshButton?.title=detailReport=="enrollment-review" ? "Review this Mac…":"Refresh"
+        enrollmentReviewButton?.isHidden=detailReport != "setup"
         reportSelector?.isEnabled = !busy
         copySummaryButton?.isHidden=detailReport != "support-summary"
         copySummaryButton?.isEnabled = !busy && reviewedSummary.body(for:detailReport) != nil
-        reportStatus?.stringValue = busy ? progress : (!copySummaryNotice.isEmpty ? copySummaryNotice:(detailReport=="status" ? "Live controller status":"Snapshot report; use Refresh to inspect again."))
+        reportStatus?.stringValue = busy ? progress : (!copySummaryNotice.isEmpty ? copySummaryNotice:(detailReport=="status" ? "Live controller status":detailReport=="enrollment-review" ? "Read-only enrollment review; no configuration saved":"Snapshot report; use Refresh to inspect again."))
         if detailReport=="status",let text=panelText,text.string != detail {
             let selection=text.selectedRange()
             let origin=text.enclosingScrollView?.contentView.bounds.origin
@@ -510,6 +519,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
         if !progress.isEmpty {add(compact,progress)}
         compact.addItem(.separator())
         add(compact,"Open Display Bridge…",["panel"])
+        add(compact,"Setup readiness…",["setup"])
         let paused=automationPaused(control)
         add(compact,paused ? "Resume automation":"Pause automation",[paused ? "resume":"pause"])
         if fresh,let token=previewToken,preview["state"] as? String == "needs-repair" {

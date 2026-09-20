@@ -68,9 +68,9 @@ new incident. No new mutation endpoint or journal schema. Rollback is the coordi
 
 The [scenario snapshot correction](../log/demo-snapshot-consistency.md) is implemented and
 checked in the isolated app; demo fixtures remain hardware-free. Finish and review
-the existing enrollment-review work without treating its report as authorization. Consolidate
-Setup readiness, explicit host choice, app/controller compatibility and the next step in one
-entry point. After the read-only flow is verified, separately implement guided capture and
+the existing enrollment-review work without treating its report as authorization. The [setup entry](../log/setup-entry.md) now links the top-level menu, readiness report and
+explicit host choice. App/controller compatibility and activation still need a consolidated
+workflow. After the read-only flow is verified, separately implement guided capture and
 activation using existing installer backups and fresh checks.
 
 Acceptance: no role preselected, unsupported controller dispatch blocked, wrong-host/malformed

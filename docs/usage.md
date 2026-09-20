@@ -21,8 +21,9 @@ or rotation calibration, use the [installation guide](install.md).
 Overview keeps recovery near the top, with its action before long error details. Audio puts
 the current output, repair reason and manual controls before profile preferences.
 
-For a read-only prospective enrollment check, select **Details → Review enrollment…**, then
-**Refresh**. Choose Mac A or Mac B explicitly. Compatible helpers must already be installed;
+Choose **Setup readiness…** from the menu to inspect setup, then **Review this Mac…** for
+a read-only prospective enrollment check. The same action is available under
+**Details → Review enrollment…**. Choose Mac A or Mac B explicitly. Compatible helpers must already be installed;
 both enrolled-model monitors must show this Mac in extended mode with fixed 120-Hz HiDPI
 and HDR off. The report saves no enrollment and changes no services. Use the
 [coordinated installer](install.md) for activation, which rechecks hardware independently.

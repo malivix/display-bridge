@@ -92,7 +92,7 @@ func detailPrefix(_ health:[String:Any],_ control:[String:Any],_ now:Double=Date
     statusFresh(health,now) && health["status"] as? String == "ready" && !automationPaused(control,now) ? "":"Last known · "
 }
 func operationTitle(_ action:String)->String {
-    let names=["display-info":"Inspecting display modes","doctor":"Checking health","diagnostics":"Saving diagnostics","support-summary":"Preparing support summary","history":"Reading transition history",
+    let names=["preset-save":"Saving named size preset","display-info":"Inspecting display modes","doctor":"Checking health","diagnostics":"Saving diagnostics","support-summary":"Preparing support summary","history":"Reading transition history",
         "ddc-history":"Reading monitor history","preview-options":"Inspecting size choices","monitor-settings":"Reading monitor settings",
         "monitor-adjust":"Adjusting monitor settings","preview-start":"Requesting size preview","preview-keep":"Requesting saved size",
         "preview-revert":"Requesting size restoration","preview-repair":"Requesting restoration retry",
@@ -893,6 +893,15 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
     func execute(_ args:[String]) {
         if args==["panel"]{showPanel();return}
         if args==["quit"]{NSApp.terminate(nil);return}
+        if args==["preset-save-prompt"] {savePresetPrompt();return}
+        if demo && args==["preview-options"] {
+            let modes:[String:Any] = ["pg":["width":1920,"height":1080],"benq":["width":1920,"height":1280]]
+            let report:[String:Any] = ["rotation":0,"options":[["label":"Current size","size":"current","fingerprint":"demo","modes":modes]],
+                "presets":[["name":"Reading","rotation":0,"available":true,"fingerprint":"demo","modes":modes],
+                           ["name":"Reading","rotation":90,"available":false,"reason":"Preset belongs to the other orientation"]]]
+            if let data=try? JSONSerialization.data(withJSONObject:report),let text=String(data:data,encoding:.utf8) {chooseSize(text)}
+            return
+        }
         if demo && args==["display-info"] {
             modeText?.string=displaySummary(#"{"read_only":true,"displays":[{"monitor":"pg","available":true,"current":{"width":1920,"height":1080,"pixelWidth":3840,"pixelHeight":2160},"saved":{"width":1920,"height":1080,"pixelWidth":3840,"pixelHeight":2160},"hz":120,"hidpi":true,"fixed_refresh":true,"hdr_preference":false,"saved_mode_matches":true},{"monitor":"benq","available":false,"reason":"Synthetic example: monitor showing the other Mac"}],"limits":"Demo data only. No monitor was inspected or changed."}"#)
             return
@@ -924,6 +933,9 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
                 else if args.first=="display-info" {self.modeText?.string=displaySummary(result)}
                 else if args.first=="doctor" {self.message("System health",healthSummary(result))}
                 else if args.first=="ddc-history" {self.message("Monitor communication",ddcSummary(result))}
+                else if args.first=="preset-save",let data=result.data(using:.utf8),let value=(try? JSONSerialization.jsonObject(with:data)) as? [String:Any],value["saved"] as? Bool == true {
+                    self.operationResult="Preset ‘\(value["name"] as? String ?? "")’ saved for \(value["rotation"] as? Int == 90 ? "portrait":"landscape"). Display settings were not changed."
+                }
                 else if args.first=="preview-options" {self.chooseSize(result)}
                 else if args.first?.hasPrefix("preview-")==true {self.showPanel()}
                 else if args.first=="monitor-adjust",let data=result.data(using:.utf8),let value=(try? JSONSerialization.jsonObject(with:data)) as? [String:Any] {
@@ -956,25 +968,60 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
         } else {alert.informativeText=body}
         alert.runModal()
     }
+    func savePresetPrompt() {
+        let alert=NSAlert();alert.messageText="Save current size preset"
+        alert.informativeText="Save the sizes currently displayed, for this orientation only. This does not apply the highlighted preview choice. Names can have up to 48 characters."
+        let name=NSTextField(frame:NSRect(x:0,y:42,width:480,height:36));name.placeholderString="Reading"
+        name.font=NSFont.systemFont(ofSize:CGFloat([16,20,24][textSizeIndex()]));name.setAccessibilityLabel("Preset name")
+        let replace=NSButton(checkboxWithTitle:"Replace this name in the current orientation",target:nil,action:nil)
+        replace.frame=NSRect(x:0,y:0,width:480,height:32)
+        let content=NSView(frame:NSRect(x:0,y:0,width:480,height:82));content.addSubview(name);content.addSubview(replace)
+        alert.accessoryView=content;alert.addButton(withTitle:"Save current size");alert.addButton(withTitle:"Cancel").keyEquivalent="\u{1b}"
+        alert.window.initialFirstResponder=name
+        guard alert.runModal() == .alertFirstButtonReturn else {return}
+        let label=name.stringValue
+        guard !label.isEmpty,label.count<=48,label==label.trimmingCharacters(in:.whitespacesAndNewlines) else {message("Invalid preset name","Use 1–48 characters without surrounding whitespace.");return}
+        var args=["preset-save","--preset",label]
+        if replace.state == .on {args.append("--replace")}
+        execute(args)
+    }
     func chooseSize(_ json:String){
-        guard let data=json.data(using:.utf8),let report=(try? JSONSerialization.jsonObject(with:data)) as? [String:Any],let options=report["options"] as? [[String:Any]],!options.isEmpty else {message("Size preview unavailable","No qualified size choices were returned.");return}
+        guard let data=json.data(using:.utf8),let report=(try? JSONSerialization.jsonObject(with:data)) as? [String:Any],let relative=report["options"] as? [[String:Any]] else {message("Size preview unavailable","No qualified size choices were returned.");return}
+        var choices=relative
+        var unavailable:[String]=[]
+        for preset in report["presets"] as? [[String:Any]] ?? [] {
+            let name=preset["name"] as? String ?? "Unnamed"
+            if preset["available"] as? Bool == true {
+                var option=preset;option["label"]="Preset: "+name;option["preset"]=name;choices.append(option)
+            } else {unavailable.append(name+": "+(preset["reason"] as? String ?? "Unavailable"))}
+        }
+        guard !choices.isEmpty else {message("Size preview unavailable","No qualified choices are currently available.");return}
         NSApp.activate(ignoringOtherApps:true)
-        let alert=NSAlert();alert.messageText="Preview display size"
-        var lines=["Fixed 120 Hz · HiDPI · HDR off", "This orientation only. Preview reverts after 20 seconds unless you Keep it."]
-        for option in options {
-            let label=option["label"] as? String ?? "Size"
+        let alert=NSAlert();alert.messageText="Preview or save display size"
+        alert.informativeText="\(report["rotation"] as? Int == 90 ? "Portrait":"Landscape") · Fixed 120 Hz · 2× HiDPI · HDR off\nPreview reverts after 20 seconds unless you Keep it."
+        let selector=NSPopUpButton(frame:NSRect(x:0,y:260,width:520,height:36))
+        selector.font=NSFont.systemFont(ofSize:CGFloat([16,20,24][textSizeIndex()]));selector.setAccessibilityLabel("Size choice to preview")
+        var lines:[String]=[]
+        for option in choices {
+            let label=option["label"] as? String ?? "Size";selector.addItem(withTitle:label)
             if let modes=option["modes"] as? [String:[String:Any]] {
                 let pg=modes["pg"] ?? [:],benq=modes["benq"] ?? [:]
-                lines.append("\n\(label): PG \(pg["width"] ?? "?") × \(pg["height"] ?? "?"); BenQ \(benq["width"] ?? "?") × \(benq["height"] ?? "?")")
+                lines.append("\(label)\nPG \(pg["width"] ?? "?") × \(pg["height"] ?? "?") · BenQ \(benq["width"] ?? "?") × \(benq["height"] ?? "?")")
             }
-            alert.addButton(withTitle:label)
         }
-        alert.addButton(withTitle:"Cancel").keyEquivalent="\u{1b}"
-        alert.informativeText=lines.joined(separator:"\n")
-        let index=alert.runModal().rawValue-NSApplication.ModalResponse.alertFirstButtonReturn.rawValue
-        if index>=0 && index<options.count,let size=options[index]["size"] as? String,let fingerprint=options[index]["fingerprint"] as? String {
-            execute(["preview-start","--size",size,"--fingerprint",fingerprint])
-        }
+        if !unavailable.isEmpty {lines.append("Unavailable presets\n"+unavailable.joined(separator:"\n"))}
+        let scroll=NSScrollView(frame:NSRect(x:0,y:0,width:520,height:248));scroll.hasVerticalScroller=true
+        let text=NSTextView(frame:scroll.bounds);text.isEditable=false;text.isSelectable=true;text.font=selector.font
+        text.isVerticallyResizable=true;text.isHorizontallyResizable=false;text.textContainer?.widthTracksTextView=true
+        text.string=lines.joined(separator:"\n\n");text.setAccessibilityLabel("Size comparison and preset availability");scroll.documentView=text
+        let content=NSView(frame:NSRect(x:0,y:0,width:520,height:300));content.addSubview(selector);content.addSubview(scroll);alert.accessoryView=content
+        alert.addButton(withTitle:"Preview selected size");alert.addButton(withTitle:"Save current as preset…");alert.addButton(withTitle:"Cancel").keyEquivalent="\u{1b}"
+        let response=alert.runModal()
+        if response == .alertSecondButtonReturn {savePresetPrompt();return}
+        let index=selector.indexOfSelectedItem
+        guard response == .alertFirstButtonReturn,index>=0,index<choices.count,let fingerprint=choices[index]["fingerprint"] as? String else {return}
+        if let preset=choices[index]["preset"] as? String {execute(["preview-start","--preset",preset,"--fingerprint",fingerprint])}
+        else if let size=choices[index]["size"] as? String {execute(["preview-start","--size",size,"--fingerprint",fingerprint])}
     }
     func notify(_ health:[String:Any],fresh:Bool) {
         guard fresh else{return}

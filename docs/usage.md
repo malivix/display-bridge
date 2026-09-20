@@ -85,10 +85,15 @@ Configuration and recovery are private state, not repository files. Rollback via
 new snapshots. Older backups without menu coverage are rejected; use a compatible installer. See [qualification](qualification.md) for deployment limits. Do not post raw logs,
 configurations, diagnostics, or screenshots containing device information in public issues.
 
-## Named size presets (CLI)
+## Named size presets
 
-With both enrolled monitors showing this Mac, extended and stable, save the currently
-qualified fixed-120-Hz/HDR-off HiDPI pair:
+In the window, choose **Preview size…**. Select a relative size or an available named
+preset, then **Preview selected size**. The comparison lists both logical resolutions and
+explains unavailable presets. **Save current as preset…** saves the sizes currently displayed,
+not the highlighted proposed choice. Replacement requires checking the explicit option.
+
+With both enrolled monitors showing this Mac, extended and stable, you can also save the
+currently qualified fixed-120-Hz/HDR-off HiDPI pair from Terminal:
 
 ```sh
 display-auto.sh preset-save --preset Reading
@@ -102,5 +107,5 @@ this orientation. The chooser report includes preset availability, reasons, and 
 pass its `--fingerprint` to `preview-start` when recalling a previously inspected choice.
 The normal timed Keep/Revert flow applies. Presets are limited to 20 name/orientation pairs,
 stay local to this enrollment, and never silently substitute another mode. Changed enrollment
-or damaged preset data is reported and preserved. The native preset chooser is not implemented
-yet; the menu's existing relative-size chooser remains unchanged.
+or damaged preset data is reported and preserved. The native chooser uses the same
+preview transaction and fresh fingerprint checks as the CLI.

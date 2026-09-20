@@ -9,7 +9,10 @@ It labels logical/framebuffer size, refresh, HiDPI, and HDR preference separatel
 after input or display changes; these are timestamped snapshots, not continuous monitoring.
 Audio shows the selected output and all four profile preferences. It also provides manual
 output preservation, resume, and repair, with an explanation when repair is unavailable.
-Pause/Resume is available directly in the window; More controls opens the advanced menu.
+Pause/Resume is available directly in the window. More controls opens the compact menu:
+status, monitor ownership, speaker, Open Display Bridge, Pause/Resume, and Quit.
+Advanced contains rotation, timed pause, audio preferences, monitor controls and reports.
+Active preview Keep/Revert and restoration retry remain at the top level.
 Keep/Revert buttons appear only during a size preview.
 
 The status window is resizable. Choose Standard, Large, or Largest interface size. Window tabs,

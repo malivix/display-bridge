@@ -515,13 +515,14 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
     var operationStarted:Double?
     var operationName=""
     var operationResult=""
-    var menuOpen=false
+    var openMenus=Set<ObjectIdentifier>()
+    var menuOpen:Bool {!openMenus.isEmpty}
     var failureAlerts=FailureAlerts(sent:Array((UserDefaults.standard.stringArray(forKey:"failureIncidents") ?? []).prefix(16)))
     func applicationShouldHandleReopen(_ sender:NSApplication,hasVisibleWindows flag:Bool)->Bool {showPanel();return true}
     func showPanel() {
         if panel==nil {
             let window=NSWindow(contentRect:NSRect(x:0,y:0,width:640,height:600),styleMask:[.titled,.closable,.resizable,.miniaturizable],backing:.buffered,defer:false)
-            window.title=demo ? "Display Bridge — Demo":"Display Auto";window.isReleasedWhenClosed=false;window.minSize=NSSize(width:600,height:480);window.center()
+            window.title=demo ? "Display Bridge — Demo":"Display Bridge";window.isReleasedWhenClosed=false;window.minSize=NSSize(width:600,height:480);window.center()
             let scroll=NSScrollView(frame:NSRect(x:20,y:138,width:600,height:440));scroll.hasVerticalScroller=true;scroll.autohidesScrollers=true
             scroll.autoresizingMask=[.width,.height]
             let text=NSTextView(frame:scroll.bounds);text.isEditable=false;text.isSelectable=true;text.font=NSFont.systemFont(ofSize:CGFloat([16,20,24][textSizeIndex()]))
@@ -816,27 +817,29 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
         }
         }
         if menuOpen{return}
-        let menu=NSMenu();menu.delegate=self
-        add(menu,"Display Auto \(health["version"] as? String ?? "—") · Mac \(health["host"] as? String ?? "?")")
-        add(menu,"Status: \(state)")
-        add(menu,statusAge(health))
-        if !progress.isEmpty {add(menu,progress)}
-        if state=="waiting-for-ddc" {add(menu,"Waiting for monitor response; layout changes held")}
-        add(menu,"\(prefix)Profile: \(health["profile"] as? String ?? "—")")
-        let rotation=health["rotation"] as? [String:Any] ?? [:]
-        if rotation["enabled"] as? Bool == true {
-            let angle=(rotation["sensor_degrees"] as? Int).map { "\($0)°" } ?? (rotation["state"] as? String ?? "Checking")
-            add(menu,"\(prefix)BenQ rotation: \(angle)")
+        let compact=NSMenu();compact.delegate=self
+        add(compact,"Display Bridge · Mac \(health["host"] as? String ?? "?")")
+        add(compact,dashboard(health,control).components(separatedBy:"\n").first ?? "Status unavailable")
+        add(compact,statusAge(health))
+        for section in sections where section.title=="PG42UQ" || section.title=="BenQ RD280UG" {
+            add(compact,section.title+": "+(section.body.components(separatedBy:"\n").first ?? "Unknown"))
         }
         let audio=health["audio"] as? [String:Any] ?? [:],selected=audio["selected"] as? [String:Any] ?? [:]
-        add(menu,"\(prefix)Speaker: \(selected["name"] as? String ?? "—")")
-        let recovery=health["recovery"] as? [String:Any] ?? [:]
-        add(menu,"\(prefix)Recovery: \(recovery["attempts"] as? Int ?? 0)/3 attempts")
-        if let error=recovery["error"] as? String {add(menu,String(error.prefix(150)))}
-        if let error=health["error"] as? String {add(menu,String(error.prefix(150)))}
-        menu.addItem(.separator())
+        add(compact,"\(prefix)Speaker: \(selected["name"] as? String ?? "—")")
+        if !progress.isEmpty {add(compact,progress)}
+        compact.addItem(.separator())
+        add(compact,"Open Display Bridge…",["panel"])
         let paused=automationPaused(control)
-        add(menu,paused ? "Resume automation":"Pause automation",[paused ? "resume":"pause"])
+        add(compact,paused ? "Resume automation":"Pause automation",[paused ? "resume":"pause"])
+        if fresh,let token=previewToken,preview["state"] as? String == "needs-repair" {
+            add(compact,"Retry size restoration",["preview-repair","--token",token])
+        }
+        if let token=previewToken,previewRemaining(health)>0 {
+            add(compact,"Keep preview size (\(previewRemaining(health))s)",["preview-keep","--token",token])
+            add(compact,"Revert preview size",["preview-revert","--token",token])
+        }
+        let menu=NSMenu();menu.delegate=self
+        let rotation=health["rotation"] as? [String:Any] ?? [:]
         add(menu,"Pause for 15 minutes",["pause-for","--minutes","15"])
         if rotation["enabled"] as? Bool == true {
             let automatic=control["auto_rotate"] as? Bool ?? true
@@ -856,13 +859,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
             };entry.submenu=sub;menu.addItem(entry)
         }
         menu.addItem(.separator())
-        add(menu,"Open status window",["panel"])
         add(menu,"Preview display size…",fresh && state=="ready" && health["profile"] as? String == "extended" && !paused ? ["preview-options"]:nil)
-        if fresh,let token=previewToken,preview["state"] as? String == "needs-repair" {add(menu,"Retry size restoration",["preview-repair","--token",token])}
-        if let token=previewToken,previewRemaining(health)>0 {
-            add(menu,"Keep preview size (\(previewRemaining(health))s)",["preview-keep","--token",token])
-            add(menu,"Revert preview size",["preview-revert","--token",token])
-        }
         let inputs=health["inputs"] as? [String:Int] ?? [:]
         let hostB=health["host"] as? String == "B"
         for (role,label,localInput) in [("pg","PG42UQ",hostB ? 18:17),("benq","BenQ",hostB ? 15:19)] {
@@ -884,11 +881,14 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
         add(menu,"Show transition timing summary…",["history"])
         add(menu,"Show monitor communication history…",["ddc-history"])
         add(menu,"Enable failure notifications…",["notifications"])
-        add(menu,"Quit menu bar (automation continues)",["quit"])
-        item.menu=menu
+        let advanced=NSMenuItem(title:"Advanced",action:nil,keyEquivalent:"")
+        advanced.submenu=menu;compact.addItem(advanced)
+        compact.addItem(.separator())
+        add(compact,"Quit menu bar (automation continues)",["quit"])
+        item.menu=compact
     }
-    func menuWillOpen(_ menu:NSMenu){menuOpen=true}
-    func menuDidClose(_ menu:NSMenu){menuOpen=false}
+    func menuWillOpen(_ menu:NSMenu){openMenus.insert(ObjectIdentifier(menu))}
+    func menuDidClose(_ menu:NSMenu){openMenus.remove(ObjectIdentifier(menu))}
     @objc func act(_ sender:NSMenuItem){if let args=sender.representedObject as? [String]{execute(args)}}
     func execute(_ args:[String]) {
         if args==["panel"]{showPanel();return}

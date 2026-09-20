@@ -63,7 +63,7 @@ allows layout/accessibility inspection without installing or controlling monitor
 with the same macOS 13 deployment target used by `scripts/verify`; the compiler default
 may target a newer OS than the development machine. Local preview bundles stay ignored.
 
-Demo windows include a synthetic scenario selector (ready, stale, paused, away, preview,
+Demo windows include a synthetic scenario selector (ready, PG-only, BenQ-only, stale, paused, away, preview,
 exhausted audio recovery, pending retry, unreadable presets) and a Minimum window action. These controls exist only in demo
 mode. The monitor-response-error scenario makes Read brightness and volume retain a synthetic
 previous reading after a malformed response; it does not run a monitor command. Preview time is a static 20-second fixture and the retry example has a static eight-second
@@ -81,3 +81,7 @@ and invalid-input preservation, then releases the board. It never reads or write
 general user clipboard and does not start the menu UI or controller. Run it in a macOS
 user session with the pasteboard service available; it is separate from default headless
 self-tests. It does not qualify permissions or behavior of every user's general clipboard.
+
+Demo display snapshots derive their input ownership from the selected scenario. Switching
+scenarios leaves an earlier snapshot intact until Refresh, so changed-input and failed-refresh
+notices can be inspected deliberately. Away and unknown states do not invent a mirror layout.

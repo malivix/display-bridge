@@ -227,7 +227,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
                 panelActions.append(button);scalableControls.append(button)
             }
             if demo {
-                let scenarios=NSPopUpButton();scenarios.addItems(withTitles:["ready","stale","paused","away","unknown-input","preview","recovery","recovery-wait","presets-error","controls-error","brightness-empty","older-controller","display-refresh-failed","monitor-response-error"])
+                let scenarios=NSPopUpButton();scenarios.addItems(withTitles:["ready","pg-only","benq-only","stale","paused","away","unknown-input","preview","recovery","recovery-wait","presets-error","controls-error","brightness-empty","older-controller","display-refresh-failed","monitor-response-error"])
                 scenarios.target=self;scenarios.action=#selector(changeDemoScenario(_:));scenarios.setAccessibilityLabel("Synthetic scenario")
                 let compact=NSButton(title:"Minimum window",target:self,action:#selector(compactDemo))
                 let row=NSStackView(views:[scenarios,compact]);row.spacing=12;footer.addArrangedSubview(row)
@@ -628,7 +628,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
         }
         if demo && args==["display-info"] {
             if demoScenario=="display-refresh-failed" {displayReading.failed=true;refresh();return}
-            acceptDisplayReading(#"{"read_only":true,"inputs":{"pg":17,"benq":15},"logical_layout":{"state":"pg-source","monitors":[{"monitor":"pg","owner":"A","rotation":0},{"monitor":"benq","owner":"B","rotation":90}]},"displays":[{"monitor":"pg","available":true,"current":{"width":1920,"height":1080,"pixelWidth":3840,"pixelHeight":2160},"saved":{"width":1920,"height":1080,"pixelWidth":3840,"pixelHeight":2160},"hz":120,"hidpi":true,"fixed_refresh":true,"hdr_preference":false,"saved_mode_matches":true},{"monitor":"benq","available":false,"reason":"Synthetic example: monitor showing the other Mac"}],"limits":"Demo data only. No monitor was inspected or changed."}"#)
+            if let data=try? JSONSerialization.data(withJSONObject:demoDisplayReport(demoScenario)),let json=String(data:data,encoding:.utf8) {acceptDisplayReading(json)}
             return
         }
         if demo {message("Hardware-free demo","This preview uses synthetic status. Monitor, audio, diagnostic and notification actions are disabled.");return}

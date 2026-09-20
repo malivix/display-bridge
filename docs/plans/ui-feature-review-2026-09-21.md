@@ -66,7 +66,8 @@ new incident. No new mutation endpoint or journal schema. Rollback is the coordi
 
 ### 2. Trustworthy UI qualification and setup entry
 
-Fix the scenario-inconsistent snapshot; keep demo fixtures hardware-free. Finish and review
+The [scenario snapshot correction](../log/demo-snapshot-consistency.md) is implemented and
+checked in the isolated app; demo fixtures remain hardware-free. Finish and review
 the existing enrollment-review work without treating its report as authorization. Consolidate
 Setup readiness, explicit host choice, app/controller compatibility and the next step in one
 entry point. After the read-only flow is verified, separately implement guided capture and

@@ -458,6 +458,8 @@ func demoState(_ scenario:String,_ name:String,_ now:Double)->[String:Any] {
     case "stale":health["updated_at"]=now-90
     case "paused":health["status"]="paused"
     case "unknown-input":health["status"]="waiting-for-known-input";health["profile"]="unknown";health["inputs"]=["pg":15,"benq":19]
+    case "pg-only":health["profile"]="pg";health["inputs"]=["pg":17,"benq":15]
+    case "benq-only":health["profile"]="benq";health["inputs"]=["pg":18,"benq":19]
     case "away":health["profile"]="away";health["inputs"]=["pg":18,"benq":15]
     case "preview":
         health["status"]="preview-preview"
@@ -471,4 +473,29 @@ func demoState(_ scenario:String,_ name:String,_ now:Double)->[String:Any] {
     default:break
     }
     return health
+}
+
+// Derive every synthetic snapshot from the same scenario as Overview. No hardware reads.
+func demoDisplayReport(_ scenario:String)->[String:Any] {
+    let health=demoState(scenario,"health.json",0)
+    let inputs=health["inputs"] as? [String:Int] ?? [:]
+    let profile=health["profile"] as? String ?? "unknown"
+    let layout=["extended":"extended","pg":"pg-source","benq":"benq-source"][profile] ?? "unknown"
+    var monitors:[[String:Any]]=[]
+    var displays:[[String:Any]]=[]
+    for role in ["pg","benq"] {
+        let local=role=="pg" ? 17:19,remote=role=="pg" ? 18:15
+        let owner=inputs[role]==local ? "A":inputs[role]==remote ? "B":"unknown"
+        monitors.append(["monitor":role,"owner":owner,"rotation":role=="pg" ? 0:90])
+        if owner=="A" && profile != "unknown" {
+            let mode=["width":role=="pg" ? 1920:1280,"height":role=="pg" ? 1080:1920,
+                      "pixelWidth":role=="pg" ? 3840:2560,"pixelHeight":role=="pg" ? 2160:3840]
+            displays.append(["monitor":role,"available":true,"current":mode,"saved":mode,
+                             "hz":120,"hidpi":true,"fixed_refresh":true,"hdr_preference":false,"saved_mode_matches":true])
+        } else {
+            displays.append(["monitor":role,"available":false,"reason":owner=="B" ? "Synthetic example: monitor showing the other Mac":"Synthetic example: ownership is not confirmed"])
+        }
+    }
+    return ["read_only":true,"inputs":inputs,"logical_layout":["state":layout,"monitors":monitors],
+            "displays":displays,"limits":"Demo data only. No monitor was inspected or changed."]
 }

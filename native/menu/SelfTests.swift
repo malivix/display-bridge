@@ -4,6 +4,19 @@ import UserNotifications
 import Darwin
 
 func runMenuSelfTests() {
+    for (scenario,available,layout) in [("ready",2,"extended"),("pg-only",1,"pg-source"),("benq-only",1,"benq-source"),("away",0,"unknown"),("unknown-input",0,"unknown")] {
+        let report=demoDisplayReport(scenario)
+        precondition((report["inputs"] as? [String:Int]) == (demoState(scenario,"health.json",100)["inputs"] as? [String:Int]))
+        precondition((report["logical_layout"] as? [String:Any])?["state"] as? String == layout)
+        precondition((report["displays"] as! [[String:Any]]).filter{$0["available"] as? Bool == true}.count==available)
+        let json=String(decoding:try! JSONSerialization.data(withJSONObject:report),as:UTF8.self)
+        var reading=DisplayReading();precondition(reading.accept(json))
+        if scenario=="ready" {precondition(reading.notice(demoState(scenario,"health.json",100),refreshing:false,now:100).contains("Inputs still match"))}
+    }
+    var oldDemo=DisplayReading()
+    precondition(oldDemo.accept(String(decoding:try! JSONSerialization.data(withJSONObject:demoDisplayReport("ready")),as:UTF8.self)))
+    precondition(oldDemo.notice(demoState("pg-only","health.json",100),refreshing:false,now:100).contains("Inputs changed"))
+
     precondition(enrollmentHost(0)==nil && enrollmentHost(1)=="A" && enrollmentHost(2)=="B" && enrollmentHost(3)==nil)
     let enrollmentRows:[[String:Any]]=["pg","benq"].map{role in ["monitor":role,"local_input":role=="pg" ? 18:15,"width":1280,"height":720,"pixelWidth":2560,"pixelHeight":1440,"rotation":0]}
     let enrollment:[String:Any]=["read_only":true,"status":"review-ready","host":"B","monitors":enrollmentRows,"audio_routes":["pg","benq","built-in"]]

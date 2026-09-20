@@ -227,3 +227,8 @@ The arrow runs from desktop source to mirror on this Mac. Each monitor lists inp
 ownership and macOS rotation, followed by current/saved size details. This is not a
 physical placement diagram or an inspection of the other Mac's desktop. Missing topology
 from an older helper reports unavailable; refresh after input or layout changes.
+
+A notice above Displays identifies changed inputs, unavailable controller status, and
+refresh failures. Failed or malformed refreshes preserve the last valid reading for
+comparison and explicitly mark it as old. Matching input reports do not establish that
+size, rotation or other display settings are unchanged; refresh after changing them.

@@ -337,6 +337,38 @@ func statusSections(_ health:[String:Any],_ control:[String:Any])->[StatusSectio
         StatusSection(title:"Recovery",body:recoverySummary(health,control))
     ]
 }
+struct DisplayReading {
+    var report:[String:Any]?
+    var failed=false
+    mutating func accept(_ json:String)->Bool {
+        guard let data=json.data(using:.utf8),let value=(try? JSONSerialization.jsonObject(with:data)) as? [String:Any],
+              let readOnly=value["read_only"] as? NSNumber,CFGetTypeID(readOnly)==CFBooleanGetTypeID(),readOnly.boolValue,
+              let rows=value["displays"] as? [[String:Any]],rows.count==2,
+              rows.compactMap({$0["monitor"] as? String}).sorted()==["benq","pg"] else {failed=true;return false}
+        report=value;failed=false;return true
+    }
+    func notice(_ health:[String:Any],refreshing:Bool,now:Double=Date().timeIntervalSince1970)->String {
+        if refreshing {return report==nil ? "Reading displays…":"Refreshing… previous snapshot shown below."}
+        if failed {return report==nil ? "Refresh failed. No valid display snapshot available.":"Refresh failed. Previous snapshot retained; do not treat it as current."}
+        guard let report=report else {return "No display snapshot yet. Choose Refresh display details."}
+        guard statusFresh(health,now) else {return "Controller unavailable. Snapshot may be outdated; refresh after it recovers."}
+        func inputs(_ value:Any?)->[Int]? {
+            guard let value=value as? [String:Any],Set(value.keys)==Set(["pg","benq"]) else{return nil}
+            var result:[Int]=[]
+            for role in ["pg","benq"] {
+                guard let n=value[role] as? NSNumber,CFGetTypeID(n) != CFBooleanGetTypeID(),n.doubleValue.rounded()==n.doubleValue,
+                      (role=="pg" ? [17.0,18.0]:[19.0,15.0]).contains(n.doubleValue) else{return nil}
+                result.append(n.intValue)
+            }
+            return result
+        }
+        guard let observed=inputs(report["inputs"]),let current=inputs(health["inputs"]) else {return "Input comparison unavailable. Refresh after inputs are recognized."}
+        if observed != current {return "Inputs changed since this snapshot. Refresh display details."}
+        if health["status"] as? String != "ready" {return "Controller is not ready. Refresh after switching or recovery settles."}
+        return "Snapshot only. Inputs still match; refresh after changing size or rotation."
+    }
+}
+
 func layoutSummary(_ value:Any?)->String {
     guard let layout=value as? [String:Any],let state=layout["state"] as? String,
           let monitors=layout["monitors"] as? [[String:Any]],monitors.count==2,
@@ -734,6 +766,22 @@ if CommandLine.arguments.contains("--self-test") {
     precondition(automationPaused(["paused":true,"pause_until":200.0],100))
     precondition(!automationPaused(["paused":true,"pause_until":200.0],200))
     precondition(automationPaused(["paused":true],200))
+    var reading=DisplayReading()
+    let snapshotJSON="{\"read_only\":true,\"inputs\":{\"pg\":17,\"benq\":19},\"displays\":[{\"monitor\":\"pg\"},{\"monitor\":\"benq\"}]}"
+    var snapshotHealth:[String:Any]=["updated_at":100.0,"status":"ready","inputs":["pg":17,"benq":19]]
+    precondition(reading.notice(snapshotHealth,refreshing:false,now:100).contains("No display snapshot"))
+    precondition(reading.accept(snapshotJSON))
+    precondition(reading.notice(snapshotHealth,refreshing:false,now:100).contains("Inputs still match"))
+    precondition(reading.notice(snapshotHealth,refreshing:false,now:120).contains("Controller unavailable"))
+    snapshotHealth["inputs"]=["pg":18,"benq":19]
+    precondition(reading.notice(snapshotHealth,refreshing:false,now:100).contains("Inputs changed"))
+    snapshotHealth["inputs"]=["pg":true,"benq":19]
+    precondition(reading.notice(snapshotHealth,refreshing:false,now:100).contains("comparison unavailable"))
+    precondition(!reading.accept("{}") && reading.report != nil)
+    precondition(reading.notice(snapshotHealth,refreshing:false,now:100).contains("Previous snapshot retained"))
+    precondition(reading.notice(snapshotHealth,refreshing:true,now:100).contains("Refreshing"))
+    precondition(reading.accept(snapshotJSON) && !reading.failed)
+    print("PASS snapshot input comparison, stale health, failed refresh preservation and recovery")
     let sampleLayout:[String:Any]=["state":"pg-source","monitors":[["monitor":"pg","owner":"A","rotation":0],["monitor":"benq","owner":"B","rotation":90]]]
     precondition(layoutSummary(sampleLayout).contains("BenQ mirrors PG"))
     precondition(layoutSummary(sampleLayout).contains("Showing Mac B"))
@@ -1076,6 +1124,13 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
     var panelText:NSTextView?
     var contentTabs:NSTabView?
     var modeText:NSTextView?
+    var modeStatus:NSTextField?
+    var displayReading=DisplayReading()
+    var displayRefreshing=false
+    func acceptDisplayReading(_ json:String) {
+        if displayReading.accept(json) {modeText?.string=displaySummary(json)}
+        refresh()
+    }
     var monitorRole="pg"
     var monitorSelector:NSPopUpButton?
     var monitorButtons:[NSButton]=[]
@@ -1181,8 +1236,12 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
             let refreshModes=NSButton(title:"Refresh display details",target:self,action:#selector(panelAction(_:)))
             refreshModes.identifier=NSUserInterfaceItemIdentifier("display-info");refreshModes.translatesAutoresizingMaskIntoConstraints=false;scalableControls.append(refreshModes)
             modeView.addSubview(refreshModes);panelActions.append(refreshModes)
+            let snapshotStatus=NSTextField(wrappingLabelWithString:"");snapshotStatus.isSelectable=true
+            snapshotStatus.translatesAutoresizingMaskIntoConstraints=false;modeView.addSubview(snapshotStatus)
+            modeStatus=snapshotStatus;scalableControls.append(snapshotStatus)
+            NSLayoutConstraint.activate([snapshotStatus.leadingAnchor.constraint(equalTo:modeView.leadingAnchor,constant:12),snapshotStatus.trailingAnchor.constraint(equalTo:modeView.trailingAnchor,constant:-12),snapshotStatus.topAnchor.constraint(equalTo:modeView.topAnchor,constant:12)])
             modeScroll.translatesAutoresizingMaskIntoConstraints=false
-            NSLayoutConstraint.activate([refreshModes.leadingAnchor.constraint(equalTo:modeView.leadingAnchor,constant:12),refreshModes.bottomAnchor.constraint(equalTo:modeView.bottomAnchor,constant:-12),modeScroll.leadingAnchor.constraint(equalTo:modeView.leadingAnchor,constant:12),modeScroll.trailingAnchor.constraint(equalTo:modeView.trailingAnchor,constant:-12),modeScroll.topAnchor.constraint(equalTo:modeView.topAnchor,constant:12),modeScroll.bottomAnchor.constraint(equalTo:refreshModes.topAnchor,constant:-12)])
+            NSLayoutConstraint.activate([refreshModes.leadingAnchor.constraint(equalTo:modeView.leadingAnchor,constant:12),refreshModes.bottomAnchor.constraint(equalTo:modeView.bottomAnchor,constant:-12),modeScroll.leadingAnchor.constraint(equalTo:modeView.leadingAnchor,constant:12),modeScroll.trailingAnchor.constraint(equalTo:modeView.trailingAnchor,constant:-12),modeScroll.topAnchor.constraint(equalTo:snapshotStatus.bottomAnchor,constant:8),modeScroll.bottomAnchor.constraint(equalTo:refreshModes.topAnchor,constant:-12)])
             displays.view=modeView;tabs.addTabViewItem(displays)
             let audioTab=NSTabViewItem(identifier:"audio");audioTab.label="Audio"
             let audioScroll=NSScrollView();audioScroll.hasVerticalScroller=true
@@ -1259,7 +1318,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
                 panelActions.append(button);scalableControls.append(button)
             }
             if demo {
-                let scenarios=NSPopUpButton();scenarios.addItems(withTitles:["ready","stale","paused","away","preview","recovery","recovery-wait","presets-error","controls-error","brightness-empty","older-controller"])
+                let scenarios=NSPopUpButton();scenarios.addItems(withTitles:["ready","stale","paused","away","preview","recovery","recovery-wait","presets-error","controls-error","brightness-empty","older-controller","display-refresh-failed"])
                 scenarios.target=self;scenarios.action=#selector(changeDemoScenario(_:));scenarios.setAccessibilityLabel("Synthetic scenario")
                 let compact=NSButton(title:"Minimum window",target:self,action:#selector(compactDemo))
                 let row=NSStackView(views:[scenarios,compact]);row.spacing=12;footer.addArrangedSubview(row)
@@ -1424,6 +1483,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
     func refresh() {
         let health=read("health.json"),control=read("control.json")
         controlsUsable=controlsAvailable(control)
+        modeStatus?.stringValue=displayReading.notice(health,refreshing:displayRefreshing)
         let fresh=statusFresh(health)
         let prefix=detailPrefix(health,control)
         let state=fresh ? health["status"] as? String ?? "Unknown" : "Controller unavailable"
@@ -1619,7 +1679,8 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
             return
         }
         if demo && args==["display-info"] {
-            modeText?.string=displaySummary(#"{"read_only":true,"logical_layout":{"state":"pg-source","monitors":[{"monitor":"pg","owner":"A","rotation":0},{"monitor":"benq","owner":"B","rotation":90}]},"displays":[{"monitor":"pg","available":true,"current":{"width":1920,"height":1080,"pixelWidth":3840,"pixelHeight":2160},"saved":{"width":1920,"height":1080,"pixelWidth":3840,"pixelHeight":2160},"hz":120,"hidpi":true,"fixed_refresh":true,"hdr_preference":false,"saved_mode_matches":true},{"monitor":"benq","available":false,"reason":"Synthetic example: monitor showing the other Mac"}],"limits":"Demo data only. No monitor was inspected or changed."}"#)
+            if demoScenario=="display-refresh-failed" {displayReading.failed=true;refresh();return}
+            acceptDisplayReading(#"{"read_only":true,"inputs":{"pg":17,"benq":15},"logical_layout":{"state":"pg-source","monitors":[{"monitor":"pg","owner":"A","rotation":0},{"monitor":"benq","owner":"B","rotation":90}]},"displays":[{"monitor":"pg","available":true,"current":{"width":1920,"height":1080,"pixelWidth":3840,"pixelHeight":2160},"saved":{"width":1920,"height":1080,"pixelWidth":3840,"pixelHeight":2160},"hz":120,"hidpi":true,"fixed_refresh":true,"hdr_preference":false,"saved_mode_matches":true},{"monitor":"benq","available":false,"reason":"Synthetic example: monitor showing the other Mac"}],"limits":"Demo data only. No monitor was inspected or changed."}"#)
             return
         }
         if demo {message("Hardware-free demo","This preview uses synthetic status. Monitor, audio, diagnostic and notification actions are disabled.");return}
@@ -1629,6 +1690,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
             };return
         }
         guard !busy else{return}
+        displayRefreshing=args.first=="display-info"
         busy=true;operationStarted=ProcessInfo.processInfo.systemUptime
         operationName=operationTitle(args.first ?? "");operationResult=""
         showPanel()
@@ -1637,6 +1699,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
             let result=response.output,code=response.code
             DispatchQueue.main.async {
                 self.busy=false;self.operationStarted=nil
+                if args.first=="display-info" {self.displayRefreshing=false;if code != 0 {self.displayReading.failed=true}}
                 if code != 0 {self.operationResult=code==124 ? "Command timed out; inspect status before retrying.":"Command failed; see the error for details."}
                 else if let data=result.data(using:.utf8),let response=(try? JSONSerialization.jsonObject(with:data)) as? [String:Any],response["requested"] != nil {
                     self.operationResult=response["request_id"] == nil ? "Request saved; this controller does not report command completion.":""
@@ -1646,7 +1709,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
                 else if args.first=="diagnostics" {NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath:result.trimmingCharacters(in:.whitespacesAndNewlines))])}
                 else if args.first=="support-summary" {self.showReport("support-summary","Review before sharing. This report is not uploaded automatically.\n\n"+result)}
                 else if args.first=="history" {self.showReport("history",timingSummary(result))}
-                else if args.first=="display-info" {self.modeText?.string=displaySummary(result)}
+                else if args.first=="display-info" {self.acceptDisplayReading(result)}
                 else if args.first=="doctor" {self.showReport("doctor",healthSummary(result))}
                 else if args.first=="setup" {self.showReport("setup",setupSummary(result,NSWorkspace.shared.runningApplications.compactMap{$0.bundleURL?.lastPathComponent}))}
                 else if args.first=="ddc-history" {self.showReport("ddc-history",ddcSummary(result))}

@@ -65,6 +65,29 @@ class HealthChecks(unittest.TestCase):
         rotation['sensor_map']={'1':True,'2':90}
         self.assertEqual(setup_checks(config)[1]['status'],'warning')
 
+    def test_special_state_files_are_rejected_without_blocking_or_mutation(self):
+        import os,subprocess,sys
+        with tempfile.TemporaryDirectory() as temp:
+            root=Path(temp);fifo=root/'config.json';os.mkfifo(fifo)
+            target=root/'target';target.write_text('{"private":"unchanged"}')
+            (root/'control.json').symlink_to(target)
+            (root/'recovery.json').mkdir()
+            (root/'menu-health.json').symlink_to(root/'missing')
+            code="""from pathlib import Path
+import sys
+from health_check import report
+root=Path(sys.argv[1])
+def forbidden(*args):raise AssertionError('No monitor queries for rejected configuration')
+result=report(root,root,'test',forbidden,forbidden)
+errors={c['name'] for c in result['checks'] if c['status']=='error'}
+assert {'config.json','control.json','recovery.json','menu-health.json'} <= errors,errors
+assert result['status']=='error' and result['read_only'] is True
+"""
+            subprocess.run([sys.executable,'-c',code,str(root)],check=True,timeout=5)
+            self.assertTrue(fifo.exists());self.assertTrue((root/'control.json').is_symlink())
+            self.assertTrue((root/'recovery.json').is_dir());self.assertTrue((root/'menu-health.json').is_symlink())
+            self.assertEqual(target.read_text(),'{"private":"unchanged"}')
+
     def test_invalid_configuration_never_queries_monitors_or_changes_files(self):
         with tempfile.TemporaryDirectory() as temp:
             root=Path(temp);(root/'config.json').write_text('{bad')

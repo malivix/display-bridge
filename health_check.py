@@ -3,6 +3,7 @@
 import hashlib
 import json
 import os
+import stat
 import time
 from release_manifest import RUNTIME_MODULES, HELPER_HASH_FIELDS
 from persisted_state import validate_control,validate_recovery
@@ -80,14 +81,19 @@ def report(root, bin_dir, version, validate_config, read_inputs, inspect_modes=N
         checks.append(item)
     def read(name, optional=False):
         path=root/name
-        if optional and not path.exists():return None
         try:
-            with path.open('rb') as stream:raw=stream.read(1024*1024+1)
+            descriptor=os.open(path,os.O_RDONLY|os.O_NONBLOCK|os.O_NOFOLLOW)
+            with os.fdopen(descriptor,'rb') as stream:
+                info=os.fstat(stream.fileno())
+                if not stat.S_ISREG(info.st_mode):raise ValueError('State must be a regular file; original preserved')
+                if info.st_size>1024*1024:raise ValueError('State file exceeds the health-check read limit; original preserved')
+                raw=stream.read(1024*1024+1)
             if len(raw)>1024*1024:raise ValueError('State file exceeds the health-check read limit; original preserved')
             value=json.loads(raw)
             if not isinstance(value,dict):raise ValueError('Expected a JSON object')
             return value
         except (OSError,ValueError) as error:
+            if optional and isinstance(error,FileNotFoundError):return None
             add(name,'error',str(error),'Save a diagnostic report; restore a known-good local backup rather than deleting recovery files.')
             return None
 

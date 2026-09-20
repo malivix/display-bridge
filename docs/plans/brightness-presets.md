@@ -16,3 +16,11 @@ apply/removal. Diagnostics include this private file; public summaries omit name
 Tests cover enrollment/range/revision changes, corruption, ownership changes, readback
 failure, no-op recall and one-write-only behavior. Physical brightness qualification is
 opt-in. Rollback ignores the additive store; no configuration migration is required.
+
+## Source implementation status
+
+Backend and Controls chooser are implemented. The chooser keeps the monitor and revision
+from its validated list snapshot, distinguishes saved from live values, and has explicit
+Save/Apply/Remove actions. Empty and malformed lists have separate outcomes. See
+[UI validation](../log/brightness-preset-chooser.md). Physical recall, ownership changes
+during an open dialog, and installed-version qualification remain pending.

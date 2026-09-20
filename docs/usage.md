@@ -187,8 +187,15 @@ These shortcuts do not change display settings. Held-key repeats are ignored, an
 shortcuts do not apply inside modal preview/preset dialogs or other applications.
 No global keyboard monitoring or Accessibility permission is added.
 
-Brightness presets currently have a CLI interface; the Controls chooser is pending.
-On the enrolled setup, use these commands through `~/.local/bin/display-auto.sh` after
+In Controls, select the monitor, then open **Brightness presets…**. Save captures its
+current hardware brightness under a name; Apply recalls the selected saved value; Remove
+deletes only that saved entry. The chooser labels saved values separately from live
+readings. An empty list offers Save. Apply and Save require the selected monitor to be
+available locally; stale selections are checked again by the controller. Replacement
+requires the explicit checkbox. These controls require a coordinated menu/controller
+installation that includes this feature.
+
+The equivalent CLI commands are available through `~/.local/bin/display-auto.sh` after
 installing a source revision that includes this feature:
 
 ```sh

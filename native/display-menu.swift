@@ -91,7 +91,7 @@ func runMenuCommand(_ executable:URL,_ arguments:[String],timeout:Double=45,outp
 
 func controlsAvailable(_ control:[String:Any])->Bool {control["_read_unavailable"] as? Bool != true}
 func safeWithoutControls(_ action:String)->Bool {
-    ["panel","quit","status","doctor","setup","diagnostics","support-summary","history","ddc-history","display-info","monitor-settings","notifications","preview-revert","preview-repair"].contains(action)
+    ["panel","quit","status","doctor","setup","brightness-list","diagnostics","support-summary","history","ddc-history","display-info","monitor-settings","notifications","preview-revert","preview-repair"].contains(action)
 }
 func automationPaused(_ control:[String:Any],_ now:Double=Date().timeIntervalSince1970)->Bool {
     let until=control["pause_until"] as? Double ?? 0
@@ -114,6 +114,7 @@ func operationTitle(_ action:String)->String {
     let names=["preset-remove":"Removing saved size preset","preset-save":"Saving named size preset","display-info":"Inspecting display modes","doctor":"Checking health","diagnostics":"Saving diagnostics","support-summary":"Preparing support summary","history":"Reading transition history",
         "ddc-history":"Reading monitor history","preview-options":"Inspecting size choices","monitor-settings":"Reading monitor settings",
         "monitor-adjust":"Adjusting monitor settings","preview-start":"Requesting size preview","preview-keep":"Requesting saved size",
+        "brightness-list":"Reading saved brightness presets","brightness-save":"Saving current brightness","brightness-apply":"Applying saved brightness","brightness-remove":"Removing brightness preset",
         "preview-revert":"Requesting size restoration","preview-repair":"Requesting restoration retry",
         "repair-audio":"Requesting audio repair","pause":"Requesting pause","pause-for":"Requesting timed pause",
         "resume":"Requesting resume","audio-manual":"Saving audio override","audio-auto":"Requesting automatic audio",
@@ -632,6 +633,23 @@ if CommandLine.arguments.contains("--self-test") {
     precondition(panelRefreshArguments("monitor-controls","status","unknown")==nil)
     precondition(panelRefreshArguments("audio","status","pg")==nil)
     print("PASS window shortcuts, modifier isolation, repeat suppression and read-only refresh targets")
+    var brightnessSample:[String:Any]=["read_only":true,"monitor":"benq","presets":[["name":"Reading","monitor":"benq","value":15,"maximum":50,"revision":String(repeating:"a",count:64)]]]
+    func brightnessJSON(_ report:[String:Any])->String {String(data:try! JSONSerialization.data(withJSONObject:report),encoding:.utf8)!}
+    precondition(brightnessEntries(brightnessJSON(brightnessSample))?.entries.first?.description.contains("30%") == true)
+    precondition(brightnessEntries(brightnessJSON(brightnessSample),"pg")==nil)
+    precondition(brightnessEntries(brightnessJSON(brightnessSample),"benq") != nil)
+    precondition(brightnessEntries("{}")==nil)
+    for patch in [["value":true],["value":51],["maximum":0],["revision":"stale"],["monitor":"pg"]] as [[String:Any]] {
+        var sample=brightnessSample;var entry=(sample["presets"] as! [[String:Any]])[0]
+        entry.merge(patch){_,new in new};sample["presets"]=[entry]
+        precondition(brightnessEntries(brightnessJSON(sample))==nil)
+    }
+    let brightnessRow=(brightnessSample["presets"] as! [[String:Any]])[0]
+    brightnessSample["presets"]=[brightnessRow,brightnessRow]
+    precondition(brightnessEntries(brightnessJSON(brightnessSample))==nil)
+    brightnessSample["presets"]=[]
+    precondition(brightnessEntries(brightnessJSON(brightnessSample))?.entries.isEmpty == true)
+    print("PASS brightness list targets, ranges, revisions, duplicate names and empty states")
     let trackedRequest:[String:Any]=["id":"example","action":"resume"]
     precondition(commandSummary([:],["command_request":trackedRequest]).contains("not yet reported"))
     let trackedHealth:[String:Any]=["updated_at":Date().timeIntervalSince1970,"command_result":["request":trackedRequest,"state":"deferred","detail":"Waiting for input"]]
@@ -804,22 +822,24 @@ func presetNameError(_ value:String)->String? {
 final class PresetDialog: NSObject, NSWindowDelegate {
     let window:NSPanel
     let presets:[[String:Any]]?
+    let brightnessMonitor:String?
     let name=NSTextField()
     let replace=NSButton(checkboxWithTitle:"Replace existing preset",target:nil,action:nil)
     let selector=NSPopUpButton()
     let errorLabel=NSTextField(wrappingLabelWithString:"")
     var arguments:[String]?
-    init(fontSize:CGFloat,presets:[[String:Any]]?=nil) {
-        self.presets=presets
+    init(fontSize:CGFloat,presets:[[String:Any]]?=nil,brightnessMonitor:String?=nil) {
+        self.presets=presets;self.brightnessMonitor=brightnessMonitor
         window=NSPanel(contentRect:NSRect(x:0,y:0,width:620,height:480),styleMask:[.titled,.closable,.resizable],backing:.buffered,defer:false)
         super.init()
         let saving=presets==nil
-        window.title=saving ? "Save current size preset":"Remove a saved size preset"
+        window.title=brightnessMonitor==nil ? (saving ? "Save current size preset":"Remove a saved size preset"):"Save current brightness preset"
         window.minSize=NSSize(width:600,height:460);window.delegate=self;window.isReleasedWhenClosed=false
         let stack=NSStackView();stack.orientation = .vertical;stack.alignment = .leading;stack.spacing=16
         stack.translatesAutoresizingMaskIntoConstraints=false;window.contentView!.addSubview(stack)
         NSLayoutConstraint.activate([stack.leadingAnchor.constraint(equalTo:window.contentView!.leadingAnchor,constant:20),stack.trailingAnchor.constraint(equalTo:window.contentView!.trailingAnchor,constant:-20),stack.topAnchor.constraint(equalTo:window.contentView!.topAnchor,constant:20),stack.bottomAnchor.constraint(lessThanOrEqualTo:window.contentView!.bottomAnchor,constant:-20)])
         let intro=NSTextField(wrappingLabelWithString:saving ? "Save the sizes currently displayed for this orientation. The highlighted preview choice is not applied. Replacement affects only this name and orientation.":"Select the saved name and orientation to remove. Current display settings and presets for the other orientation are preserved.")
+        if let role=brightnessMonitor {intro.stringValue="Save the current hardware brightness of \(role=="pg" ? "PG42UQ":"BenQ RD280UG"). Replacement affects only this name and monitor. Display size and speaker volume are unchanged."}
         let font=NSFont.systemFont(ofSize:fontSize);intro.font=font
         stack.addArrangedSubview(intro);intro.widthAnchor.constraint(equalTo:stack.widthAnchor).isActive=true
         if saving {
@@ -837,7 +857,7 @@ final class PresetDialog: NSObject, NSWindowDelegate {
         errorLabel.font=font;errorLabel.textColor = .systemRed;errorLabel.isSelectable=true
         errorLabel.setAccessibilityLabel("Preset validation error");stack.addArrangedSubview(errorLabel)
         errorLabel.widthAnchor.constraint(equalTo:stack.widthAnchor).isActive=true
-        let submit=NSButton(title:saving ? "Save current size":"Remove selected preset",target:self,action:#selector(confirm(_:)))
+        let submit=NSButton(title:brightnessMonitor==nil ? (saving ? "Save current size":"Remove selected preset"):"Save current brightness",target:self,action:#selector(confirm(_:)))
         submit.font=font
         // Destructive removal is explicit; Return in the selector must not remove a preset.
         if saving {submit.keyEquivalent="\r"}
@@ -857,7 +877,7 @@ final class PresetDialog: NSObject, NSWindowDelegate {
                 errorLabel.stringValue=error;window.makeFirstResponder(name)
                 NSAccessibility.post(element:errorLabel,notification:.valueChanged);return
             }
-            arguments=["preset-save","--preset",name.stringValue]
+            arguments=brightnessMonitor.map{["brightness-save","--monitor",$0,"--preset",name.stringValue]} ?? ["preset-save","--preset",name.stringValue]
             if replace.state == .on {arguments?.append("--replace")}
         }
         NSApp.stopModal()
@@ -868,6 +888,70 @@ final class PresetDialog: NSObject, NSWindowDelegate {
         window.center();window.makeKeyAndOrderFront(nil);NSApp.runModal(for:window);window.orderOut(nil)
         return arguments
     }
+}
+
+struct BrightnessEntry {
+    let name:String
+    let value:Int
+    let maximum:Int
+    let revision:String
+    var description:String {"\(name)\nSaved brightness: \(Int((Double(value)*100/Double(maximum)).rounded(.toNearestOrEven)))% (\(value) / \(maximum))"}
+}
+func brightnessEntries(_ json:String,_ expectedMonitor:String?=nil)->(monitor:String,entries:[BrightnessEntry])? {
+    guard let data=json.data(using:.utf8),let report=(try? JSONSerialization.jsonObject(with:data)) as? [String:Any],report["read_only"] as? Bool == true,
+          let role=report["monitor"] as? String,["pg","benq"].contains(role),let rows=report["presets"] as? [[String:Any]],rows.count<=20,expectedMonitor==nil || expectedMonitor==role else{return nil}
+    var entries:[BrightnessEntry]=[];var names=Set<String>()
+    for row in rows {
+        guard row["monitor"] as? String==role,let name=row["name"] as? String,presetNameError(name)==nil,names.insert(name).inserted,
+              let value=row["value"] as? NSNumber,let maximum=row["maximum"] as? NSNumber,
+              CFGetTypeID(value) != CFBooleanGetTypeID(),CFGetTypeID(maximum) != CFBooleanGetTypeID(),
+              value.doubleValue.isFinite,maximum.doubleValue.isFinite,value.doubleValue.rounded()==value.doubleValue,maximum.doubleValue.rounded()==maximum.doubleValue,
+              value.doubleValue>=0,maximum.doubleValue>0,value.doubleValue<=maximum.doubleValue,maximum.doubleValue<=65535,
+              let revision=row["revision"] as? String,revision.count==64,revision.allSatisfy({"0123456789abcdef".contains($0)}) else{return nil}
+        entries.append(BrightnessEntry(name:name,value:value.intValue,maximum:maximum.intValue,revision:revision))
+    }
+    return (role,entries)
+}
+final class BrightnessChooser: NSObject, NSWindowDelegate {
+    let window:NSPanel
+    let entries:[BrightnessEntry]
+    let selector=NSPopUpButton()
+    let detail=NSTextField(wrappingLabelWithString:"")
+    var result = -1
+    var selected:BrightnessEntry? {entries.indices.contains(selector.indexOfSelectedItem) ? entries[selector.indexOfSelectedItem]:nil}
+    init(monitor:String,entries:[BrightnessEntry],fontSize:CGFloat,unavailable:String?,canRemove:Bool) {
+        self.entries=entries
+        window=NSPanel(contentRect:NSRect(x:0,y:0,width:640,height:620),styleMask:[.titled,.closable,.resizable],backing:.buffered,defer:false)
+        super.init()
+        window.title="\(monitor=="pg" ? "PG42UQ":"BenQ RD280UG") brightness presets"
+        window.minSize=NSSize(width:600,height:620);window.delegate=self;window.isReleasedWhenClosed=false
+        let stack=NSStackView();stack.orientation = .vertical;stack.alignment = .leading;stack.spacing=14
+        stack.translatesAutoresizingMaskIntoConstraints=false;window.contentView!.addSubview(stack)
+        NSLayoutConstraint.activate([stack.leadingAnchor.constraint(equalTo:window.contentView!.leadingAnchor,constant:20),stack.trailingAnchor.constraint(equalTo:window.contentView!.trailingAnchor,constant:-20),stack.topAnchor.constraint(equalTo:window.contentView!.topAnchor,constant:20),stack.bottomAnchor.constraint(lessThanOrEqualTo:window.contentView!.bottomAnchor,constant:-20)])
+        let font=NSFont.systemFont(ofSize:fontSize)
+        let intro=NSTextField(wrappingLabelWithString:"Target: \(monitor=="pg" ? "PG42UQ":"BenQ RD280UG"). Apply changes only this monitor's hardware brightness. Save reads its current brightness; it does not apply the selected preset.")
+        intro.font=font;stack.addArrangedSubview(intro);intro.widthAnchor.constraint(equalTo:stack.widthAnchor).isActive=true
+        selector.font=font;selector.setAccessibilityLabel("Brightness preset")
+        for entry in entries {selector.addItem(withTitle:entry.name)}
+        selector.isEnabled = !entries.isEmpty;selector.target=self;selector.action=#selector(selectEntry(_:))
+        stack.addArrangedSubview(selector);selector.widthAnchor.constraint(equalTo:stack.widthAnchor).isActive=true
+        detail.font=font;detail.isSelectable=true;stack.addArrangedSubview(detail);detail.widthAnchor.constraint(equalTo:stack.widthAnchor).isActive=true
+        let note=NSTextField(wrappingLabelWithString:unavailable ?? "Saved values are not live readings. Apply checks the current input and range, then verifies the result. Nothing runs automatically.")
+        note.font=font;stack.addArrangedSubview(note);note.widthAnchor.constraint(equalTo:stack.widthAnchor).isActive=true
+        for (index,title) in ["Apply selected brightness","Save current brightness…","Remove selected preset","Cancel"].enumerated() {
+            let button=NSButton(title:title,target:self,action:#selector(finish(_:)));button.tag=index;button.font=font
+            if index==0 {button.isEnabled=unavailable==nil && !entries.isEmpty}
+            if index==1 {button.isEnabled=unavailable==nil}
+            if index==2 {button.isEnabled=canRemove && !entries.isEmpty}
+            if index==3 {button.keyEquivalent="\u{1b}"}
+            stack.addArrangedSubview(button)
+        }
+        window.initialFirstResponder=selector;selectEntry(selector)
+    }
+    @objc func selectEntry(_ sender:NSPopUpButton) {detail.stringValue=selected?.description ?? "No saved brightness presets for this monitor."}
+    @objc func finish(_ sender:NSButton) {result=sender.tag;NSApp.stopModal()}
+    func windowShouldClose(_ sender:NSWindow)->Bool {result = -1;NSApp.stopModal();return true}
+    func run()->Int {window.center();window.makeKeyAndOrderFront(nil);NSApp.runModal(for:window);window.orderOut(nil);return result}
 }
 
 enum PanelShortcut: Equatable {
@@ -1043,6 +1127,8 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
             let selector=NSPopUpButton();selector.addItems(withTitles:["PG42UQ","BenQ RD280UG"])
             selector.target=self;selector.action=#selector(selectMonitor(_:));selector.setAccessibilityLabel("Monitor to adjust")
             controlsStack.addArrangedSubview(selector);monitorSelector=selector;scalableControls.append(selector)
+            let presetsButton=NSButton(title:"Brightness presets…",target:self,action:#selector(openBrightnessPresets))
+            presetsButton.identifier=NSUserInterfaceItemIdentifier("brightness-list");controlsStack.addArrangedSubview(presetsButton);panelActions.append(presetsButton);scalableControls.append(presetsButton)
             let availability=NSTextField(wrappingLabelWithString:"");controlsStack.addArrangedSubview(availability)
             availability.widthAnchor.constraint(equalTo:controlsStack.widthAnchor,constant:-32).isActive=true;monitorReason=availability
             for (title,key) in [("Read brightness and volume","read"),("Brightness −5%","luminance:-5"),("Brightness +5%","luminance:5"),("Speaker volume −5%","volume:-5"),("Speaker volume +5%","volume:5")] {
@@ -1076,7 +1162,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
                 panelActions.append(button);scalableControls.append(button)
             }
             if demo {
-                let scenarios=NSPopUpButton();scenarios.addItems(withTitles:["ready","stale","paused","away","preview","recovery","recovery-wait","presets-error","controls-error"])
+                let scenarios=NSPopUpButton();scenarios.addItems(withTitles:["ready","stale","paused","away","preview","recovery","recovery-wait","presets-error","controls-error","brightness-empty"])
                 scenarios.target=self;scenarios.action=#selector(changeDemoScenario(_:));scenarios.setAccessibilityLabel("Synthetic scenario")
                 let compact=NSButton(title:"Minimum window",target:self,action:#selector(compactDemo))
                 let row=NSStackView(views:[scenarios,compact]);row.spacing=12;footer.addArrangedSubview(row)
@@ -1145,6 +1231,21 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
         }
         monitorFeedback?.stringValue=text
         contentTabs?.selectTabViewItem(withIdentifier:"monitor-controls")
+    }
+    @objc func openBrightnessPresets() {execute(["brightness-list","--monitor",monitorRole])}
+    func chooseBrightness(_ json:String,expectedMonitor:String) {
+        guard let report=brightnessEntries(json,expectedMonitor) else {message("Brightness presets unavailable","The list could not be validated. No preset was changed; refresh after checking health.");return}
+        let role=report.monitor
+        let chooser=BrightnessChooser(monitor:role,entries:report.entries,fontSize:CGFloat([16,20,24][textSizeIndex()]),unavailable:monitorControlReason(read("health.json"),read("control.json"),role,busy),canRemove:controlsAvailable(read("control.json")) && !busy)
+        let action=chooser.run()
+        guard [0,1,2].contains(action) else{return}
+        if action != 2,let reason=monitorControlReason(read("health.json"),read("control.json"),role,busy) {message("Brightness action unavailable",reason);return}
+        if action==1 {
+            let dialog=PresetDialog(fontSize:CGFloat([16,20,24][textSizeIndex()]),brightnessMonitor:role)
+            if let arguments=dialog.run() {execute(arguments)}
+        } else if let entry=chooser.selected {
+            execute([action==0 ? "brightness-apply":"brightness-remove","--monitor",role,"--preset",entry.name,"--fingerprint",entry.revision])
+        }
     }
     @objc func selectMonitor(_ sender:NSPopUpButton) {
         monitorRole=sender.indexOfSelectedItem==0 ? "pg":"benq"
@@ -1388,6 +1489,13 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
         }
         if args==["panel"]{showPanel();return}
         if args==["quit"]{NSApp.terminate(nil);return}
+        if demo,args.first=="brightness-list" {
+            let role=args.last ?? "pg"
+            var report:[String:Any]=["read_only":true,"monitor":role,"presets":[["name":"Reading","monitor":role,"value":30,"maximum":100,"revision":String(repeating:"a",count:64)],["name":"Evening","monitor":role,"value":15,"maximum":100,"revision":String(repeating:"b",count:64)]]]
+            if demoScenario=="brightness-empty" {report["presets"]=[] }
+            if let data=try? JSONSerialization.data(withJSONObject:report),let json=String(data:data,encoding:.utf8) {chooseBrightness(json,expectedMonitor:role)}
+            return
+        }
         if demo,args==["setup"] {
             let report:[String:Any]=["read_only":true,"status":"warning","checks":[["name":"Host enrollment","status":"ok","detail":"Mac A; expected local inputs PG=17, BenQ=19. Synthetic enrollment."],["name":"Rotation enrollment","status":"info","detail":"Portrait profile is missing.","action":"Capture the missing orientation on this Mac through the installer; keep existing profiles."]],"limits":"Synthetic fixture. Nothing was read, changed or uploaded."]
             if let data=try? JSONSerialization.data(withJSONObject:report),let json=String(data:data,encoding:.utf8) {showReport("setup",setupSummary(json,["BetterDisplay.app","Unrelated.app"]))}
@@ -1445,9 +1553,13 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
                 else if args.first=="preset-save",let data=result.data(using:.utf8),let value=(try? JSONSerialization.jsonObject(with:data)) as? [String:Any],value["saved"] as? Bool == true {
                     self.operationResult="Preset ‘\(value["name"] as? String ?? "")’ saved for \(value["rotation"] as? Int == 90 ? "portrait":"landscape"). Display settings were not changed."
                 }
+                else if args.first=="brightness-list" {self.chooseBrightness(result,expectedMonitor:args.last ?? "")}
+                else if ["brightness-save","brightness-remove"].contains(args.first ?? ""),let data=result.data(using:.utf8),let value=(try? JSONSerialization.jsonObject(with:data)) as? [String:Any],value[args.first=="brightness-save" ? "saved":"removed"] as? Bool == true {
+                    self.showMonitorResult("Brightness preset ‘\(value["name"] as? String ?? "")’ \(args.first=="brightness-save" ? "saved":"removed"). No brightness change was requested.",value["monitor"] as? String)
+                }
                 else if args.first=="preview-options" {self.chooseSize(result)}
                 else if args.first?.hasPrefix("preview-")==true {self.showPanel()}
-                else if args.first=="monitor-adjust",let data=result.data(using:.utf8),let value=(try? JSONSerialization.jsonObject(with:data)) as? [String:Any] {
+                else if ["monitor-adjust","brightness-apply"].contains(args.first ?? ""),let data=result.data(using:.utf8),let value=(try? JSONSerialization.jsonObject(with:data)) as? [String:Any] {
                     let name=value["feature"] as? String == "luminance" ? "Brightness":"Speaker volume"
                     let monitor=value["monitor"] as? String == "pg" ? "PG42UQ":"BenQ RD280UG"
                     if let percent=value["percent"] as? Int,(0...100).contains(percent) {

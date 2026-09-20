@@ -164,4 +164,6 @@ as part of this milestone. These introduce new failure paths unrelated to reliab
 
 Window-scoped tab navigation and contextual read-only refresh are implemented; see
 [keyboard navigation validation](../log/window-keyboard-navigation.md). Global keys,
-brightness shortcuts and persisted comfort presets remain separate work.
+brightness shortcuts remain separate work. Named per-monitor brightness presets now have
+a guarded CLI and Controls chooser; see [validation](../log/brightness-preset-chooser.md).
+Physical brightness qualification and coordinated installation remain pending.

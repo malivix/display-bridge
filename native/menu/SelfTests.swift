@@ -4,6 +4,13 @@ import UserNotifications
 import Darwin
 
 func runMenuSelfTests() {
+    precondition(previewDurations([:])==[20])
+    precondition(previewDurations(["preview_seconds":[40,20]])==[20,40])
+    for invalid:Any in [[true,40],[20,60],[40],[20,20],"40"] {
+        precondition(previewDurations(["preview_seconds":invalid])==[20])
+    }
+    precondition(previewRemaining(["updated_at":100.0,"preview":["state":"preview","remaining_seconds":40.0]],105)==35)
+
     let monitorArgs=["monitor-adjust","--monitor","pg","--feature","luminance","--step","5"]
     let validMonitor:[String:Any]=["monitor":"pg","feature":"luminance","before":25,"value":30,"maximum":100,"percent":30,"changed":true]
     func monitorResult(_ value:[String:Any],_ args:[String]?=nil,_ code:Int32=0)->MonitorResponse? {

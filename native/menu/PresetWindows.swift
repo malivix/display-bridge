@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
 import AppKit
+import CoreFoundation
 
 func sizeComparison(_ current:[String:Any],_ selected:[String:Any])->String {
     let before=current["modes"] as? [String:[String:Any]] ?? [:]
@@ -29,6 +30,13 @@ func sizeComparison(_ current:[String:Any],_ selected:[String:Any])->String {
     return lines.joined(separator:"\n\n")
 }
 
+func previewDurations(_ report:[String:Any])->[Int] {
+    guard let values=report["preview_seconds"] as? [NSNumber],!values.isEmpty,values.count<=2,
+          values.allSatisfy({CFGetTypeID($0) != CFBooleanGetTypeID() && [20.0,40.0].contains($0.doubleValue)}),
+          Set(values.map{$0.intValue}).count==values.count,values.contains(20) else{return [20]}
+    return values.map{$0.intValue}.sorted()
+}
+
 final class SizeChooser: NSObject, NSWindowDelegate {
     let choices:[[String:Any]]
     let current:[String:Any]
@@ -36,10 +44,14 @@ final class SizeChooser: NSObject, NSWindowDelegate {
     let window:NSPanel
     let selector=NSPopUpButton()
     let comparison=NSTextView()
+    let durationSelector=NSPopUpButton()
+    let durations:[Int]
+    var previewSeconds:Int {durations[max(0,min(durations.count-1,durationSelector.indexOfSelectedItem))]}
     var result = -1
     var selectedIndex:Int {selector.indexOfSelectedItem}
-    init(choices:[[String:Any]],current:[String:Any],notes:String,orientation:String,fontSize:CGFloat,canSave:Bool,canRemove:Bool) {
+    init(choices:[[String:Any]],current:[String:Any],notes:String,orientation:String,fontSize:CGFloat,canSave:Bool,canRemove:Bool,durations:[Int]=[20]) {
         self.choices=choices;self.current=current;self.notes=notes
+        self.durations=previewDurations(["preview_seconds":durations])
         window=NSPanel(contentRect:NSRect(x:0,y:0,width:660,height:720),styleMask:[.titled,.closable,.resizable],backing:.buffered,defer:false)
         super.init()
         window.title="Compare display sizes";window.minSize=NSSize(width:600,height:620);window.delegate=self
@@ -47,13 +59,19 @@ final class SizeChooser: NSObject, NSWindowDelegate {
         let stack=NSStackView();stack.orientation = .vertical;stack.alignment = .leading;stack.spacing=12
         stack.translatesAutoresizingMaskIntoConstraints=false;window.contentView!.addSubview(stack)
         NSLayoutConstraint.activate([stack.leadingAnchor.constraint(equalTo:window.contentView!.leadingAnchor,constant:20),stack.trailingAnchor.constraint(equalTo:window.contentView!.trailingAnchor,constant:-20),stack.topAnchor.constraint(equalTo:window.contentView!.topAnchor,constant:20),stack.bottomAnchor.constraint(equalTo:window.contentView!.bottomAnchor,constant:-20)])
-        let intro=NSTextField(wrappingLabelWithString:"\(orientation) · Fixed 120 Hz · 2× HiDPI · HDR off\nPreview reverts after 20 seconds unless you Keep it.")
+        let intro=NSTextField(wrappingLabelWithString:"\(orientation) · Fixed 120 Hz · 2× HiDPI · HDR off\nPreview reverts unless you Keep it. Time starts after the new size is verified.")
         intro.font=NSFont.systemFont(ofSize:fontSize);stack.addArrangedSubview(intro)
         intro.widthAnchor.constraint(equalTo:stack.widthAnchor).isActive=true
         selector.font=intro.font;selector.setAccessibilityLabel("Size choice to preview")
         for choice in choices {selector.addItem(withTitle:choice["label"] as? String ?? "Size")}
         selector.target=self;selector.action=#selector(selectionChanged(_:));stack.addArrangedSubview(selector)
         selector.widthAnchor.constraint(equalTo:stack.widthAnchor).isActive=true
+        durationSelector.font=intro.font
+        durationSelector.setAccessibilityLabel("Time to confirm display size")
+        durationSelector.addItems(withTitles:self.durations.map{"\($0) seconds to Keep or Revert"})
+        durationSelector.isEnabled=self.durations.count>1
+        stack.addArrangedSubview(durationSelector)
+        durationSelector.widthAnchor.constraint(equalTo:stack.widthAnchor).isActive=true
         let scroll=NSScrollView();scroll.hasVerticalScroller=true;scroll.autohidesScrollers=true
         comparison.isEditable=false;comparison.isSelectable=true;comparison.font=intro.font
         comparison.isVerticallyResizable=true;comparison.isHorizontallyResizable=false;comparison.textContainer?.widthTracksTextView=true
@@ -80,7 +98,7 @@ final class SizeChooser: NSObject, NSWindowDelegate {
     @objc func finish(_ sender:NSButton) {result=sender.tag;NSApp.stopModal()}
     func windowShouldClose(_ sender:NSWindow)->Bool {result = -1;NSApp.stopModal();return true}
     func run()->Int {
-        window.center();window.makeKeyAndOrderFront(nil);NSApp.runModal(for:window);window.orderOut(nil)
+        window.center();window.recalculateKeyViewLoop();window.makeKeyAndOrderFront(nil);NSApp.runModal(for:window);window.orderOut(nil)
         return result
     }
 }

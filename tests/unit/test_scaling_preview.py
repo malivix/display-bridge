@@ -15,6 +15,36 @@ class PreviewTests(unittest.TestCase):
     def viewing(self):
         self.p.applying(self.token,'session',101,self.context)
         return self.p.verified(self.token,'session',105,self.context)
+    def test_longer_preview_is_persisted_bounded_and_restored_after_restart(self):
+        self.path.unlink()
+        record=self.p.begin(self.old,self.new,self.context,'session',100,preview_seconds=40)
+        token=record['token'];self.p.applying(token,'session',101,self.context)
+        shown=self.p.verified(token,'session',105,self.context)
+        self.assertEqual(shown['keep_until'],145)
+        reopened=Preview(self.path)
+        self.assertEqual(reopened.decision('session',140,self.context),'preview')
+        self.assertTrue(keep_eligible(reopened.read(),'session',140,self.context,140))
+        self.assertEqual(reopened.decision('session',145,self.context),'restore')
+        self.assertEqual(reopened.decision('new-session',110,self.context),'restore')
+        with self.assertRaises(RuntimeError):reopened.keep(token,'session',145,self.context)
+        self.assertEqual(decode_snapshot(reopened.read()['original']),self.old)
+
+    def test_duration_cannot_extend_hard_lifetime_and_old_journals_still_work(self):
+        legacy=self.p.read();legacy.pop('preview_seconds');self.p.write(legacy)
+        self.assertEqual(self.viewing()['keep_until'],125)
+        self.path.unlink()
+        record=self.p.begin(self.old,self.new,self.context,'session',100,preview_seconds=40)
+        self.p.applying(record['token'],'session',101,self.context)
+        self.assertEqual(self.p.verified(record['token'],'session',210,self.context)['keep_until'],220)
+        self.assertEqual(self.p.decision('session',220,self.context),'restore')
+
+    def test_invalid_duration_preserves_existing_journal(self):
+        original=self.path.read_bytes()
+        for duration in (True,0,21,60,40.0,'40',None):
+            with self.assertRaises(ValueError):
+                self.p.begin(self.old,self.new,self.context,'session',100,preview_seconds=duration)
+            self.assertEqual(self.path.read_bytes(),original)
+
     def test_keep_requires_verified_apply_and_complete_files(self):
         with self.assertRaises(RuntimeError):self.p.keep(self.token,'session',101,self.context)
         self.viewing();self.p.keep(self.token,'session',110,self.context)

@@ -55,10 +55,11 @@ A failed parse never displays Confirmed, never retries the mutation and never er
 recovery journal. Native isolated tests and a synthetic UI error scenario are required.
 Rollback: coordinated source/menu deployment; no runtime schema migration.
 
-### 2. Accessible preview and size matching
+### 2. Accessible preview and size matching — duration implemented in source
 
-First finish the accessibility matrix above for current dialogs. Then offer a user-selected
-longer preview duration (for example 20 or 40 seconds) through the controller transaction,
+[Duration and keyboard validation](../log/accessible-preview-duration.md) cover the size chooser;
+VoiceOver, light appearance and the rest of the accessibility matrix remain open. The implemented user-selected
+longer preview duration offers 20 or 40 seconds through the controller transaction,
 not only the UI countdown. Keep/Revert must remain prominent and work independently of
 window visibility. A later physical-size matching guide can show estimated relative size
 and let the user calibrate visually; it cannot promise native sharpness at every scale.

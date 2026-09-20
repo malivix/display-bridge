@@ -25,6 +25,24 @@ class ServiceTests(unittest.TestCase):
         enqueue(self.c,'start','current')
         self.assertEqual(self.service.step(),'preview', self.health)
         return self.service.journal.read()['token']
+    def test_duration_options_reach_journal_and_restart_restores(self):
+        from preview_service import options
+        self.assertEqual(options(self.c)['preview_seconds'],[20,40])
+        enqueue(self.c,'start','current',preview_seconds=40)
+        self.assertEqual(self.service.step(),'preview',self.health)
+        record=self.service.journal.read()
+        self.assertEqual(record['preview_seconds'],40)
+        self.assertAlmostEqual(record['keep_until']-record['verified_at'],40)
+        self.assertEqual(Service(self.c).step(),'reverted')
+
+    def test_invalid_duration_is_rejected_before_request_or_hardware(self):
+        for duration in (True,60,'40',None):
+            with self.assertRaises(ValueError):enqueue(self.c,'start','current',preview_seconds=duration)
+            self.assertFalse((self.root/'preview-request.json').exists())
+            with patch.object(self.c,'startup_config',side_effect=AssertionError('No hardware preparation')):
+                with self.assertRaises(ValueError):self.service.start({'preview_seconds':duration})
+        with self.assertRaises(ValueError):enqueue(self.c,'keep',token='example',preview_seconds=40)
+
     def test_named_preset_uses_existing_preview_and_restart_rollback(self):
         from preview_service import save_preset,options
         saved=save_preset(self.c,'Reading')

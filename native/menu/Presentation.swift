@@ -76,7 +76,7 @@ func notificationCommand(_ identifier:String)->String? {
 func previewRemaining(_ health:[String:Any],_ now:Double=Date().timeIntervalSince1970)->Int {
     let age=now-(health["updated_at"] as? Double ?? 0)
     guard age>=0 && age<15,let preview=health["preview"] as? [String:Any],preview["state"] as? String == "preview",let remaining=preview["remaining_seconds"] as? Double,remaining.isFinite else{return 0}
-    return Int(max(0,min(20,ceil(remaining-age))))
+    return Int(max(0,min(40,ceil(remaining-age))))
 }
 struct RecoveryAction: Equatable {
     let title:String

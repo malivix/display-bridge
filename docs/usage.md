@@ -60,8 +60,10 @@ and an estimated interface-size change for each monitor. It compares each monito
 itself, without promising equal physical size across monitors or native pixel sharpness.
 Escape closes the chooser without applying a preview.
 
-Choose **Keep size** within the 20-second countdown or the controller restores the previous
-size. Keep saves only the current orientation. If inputs or orientation change, restoration
+Select 20 seconds (default) or 40 seconds to judge the preview, then choose **Keep size**
+within the countdown or the controller restores the previous size. Older controllers offer
+only 20 seconds. The timer starts after verified application; the existing two-minute total
+transaction limit can shorten it. Closing the menu does not disable restoration. Keep saves only the current orientation. If inputs or orientation change, restoration
 waits for the original context. Preserve recovery journals and avoid manual configuration
 edits while a preview or restoration is pending.
 

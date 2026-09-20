@@ -14,6 +14,13 @@ import tempfile
 import uuid
 from persisted_state import number as finite
 
+PREVIEW_SECONDS=(20,40)
+
+def validate_preview_seconds(value):
+    if type(value) is not int or value not in PREVIEW_SECONDS:raise ValueError('Preview duration must be 20 or 40 seconds')
+    return value
+
+
 FILES={'config.json','baseline.json','rotation-active.json'}
 TERMINAL={'kept','reverted'}
 PHASES={'prepared','applying','preview','committing','restoring','restore-failed'}|TERMINAL
@@ -22,7 +29,7 @@ PHASES={'prepared','applying','preview','committing','restoring','restore-failed
 def keep_eligible(record,session,now,context,requested_at):
     until=record.get('keep_until')
     if not finite(until) or not finite(now) or not finite(requested_at):return False
-    ready=record.get('verified_at',max(record['started'],until-20))
+    ready=record.get('verified_at',max(record['started'],until-record.get('preview_seconds',20)))
     return (record['phase']=='preview' and record['session']==session and record['context']==context
             and record['started']<=now<record['hard_deadline']
             and ready<=requested_at<=now and requested_at<until)
@@ -54,6 +61,7 @@ def decode_snapshot(value):
 def validate(record):
     if not isinstance(record,dict) or record.get('schema')!=1 or record.get('phase') not in PHASES:
         raise ValueError('Invalid preview journal')
+    validate_preview_seconds(record.get('preview_seconds',20))
     for key in ('token','session'):
         if not isinstance(record.get(key),str) or not record[key]:raise ValueError('Missing preview identity')
     for key in ('started','hard_deadline'):
@@ -133,14 +141,15 @@ class Preview:
             if os.path.exists(name):os.unlink(name)
         return copy.deepcopy(record)
 
-    def begin(self,original,proposed,context,session,now):
+    def begin(self,original,proposed,context,session,now,preview_seconds=20):
+        validate_preview_seconds(preview_seconds)
         previous=self.read()
         if previous and previous['phase'] not in TERMINAL:raise RuntimeError('A preview still needs completion or restoration')
         if not finite(now):raise ValueError('Invalid clock')
         if original.get('config.json') is None or original.get('baseline.json') is None:raise ValueError('Original configuration is required')
         if proposed.get('config.json') is None or proposed.get('baseline.json') is None:raise ValueError('Proposed configuration is required')
         return self.write({'schema':1,'token':uuid.uuid4().hex,'session':session,'phase':'prepared',
-                           'started':now,'hard_deadline':now+120,'keep_until':None,'restore_attempts':0,
+                           'preview_seconds':preview_seconds,'started':now,'hard_deadline':now+120,'keep_until':None,'restore_attempts':0,
                            'context':copy.deepcopy(context),'original':snapshot(original),'proposed':snapshot(proposed)})
 
     def require(self,token,phases):
@@ -166,7 +175,7 @@ class Preview:
     def verified(self,token,session,now,context):
         record=self.require(token,{'applying'})
         if self.decision(session,now,context)!='applying':raise RuntimeError('Preview context expired or changed')
-        record.update(phase='preview',verified_at=now,keep_until=min(now+20,record['hard_deadline']))
+        record.update(phase='preview',verified_at=now,keep_until=min(now+record.get('preview_seconds',20),record['hard_deadline']))
         return self.write(record)
 
     def keep(self,token,session,now,context,requested_at=None):

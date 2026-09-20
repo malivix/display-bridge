@@ -2,7 +2,7 @@
 """Daemon request handling for scaling previews. Menu is never the watchdog."""
 import fcntl,json,os,time,uuid,hashlib
 from contextlib import contextmanager
-from scaling_preview import Preview,TERMINAL,decode_snapshot,finite
+from scaling_preview import Preview,TERMINAL,decode_snapshot,finite,PREVIEW_SECONDS,validate_preview_seconds
 from preview_runner import Runner
 from preview_hardware import ControllerHardware
 from scaling_choices import candidates,paired_sizes
@@ -28,7 +28,9 @@ def mutation_guard(controller):
         yield
 
 
-def enqueue(controller,action,size=None,token=None,fingerprint=None,preset=None):
+def enqueue(controller,action,size=None,token=None,fingerprint=None,preset=None,preview_seconds=20):
+    validate_preview_seconds(preview_seconds)
+    if action != 'start' and preview_seconds != 20:raise ValueError('Duration applies only to preview start')
     if action not in ('start','keep','revert','repair'):raise ValueError('Invalid preview action')
     if action=='start':
         if preset is not None:
@@ -43,7 +45,7 @@ def enqueue(controller,action,size=None,token=None,fingerprint=None,preset=None)
         controller.acquire_lock(lock,2)
         path=root/'preview-request.json'
         if path.exists():raise RuntimeError('A preview request is already waiting for the controller')
-        request={'id':uuid.uuid4().hex,'action':action,'size':size,'preset':preset,'token':token,'fingerprint':fingerprint,'created_at':time.time(),'created_monotonic':time.monotonic()}
+        request={'id':uuid.uuid4().hex,'action':action,'size':size,'preset':preset,'token':token,'fingerprint':fingerprint,'preview_seconds':preview_seconds,'created_at':time.time(),'created_monotonic':time.monotonic()}
         with path.open('x') as stream:
             os.chmod(path,0o600);json.dump(request,stream);stream.flush();os.fsync(stream.fileno())
     return request
@@ -76,7 +78,7 @@ def options(c):
         except ValueError as error:item['reason']=str(error)
         presets.append(item)
     if hardware.context()!=context:raise RuntimeError('Inputs or orientation changed during inspection')
-    response={'read_only':True,'rotation':context['rotation'],'options':result,'presets':presets}
+    response={'preview_seconds':list(PREVIEW_SECONDS),'read_only':True,'rotation':context['rotation'],'options':result,'presets':presets}
     if preset_error:response['preset_error']=preset_error
     return response
 
@@ -138,6 +140,7 @@ class Service:
                 return {'action':'invalid','token':None}
 
     def start(self,request):
+        duration=validate_preview_seconds(request.get('preview_seconds',20))
         c=self.c
         with (self.root/'install.lock').open('a') as install:
             try:fcntl.flock(install,fcntl.LOCK_SH|fcntl.LOCK_NB)
@@ -169,7 +172,7 @@ class Service:
             for name,data in original.items():
                 path=self.root/name
                 if (path.read_bytes() if path.exists() else None)!=data:raise RuntimeError('Settings changed during preview preparation')
-            self.journal.begin(original,proposed,context,self.session,time.monotonic())
+            self.journal.begin(original,proposed,context,self.session,time.monotonic(),preview_seconds=duration)
             self.config=config;self.runner=Runner(self.journal,self.root,self.session,hardware,time.monotonic)
 
     def publish(self,result):

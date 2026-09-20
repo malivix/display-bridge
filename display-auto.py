@@ -652,12 +652,14 @@ def run_main(resources):
     parser.add_argument('--feature',choices=['luminance','volume'])
     parser.add_argument('--step',type=int,choices=[-5,5])
     parser.add_argument('--size',choices=['larger','current','more-space'])
+    parser.add_argument('--preview-seconds',type=int,choices=[20,40])
     parser.add_argument('--token')
     parser.add_argument('--fingerprint')
     parser.add_argument('--preset')
     parser.add_argument('--orientation',type=int,choices=[0,90])
     parser.add_argument('--replace',action='store_true')
     args = parser.parse_args()
+    if args.preview_seconds is not None and args.action!='preview-start':parser.error('--preview-seconds requires preview-start')
     if args.action=='capabilities':
         print(json.dumps({'protocol':1,'read_only':True,'commands':list(action_argument.choices)}));return
     if args.action=='preset-remove':
@@ -675,7 +677,7 @@ def run_main(resources):
     if args.action in ('preview-start','preview-keep','preview-revert','preview-repair'):
         from types import SimpleNamespace
         from preview_service import enqueue
-        print(json.dumps(enqueue(SimpleNamespace(**globals()),args.action.removeprefix('preview-'),args.size,args.token,args.fingerprint,args.preset)));return
+        print(json.dumps(enqueue(SimpleNamespace(**globals()),args.action.removeprefix('preview-'),args.size,args.token,args.fingerprint,args.preset,preview_seconds=args.preview_seconds if args.preview_seconds is not None else 20)));return
     if args.action in ('brightness-list','brightness-remove'):
         import brightness_presets as presets
         if args.monitor is None:parser.error('--monitor is required')

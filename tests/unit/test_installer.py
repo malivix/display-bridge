@@ -144,7 +144,7 @@ class InstallerEntryTests(unittest.TestCase):
         module=self.load()
         with tempfile.TemporaryDirectory() as directory:
             root=Path(directory)
-            module.require_install_idle(root)
+            module.require_idle_preview(root)
             self.assertEqual(list(root.iterdir()),[])
             files={'config.json':b'{}','baseline.json':b'{}'}
             preview=Preview(root/'scaling-preview.json')
@@ -152,7 +152,7 @@ class InstallerEntryTests(unittest.TestCase):
             record.update(phase='kept',recovery_queued=True)
             preview.write(record)
             before=preview.path.read_bytes()
-            module.require_install_idle(root)
+            module.require_idle_preview(root)
             self.assertEqual(preview.path.read_bytes(),before)
 
     def exercise_service_failure(self, lock_error):

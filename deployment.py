@@ -6,6 +6,16 @@ from pathlib import Path
 from xml.parsers.expat import ExpatError
 
 
+def require_idle_preview(root):
+    """Preserve queued requests and recovery evidence before touching deployment state."""
+    from preview_service import unresolved
+    request=root/'preview-request.json'
+    if request.exists() or request.is_symlink():
+        raise RuntimeError('A size-preview request is pending. Let the controller finish it and complete any restoration before installation or rollback; preserve the request if troubleshooting is needed.')
+    if unresolved(root):
+        raise RuntimeError('Finish scaling preview recovery before installation or rollback')
+
+
 def atomic_link(target, path):
     path = Path(path)
     temporary = path.with_name(path.name + ".new")

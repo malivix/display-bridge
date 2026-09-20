@@ -15,7 +15,7 @@ import tempfile
 import time
 import fcntl
 from contextlib import ExitStack
-from deployment import atomic_link, snapshot, restore, require_service_namespace
+from deployment import atomic_link, snapshot, restore, require_service_namespace, require_idle_preview
 from release_manifest import (
     RUNTIME_MODULES,
     INSTALLED_FILES,
@@ -28,16 +28,6 @@ def run(args, **kwargs):
     kwargs.setdefault("timeout", 120)
     kwargs.setdefault("env", dict(os.environ, MACOSX_DEPLOYMENT_TARGET="13.0"))
     return subprocess.run(args, **kwargs)
-
-
-def require_install_idle(root):
-    """Preserve queued requests and recovery evidence before touching installation state."""
-    from preview_service import unresolved
-    request=root/'preview-request.json'
-    if request.exists() or request.is_symlink():
-        raise RuntimeError('A size-preview request is pending. Let the controller finish it and complete any restoration before installing; preserve the request if troubleshooting is needed.')
-    if unresolved(root):
-        raise RuntimeError('Finish scaling preview recovery before installing')
 
 
 def preflight(package, home):
@@ -115,7 +105,7 @@ def run_install(argv, resources):
     root = home / ".config/display-auto"
     bin_dir = home / ".local/bin"
     require_service_namespace(home, label)
-    require_install_idle(root)
+    require_idle_preview(root)
     root.mkdir(mode=0o700, parents=True, exist_ok=True)
     root.chmod(0o700)
     bin_dir.mkdir(parents=True, exist_ok=True)
@@ -128,7 +118,7 @@ def run_install(argv, resources):
         sys.exit("Another installation is already running")
     # Enqueue also takes install.lock. Recheck after exclusive acquisition so a
     # request arriving between the preliminary check and lock cannot be missed.
-    require_install_idle(root)
+    require_idle_preview(root)
     sdk = run(
         ["/usr/bin/xcrun", "--sdk", "macosx", "--show-sdk-path"],
         capture_output=True,

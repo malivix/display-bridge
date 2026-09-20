@@ -75,7 +75,9 @@ Run the same installer for the same host to preserve an existing baseline and ve
 current profile. Complete any pending size preview or recovery first. A queued preview
 request also blocks installation, even before a preview starts. Let the controller finish
 it; preserve requests and journals if troubleshooting is needed. The installer checks
-before directory changes and again under its installation lock.
+before directory changes and again under its installation lock. Explicit rollback also
+rejects queued requests and unresolved preview recovery before service changes or file
+restoration. Neither operation deletes pending requests to force progress.
 To deliberately replace the current baseline, arrange both local displays, select fixed 120 Hz,
 then use `--capture-fixed-120`. This is a configuration change, not a repair shortcut.
 

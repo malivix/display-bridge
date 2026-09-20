@@ -9,7 +9,7 @@ from pathlib import Path
 import subprocess
 import sys
 import time
-from deployment import snapshot, restore, validate_snapshot
+from deployment import snapshot, restore, validate_snapshot, require_idle_preview
 from release_manifest import INSTALLED_FILES
 
 
@@ -77,10 +77,7 @@ def main(argv=None):
         (root / "controller.lock").open("a") as controller,
     ):
         fcntl.flock(install, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        from preview_service import unresolved
-
-        if unresolved(root):
-            raise RuntimeError("Finish scaling preview recovery before rollback")
+        require_idle_preview(root)
         running = [
             (service, path)
             for service, path in services

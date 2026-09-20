@@ -574,6 +574,13 @@ if CommandLine.arguments.contains("--self-test") {
     precondition(sizeComparison(comparisonCurrent,["modes":["pg":["width":Double.infinity]]]).contains("estimate unavailable"))
     precondition(sizeComparison(comparisonCurrent,comparisonLarger).contains("3840 × 2160 → 3072 × 1728"))
     print("PASS size comparison direction, missing dimensions and framebuffer labels")
+    precondition(presetNameError("Reading")==nil)
+    precondition(presetNameError(String(repeating:"a",count:48))==nil)
+    for invalid in ["",String(repeating:"a",count:49)," Reading","Reading ","a\u{7F}b","a\nb","\u{85}Reading",String(repeating:"e\u{301}",count:25)] {
+        precondition(presetNameError(invalid) != nil)
+    }
+    precondition(presetNameError("Reading 🌙")==nil)
+    print("PASS preset names match code-point limits, whitespace and control-character rules")
     let trackedRequest:[String:Any]=["id":"example","action":"resume"]
     precondition(commandSummary([:],["command_request":trackedRequest]).contains("not yet reported"))
     let trackedHealth:[String:Any]=["updated_at":Date().timeIntervalSince1970,"command_result":["request":trackedRequest,"state":"deferred","detail":"Waiting for input"]]
@@ -727,6 +734,88 @@ final class SizeChooser: NSObject, NSWindowDelegate {
     func run()->Int {
         window.center();window.makeKeyAndOrderFront(nil);NSApp.runModal(for:window);window.orderOut(nil)
         return result
+    }
+}
+
+func presetNameError(_ value:String)->String? {
+    let scalars=Array(value.unicodeScalars)
+    // Match Python's code-point count and str.strip whitespace contract in size_presets.
+    func whitespace(_ scalar:Unicode.Scalar)->Bool {
+        let n=scalar.value
+        return (9...13).contains(n) || (28...32).contains(n) || (0x2000...0x200A).contains(n) || [0x85,0xA0,0x1680,0x2028,0x2029,0x202F,0x205F,0x3000].contains(n)
+    }
+    guard !scalars.isEmpty,scalars.count<=48 else{return "Use a name with 1–48 Unicode characters."}
+    guard !whitespace(scalars.first!),!whitespace(scalars.last!) else{return "Remove whitespace from the start and end of the name."}
+    guard !scalars.contains(where:{$0.value<32 || $0.value==127}) else{return "Remove control characters from the name."}
+    return nil
+}
+
+final class PresetDialog: NSObject, NSWindowDelegate {
+    let window:NSPanel
+    let presets:[[String:Any]]?
+    let name=NSTextField()
+    let replace=NSButton(checkboxWithTitle:"Replace existing preset",target:nil,action:nil)
+    let selector=NSPopUpButton()
+    let errorLabel=NSTextField(wrappingLabelWithString:"")
+    var arguments:[String]?
+    init(fontSize:CGFloat,presets:[[String:Any]]?=nil) {
+        self.presets=presets
+        window=NSPanel(contentRect:NSRect(x:0,y:0,width:620,height:480),styleMask:[.titled,.closable,.resizable],backing:.buffered,defer:false)
+        super.init()
+        let saving=presets==nil
+        window.title=saving ? "Save current size preset":"Remove a saved size preset"
+        window.minSize=NSSize(width:600,height:460);window.delegate=self;window.isReleasedWhenClosed=false
+        let stack=NSStackView();stack.orientation = .vertical;stack.alignment = .leading;stack.spacing=16
+        stack.translatesAutoresizingMaskIntoConstraints=false;window.contentView!.addSubview(stack)
+        NSLayoutConstraint.activate([stack.leadingAnchor.constraint(equalTo:window.contentView!.leadingAnchor,constant:20),stack.trailingAnchor.constraint(equalTo:window.contentView!.trailingAnchor,constant:-20),stack.topAnchor.constraint(equalTo:window.contentView!.topAnchor,constant:20),stack.bottomAnchor.constraint(lessThanOrEqualTo:window.contentView!.bottomAnchor,constant:-20)])
+        let intro=NSTextField(wrappingLabelWithString:saving ? "Save the sizes currently displayed for this orientation. The highlighted preview choice is not applied. Replacement affects only this name and orientation.":"Select the saved name and orientation to remove. Current display settings and presets for the other orientation are preserved.")
+        let font=NSFont.systemFont(ofSize:fontSize);intro.font=font
+        stack.addArrangedSubview(intro);intro.widthAnchor.constraint(equalTo:stack.widthAnchor).isActive=true
+        if saving {
+            name.font=font;name.placeholderString="Preset name, e.g. Reading";name.setAccessibilityLabel("Preset name")
+            stack.addArrangedSubview(name);name.widthAnchor.constraint(equalTo:stack.widthAnchor).isActive=true
+            replace.font=font;stack.addArrangedSubview(replace);window.initialFirstResponder=name
+        } else {
+            selector.font=font;selector.setAccessibilityLabel("Saved preset and orientation to remove")
+            for entry in presets ?? [] {
+                selector.addItem(withTitle:"\(entry["name"] as? String ?? "Unnamed") — \(entry["rotation"] as? Int == 90 ? "Portrait":"Landscape")")
+            }
+            stack.addArrangedSubview(selector);selector.widthAnchor.constraint(equalTo:stack.widthAnchor).isActive=true
+            window.initialFirstResponder=selector
+        }
+        errorLabel.font=font;errorLabel.textColor = .systemRed;errorLabel.isSelectable=true
+        errorLabel.setAccessibilityLabel("Preset validation error");stack.addArrangedSubview(errorLabel)
+        errorLabel.widthAnchor.constraint(equalTo:stack.widthAnchor).isActive=true
+        let submit=NSButton(title:saving ? "Save current size":"Remove selected preset",target:self,action:#selector(confirm(_:)))
+        submit.font=font
+        // Destructive removal is explicit; Return in the selector must not remove a preset.
+        if saving {submit.keyEquivalent="\r"}
+        submit.isEnabled=saving || !(presets ?? []).isEmpty
+        let cancel=NSButton(title:"Cancel",target:self,action:#selector(cancel(_:)));cancel.font=font;cancel.keyEquivalent="\u{1b}"
+        stack.addArrangedSubview(submit);stack.addArrangedSubview(cancel)
+    }
+    @objc func confirm(_ sender:NSButton) {
+        if let presets=presets {
+            let index=selector.indexOfSelectedItem
+            guard index>=0,index<presets.count,let label=presets[index]["name"] as? String,let rotation=presets[index]["rotation"] as? Int,[0,90].contains(rotation),let revision=presets[index]["revision"] as? String,!revision.isEmpty else {
+                errorLabel.stringValue="This entry is incomplete. Cancel and refresh the preset list.";return
+            }
+            arguments=["preset-remove","--preset",label,"--orientation",String(rotation),"--fingerprint",revision]
+        } else {
+            if let error=presetNameError(name.stringValue) {
+                errorLabel.stringValue=error;window.makeFirstResponder(name)
+                NSAccessibility.post(element:errorLabel,notification:.valueChanged);return
+            }
+            arguments=["preset-save","--preset",name.stringValue]
+            if replace.state == .on {arguments?.append("--replace")}
+        }
+        NSApp.stopModal()
+    }
+    @objc func cancel(_ sender:NSButton) {arguments=nil;NSApp.stopModal()}
+    func windowShouldClose(_ sender:NSWindow)->Bool {arguments=nil;NSApp.stopModal();return true}
+    func run()->[String]? {
+        window.center();window.makeKeyAndOrderFront(nil);NSApp.runModal(for:window);window.orderOut(nil)
+        return arguments
     }
 }
 
@@ -1286,34 +1375,13 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
         alert.runModal()
     }
     func savePresetPrompt() {
-        let alert=NSAlert();alert.messageText="Save current size preset"
-        alert.informativeText="Save the sizes currently displayed, for this orientation only. This does not apply the highlighted preview choice. Names can have up to 48 characters."
-        let name=NSTextField(frame:NSRect(x:0,y:42,width:480,height:36));name.placeholderString="Reading"
-        name.font=NSFont.systemFont(ofSize:CGFloat([16,20,24][textSizeIndex()]));name.setAccessibilityLabel("Preset name")
-        let replace=NSButton(checkboxWithTitle:"Replace this name in the current orientation",target:nil,action:nil)
-        replace.frame=NSRect(x:0,y:0,width:480,height:32)
-        let content=NSView(frame:NSRect(x:0,y:0,width:480,height:82));content.addSubview(name);content.addSubview(replace)
-        alert.accessoryView=content;alert.addButton(withTitle:"Save current size");alert.addButton(withTitle:"Cancel").keyEquivalent="\u{1b}"
-        alert.window.initialFirstResponder=name
-        guard alert.runModal() == .alertFirstButtonReturn else {return}
-        let label=name.stringValue
-        guard !label.isEmpty,label.count<=48,label==label.trimmingCharacters(in:.whitespacesAndNewlines) else {message("Invalid preset name","Use 1–48 characters without surrounding whitespace.");return}
-        var args=["preset-save","--preset",label]
-        if replace.state == .on {args.append("--replace")}
-        execute(args)
+        let dialog=PresetDialog(fontSize:CGFloat([16,20,24][textSizeIndex()]))
+        if let arguments=dialog.run() {execute(arguments)}
     }
     func removePresetPrompt(_ presets:[[String:Any]]) {
-        guard !presets.isEmpty else {return}
-        let alert=NSAlert();alert.messageText="Remove a saved size preset"
-        alert.informativeText="Select the saved name and orientation to remove. Current display settings and the other orientation will not change."
-        let selector=NSPopUpButton(frame:NSRect(x:0,y:0,width:480,height:36))
-        selector.font=NSFont.systemFont(ofSize:CGFloat([16,20,24][textSizeIndex()]));selector.setAccessibilityLabel("Saved preset and orientation to remove")
-        for preset in presets {selector.addItem(withTitle:"\(preset["name"] as? String ?? "Unnamed") — \(preset["rotation"] as? Int == 90 ? "Portrait":"Landscape")")}
-        alert.accessoryView=selector;alert.addButton(withTitle:"Remove selected preset");alert.addButton(withTitle:"Cancel").keyEquivalent="\u{1b}"
-        guard alert.runModal() == .alertFirstButtonReturn else {return}
-        let index=selector.indexOfSelectedItem
-        guard index>=0,index<presets.count,let name=presets[index]["name"] as? String,let rotation=presets[index]["rotation"] as? Int,let revision=presets[index]["revision"] as? String else {return}
-        execute(["preset-remove","--preset",name,"--orientation",String(rotation),"--fingerprint",revision])
+        guard !presets.isEmpty else{return}
+        let dialog=PresetDialog(fontSize:CGFloat([16,20,24][textSizeIndex()]),presets:presets)
+        if let arguments=dialog.run() {execute(arguments)}
     }
     func chooseSize(_ json:String){
         guard let data=json.data(using:.utf8),let report=(try? JSONSerialization.jsonObject(with:data)) as? [String:Any],let relative=report["options"] as? [[String:Any]] else {message("Size preview unavailable","No qualified size choices were returned.");return}

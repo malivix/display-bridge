@@ -158,3 +158,10 @@ promise matching physical size across monitors or native pixel sharpness. The wi
 text, selector and buttons follow your interface size. Escape cancels without applying.
 Unavailable named presets include their orientation. The existing 20-second Keep/Revert
 transaction still controls any preview; opening or selecting a choice changes nothing.
+
+Save and Remove preset forms also follow the selected interface size. Invalid names stay
+in the Save form with an inline correction message. Names use the backend's limit of
+48 Unicode code points; combined accents or emoji may use more than one. Replacement is
+unchecked by default. Remove displays the name and orientation and requires its explicit
+button; keyboard selection alone does not remove a preset. Backend errors such as a
+concurrent replacement or changed ownership still reject the submitted command.

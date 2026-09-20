@@ -77,8 +77,9 @@ preserved; no state migration or journal deletion.
 
 ### 2. Accessible size comparison — comparison panel implemented
 
-[Implementation and validation](../log/accessible-size-comparison.md). Preset-management
-dialog accessibility and physical qualification remain open.
+[Comparison implementation](../log/accessible-size-comparison.md) and
+[preset form implementation](../log/accessible-preset-forms.md) are in source. Full
+accessibility and physical qualification remain open.
 
 Outcome: choose a readable size based on what changes, then Keep or Revert confidently.
 Use an adaptive comparison sheet with Current and Selected columns per monitor. Show

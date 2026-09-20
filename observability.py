@@ -3,8 +3,13 @@
 import hashlib,json,os,platform,time,math,statistics,base64
 from pathlib import Path
 
-def read_json(path, default=None):
-    try:return json.loads(path.read_text())
+STATE_READ_LIMIT=1024*1024
+
+def read_json(path, default=None, max_bytes=None):
+    try:
+        if max_bytes is None:return json.loads(path.read_text())
+        with path.open('rb') as stream:raw=stream.read(max_bytes+1)
+        return json.loads(raw) if len(raw)<=max_bytes else default
     except (OSError,ValueError):return default
 
 def record(root, event):
@@ -15,7 +20,8 @@ def record(root, event):
     temporary=path.with_suffix('.tmp');temporary.write_text(json.dumps(rows,indent=2)+'\n');temporary.replace(path)
 
 def summary(root):
-    rows=read_json(root/'transitions.json',[]) or []
+    source=read_json(root/'transitions.json',None,STATE_READ_LIMIT)
+    rows=source or []
     rows=[r for r in rows if isinstance(r,dict)] if isinstance(rows,list) else []
     result={}
     for profile in ('pg','benq','extended','away'):
@@ -26,14 +32,22 @@ def summary(root):
             values=sorted(v for r in samples if isinstance(r.get('seconds'),dict) for v in [r['seconds'].get(phase)] if type(v) in (int,float) and math.isfinite(v) and v>=0)
             if values:phases[phase]={'count':len(values),'mean':round(statistics.mean(values),3),'max':round(max(values),3),'median':round(statistics.median(values),3),'p95':round(values[math.ceil(.95*len(values))-1],3)}
         result[profile]={'count':len(samples),'seconds':phases}
-    return {'retained_events':len(rows),'profiles':result,'note':'Total is application time only. Settling measures first valid candidate to its second matching read; physical switching and time before the first valid read are unmeasured. Rotation check includes preflight and any rotation; Layout application includes its fresh input preflight; layout includes rotation check plus layout application. Each phase has its own sample count; p95 uses nearest rank. Software readback does not prove sound.'}
+    return {'history_available':isinstance(source,list),'retained_events':len(rows),'profiles':result,'note':'Total is application time only. Settling measures first valid candidate to its second matching read; physical switching and time before the first valid read are unmeasured. Rotation check includes preflight and any rotation; Layout application includes its fresh input preflight; layout includes rotation check plus layout application. Each phase has its own sample count; p95 uses nearest rank. Software readback does not prove sound.'}
 
 def diagnostics(root, bin_dir):
     report={'created_at':time.time(),'os':platform.platform(),'files':{},'file_sha256':{},'unreadable_files':{},'helper_sha256':{},'timings':summary(root)}
-    for name in ('command-results.json','config.json','baseline.json','manifest.json','health.json','recovery.json','control.json','audio-refresh.json','transitions.json','menu-health.json','rotation-active.json','scaling-preview.json','preview-status.json','preview-request.json'):
+    for name in ('size-presets.json','command-results.json','config.json','baseline.json','manifest.json','health.json','recovery.json','control.json','audio-refresh.json','transitions.json','menu-health.json','rotation-active.json','scaling-preview.json','preview-status.json','preview-request.json'):
         report['files'][name]=None
         try:
-            raw=(root/name).read_bytes()
+            with (root/name).open('rb') as stream:
+                observed_size=os.fstat(stream.fileno()).st_size
+                raw=stream.read(STATE_READ_LIMIT+1)
+            if len(raw)>STATE_READ_LIMIT:
+                captured=raw[:65536]
+                report['unreadable_files'][name]={'error':'State file exceeds the diagnostic read limit',
+                    'byte_count_at_open':observed_size,'captured_bytes':len(captured),'truncated':True,
+                    'captured_sha256':hashlib.sha256(captured).hexdigest(),'bytes_base64':base64.b64encode(captured).decode('ascii')}
+                continue
             report['file_sha256'][name]=hashlib.sha256(raw).hexdigest()
             try:report['files'][name]=json.loads(raw)
             except (ValueError,UnicodeError) as error:

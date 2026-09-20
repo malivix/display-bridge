@@ -38,6 +38,33 @@ class SavedStateSafety(unittest.TestCase):
             self.assertEqual(result['file_sha256']['control.json'],hashlib.sha256(raw).hexdigest())
             self.assertEqual((root/'control.json').read_bytes(),raw)
             self.assertEqual(path.stat().st_mode&0o777,0o600)
+    def test_diagnostics_capture_presets_and_bound_oversized_state(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root=Path(temp)
+            (root/'size-presets.json').write_text('{"schema":1,"presets":[]}')
+            raw=b'{"large":"'+b'x'*(2*1024*1024)+b'"}'
+            (root/'control.json').write_bytes(raw)
+            result=json.loads(observability.diagnostics(root,root).read_text())
+            self.assertEqual(result['files']['size-presets.json']['schema'],1)
+            self.assertIsNone(result['files']['control.json'])
+            self.assertNotIn('control.json',result['file_sha256'])
+            captured=result['unreadable_files']['control.json']
+            self.assertTrue(captured['truncated'])
+            self.assertEqual(base64.b64decode(captured['bytes_base64']),raw[:65536])
+            self.assertEqual(captured['captured_sha256'],hashlib.sha256(raw[:65536]).hexdigest())
+            self.assertEqual((root/'control.json').read_bytes(),raw)
+
+    def test_oversized_timing_history_is_unavailable_not_empty(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root=Path(temp);path=root/'transitions.json'
+            path.write_text('[]')
+            self.assertTrue(observability.summary(root)['history_available'])
+            raw=b'["'+b'x'*(2*1024*1024)+b'"]';path.write_bytes(raw)
+            report=observability.summary(root)
+            self.assertFalse(report['history_available'])
+            self.assertEqual(report['profiles'],{})
+            self.assertEqual(path.read_bytes(),raw)
+
     def test_invalid_controls_are_rejected_without_rewriting(self):
         values=[[],{'paused':'false'},{'pause_until':float('nan')},{'audio_manual_until':-1},{'speaker_preferences':{'extended':'unknown'}},{'auto_rotate':'yes'}]
         with tempfile.TemporaryDirectory() as temp,patch.object(c,'CONTROL',Path(temp)/'control.json'):

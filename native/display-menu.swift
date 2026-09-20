@@ -318,6 +318,7 @@ func ddcSummary(_ json:String)->String {
 
 func timingSummary(_ json:String)->String {
     guard let data=json.data(using:.utf8),let report=(try? JSONSerialization.jsonObject(with:data)) as? [String:Any],let profiles=report["profiles"] as? [String:[String:Any]] else{return "Timing report could not be read. Save a diagnostic report for details."}
+    if report["history_available"] as? Bool == false {return "Transition history is unavailable or exceeds the read limit. Save private diagnostics to inspect it; no timing conclusion can be drawn."}
     var lines=["Measured application time — median / slowest"]
     for (key,label) in [("extended","Both monitors here"),("pg","Only PG here"),("benq","Only BenQ here"),("away","Both monitors away")] {
         guard let profile=profiles[key],let phases=profile["seconds"] as? [String:[String:Any]] else{continue}
@@ -506,6 +507,7 @@ if CommandLine.arguments.contains("--self-test") {
     precondition(restartedAlerts.reserve(first)==nil)
     print("PASS distinct incidents, retry deduplication, failed delivery and late callbacks")
     precondition(timingSummary("{\"profiles\":{}}").contains("No completed transitions"))
+    precondition(timingSummary("{\"history_available\":false,\"profiles\":{}}").contains("no timing conclusion"))
     precondition(timingSummary("invalid").contains("could not be read"))
     let timing=timingSummary("{\"profiles\":{\"extended\":{\"count\":4,\"seconds\":{\"total\":{\"median\":2,\"max\":5,\"count\":3}}}}}")
     precondition(timing.contains("Both monitors here") && timing.contains("2.00 / 5.00 s (3 samples)"))

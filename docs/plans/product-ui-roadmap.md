@@ -13,7 +13,8 @@ implemented. A hardware-free demo was inspected at the largest size and a smalle
 The grouped Overview/Details dashboard and direct Pause control are now implemented.
 Largest-text scrolling and accessibility-tree values were checked in a hardware-free demo.
 A read-only Displays tab now presents measured/saved mode snapshots.
-Larger controls, simplified advanced settings, and complete
+An Audio tab now exposes profile preferences and manual/repair controls with availability reasons.
+Larger controls, further advanced-menu simplification, and complete
 accessibility qualification remain. Live deployment
 and UI qualification remain separate.
 

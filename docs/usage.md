@@ -7,6 +7,8 @@ Overview groups monitor ownership, audio, and recovery. Details keeps the full r
 Displays → Refresh display details reads current and saved modes without changing settings.
 It labels logical/framebuffer size, refresh, HiDPI, and HDR preference separately. Refresh
 after input or display changes; these are timestamped snapshots, not continuous monitoring.
+Audio shows the selected output and all four profile preferences. It also provides manual
+output preservation, resume, and repair, with an explanation when repair is unavailable.
 Pause/Resume is available directly in the window; More controls opens the advanced menu.
 Keep/Revert buttons appear only during a size preview.
 

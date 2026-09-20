@@ -105,6 +105,20 @@ func commandSummary(_ health:[String:Any],_ control:[String:Any])->String {
     let prefix=statusFresh(health) ? "":"Last reported · "
     return "\(prefix)\(titles[state] ?? "Unrecognized command result") (\(action))\n\(result["detail"] as? String ?? "")"
 }
+func speakerChoices(_ profile:String)->[(String,String)] {
+    [("pg","PG42UQ"),("benq","BenQ"),("fallback","Built-in speakers"),("preserve","Preserve current output")].filter {
+        !($0.0=="pg" && ["benq","away"].contains(profile)) && !($0.0=="benq" && ["pg","away"].contains(profile))
+    }
+}
+func audioRepairReason(_ health:[String:Any],_ control:[String:Any],_ busy:Bool)->String? {
+    if busy {return "Wait for the current command to finish."}
+    if !statusFresh(health) {return "Controller status is unavailable; check health first."}
+    if automationPaused(control) {return "Resume automation before repairing audio."}
+    if (control["audio_manual_until"] as? Double ?? 0)>Date().timeIntervalSince1970 {return "Resume automatic audio before repairing audio."}
+    if !["ready","degraded"].contains(health["status"] as? String ?? "") {return "Wait for switching or preview recovery to finish; check health if it remains blocked."}
+    if !["extended","pg","benq","away"].contains(health["profile"] as? String ?? "") {return "Monitor ownership is not confirmed."}
+    return nil
+}
 func notificationCommand(_ identifier:String)->String? {
     switch identifier {
     case UNNotificationDefaultActionIdentifier:return "panel"
@@ -330,6 +344,14 @@ if CommandLine.arguments.contains("--self-test") {
     precondition(statusAge(["updated_at":Double.nan],101)=="Status age unavailable")
     precondition(statusAge(live,120)=="Last report: 20 seconds ago")
     precondition(!detailPrefix(live,["paused":true],101).isEmpty)
+    precondition(speakerChoices("away").map{$0.0}==["fallback","preserve"])
+    precondition(!speakerChoices("benq").contains{$0.0=="pg"})
+    precondition(audioRepairReason([:],[:],false) != nil)
+    let audioHealth:[String:Any]=["updated_at":Date().timeIntervalSince1970,"status":"ready","profile":"extended"]
+    precondition(audioRepairReason(audioHealth,[:],false)==nil)
+    precondition(audioRepairReason(audioHealth,["paused":true],false) != nil)
+    precondition(audioRepairReason(audioHealth,[:],true) != nil)
+    precondition(audioRepairReason(audioHealth,["audio_manual_until":Date().timeIntervalSince1970+60],false) != nil)
     let sectionHealth:[String:Any]=["status":"ready","updated_at":Date().timeIntervalSince1970,"inputs":["pg":17,"benq":15],"profile":"pg"]
     let sections=statusSections(sectionHealth,[:])
     precondition(sections.map{$0.title}==["Overview","PG42UQ","BenQ RD280UG","Audio","Recovery"])
@@ -413,6 +435,10 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
     var panel:NSWindow?
     var panelText:NSTextView?
     var modeText:NSTextView?
+    var speakerPopups:[String:NSPopUpButton]=[:]
+    var audioInfo:NSTextField?
+    var audioRepair:NSButton?
+    var audioReason:NSTextField?
     var overviewFields:[(NSTextField,NSTextField)]=[]
     var pauseButton:NSButton?
     var displayTextIndex:Int?
@@ -472,6 +498,31 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
             refreshModes.identifier=NSUserInterfaceItemIdentifier("display-info");refreshModes.frame=NSRect(x:12,y:12,width:220,height:32)
             modeView.addSubview(refreshModes);panelActions.append(refreshModes)
             displays.view=modeView;tabs.addTabViewItem(displays)
+            let audioTab=NSTabViewItem(identifier:"audio");audioTab.label="Audio"
+            let audioScroll=NSScrollView();audioScroll.hasVerticalScroller=true
+            let audioStack=NSStackView();audioStack.orientation = .vertical;audioStack.alignment = .leading;audioStack.spacing=16
+            audioStack.edgeInsets=NSEdgeInsets(top:16,left:16,bottom:16,right:16)
+            audioStack.translatesAutoresizingMaskIntoConstraints=false;audioScroll.documentView=audioStack
+            audioStack.widthAnchor.constraint(equalTo:audioScroll.contentView.widthAnchor).isActive=true
+            audioStack.topAnchor.constraint(equalTo:audioScroll.contentView.topAnchor).isActive=true
+            let info=NSTextField(wrappingLabelWithString:"Speaker preferences apply to each monitor profile. External headsets remain under your control.")
+            audioStack.addArrangedSubview(info);info.widthAnchor.constraint(equalTo:audioStack.widthAnchor,constant:-32).isActive=true;audioInfo=info
+            for (profile,label) in [("extended","Both monitors here"),("pg","Only PG here"),("benq","Only BenQ here"),("away","Both monitors away")] {
+                let title=NSTextField(wrappingLabelWithString:label);title.widthAnchor.constraint(equalToConstant:190).isActive=true
+                let popup=NSPopUpButton();popup.identifier=NSUserInterfaceItemIdentifier(profile)
+                popup.target=self;popup.action=#selector(selectSpeaker(_:));popup.setAccessibilityLabel("Speaker when "+label.lowercased())
+                for (key,name) in speakerChoices(profile) {popup.addItem(withTitle:name);popup.lastItem?.representedObject=key}
+                popup.widthAnchor.constraint(equalToConstant:250).isActive=true;speakerPopups[profile]=popup
+                let row=NSStackView(views:[title,popup]);row.orientation = .horizontal;row.spacing=12;audioStack.addArrangedSubview(row)
+            }
+            for (title,action) in [("Preserve output for 30 minutes","audio-manual"),("Resume automatic audio","audio-auto"),("Repair audio","repair-audio")] {
+                let button=NSButton(title:title,target:self,action:#selector(panelAction(_:)));button.identifier=NSUserInterfaceItemIdentifier(action)
+                audioStack.addArrangedSubview(button)
+                if action=="repair-audio" {audioRepair=button} else {panelActions.append(button)}
+            }
+            let reason=NSTextField(wrappingLabelWithString:"");audioStack.addArrangedSubview(reason)
+            reason.widthAnchor.constraint(equalTo:audioStack.widthAnchor,constant:-32).isActive=true;audioReason=reason
+            audioTab.view=audioScroll;tabs.addTabViewItem(audioTab)
             window.contentView?.addSubview(tabs)
             applyTextSize(textSizeIndex())
             let label=NSTextField(labelWithString:"Text size")
@@ -501,7 +552,12 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
         let size=CGFloat([16,20,24][index])
         panelText?.font=NSFont.systemFont(ofSize:size)
         modeText?.font=NSFont.systemFont(ofSize:size)
+        audioInfo?.font=NSFont.systemFont(ofSize:size);audioReason?.font=NSFont.systemFont(ofSize:size)
         for (heading,body) in overviewFields {heading.font=NSFont.boldSystemFont(ofSize:size);body.font=NSFont.systemFont(ofSize:size)}
+    }
+    @objc func selectSpeaker(_ sender:NSPopUpButton) {
+        guard let profile=sender.identifier?.rawValue,let speaker=sender.selectedItem?.representedObject as? String else{return}
+        execute(["speaker","--profile",profile,"--speaker",speaker])
     }
     @objc func togglePause(_ sender:NSButton) {execute([automationPaused(read("control.json")) ? "resume":"pause"])}
     @objc func changeTextSize(_ sender:NSSegmentedControl) {
@@ -587,6 +643,24 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
             if let origin=origin {text.enclosingScrollView?.contentView.scroll(to:origin)}
         }
         for button in panelActions {button.isEnabled = !busy}
+        let preferences=control["speaker_preferences"] as? [String:String] ?? [:]
+        for (profile,popup) in speakerPopups {
+            let wanted=preferences[profile] ?? (profile=="away" ? "fallback":profile=="benq" ? "benq":"pg")
+            if let entry=popup.itemArray.first(where:{$0.representedObject as? String==wanted}) {popup.select(entry)}
+            else {popup.selectItem(at:-1)}
+            popup.isEnabled = !busy
+        }
+        let currentAudio=health["audio"] as? [String:Any] ?? [:]
+        let selectedOutput=currentAudio["selected"] as? [String:Any] ?? [:]
+        var audioDescription=prefix+"Selected output: \(selectedOutput["name"] as? String ?? "Not reported")\nSpeaker preferences apply to each profile. External headsets remain under your control."
+        if let until=control["audio_manual_until"] as? Double,until>Date().timeIntervalSince1970 {
+            audioDescription += "\nManual preservation ends at \(Date(timeIntervalSince1970:until).formatted(date:.omitted,time:.shortened))."
+        }
+        audioInfo?.stringValue=audioDescription
+        let reason=audioRepairReason(health,control,busy)
+        audioRepair?.isEnabled=reason==nil
+        audioReason?.stringValue=reason ?? "Repair uses the existing recovery policy. Listen afterward to confirm sound."
+
         let preview=health["preview"] as? [String:Any] ?? [:]
         previewToken=preview["token"] as? String
         for button in previewActions {
@@ -634,14 +708,10 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
         let manual=(control["audio_manual_until"] as? Double ?? 0)>Date().timeIntervalSince1970
         add(menu,"Preserve current audio for 30 minutes",["audio-manual","--minutes","30"],checked:manual)
         add(menu,"Resume automatic audio",["audio-auto"])
-        add(menu,"Repair audio",!fresh || paused || manual || state=="state-error" ? nil:["repair-audio"])
-        let preferences=control["speaker_preferences"] as? [String:String] ?? [:]
+        add(menu,"Repair audio",audioRepairReason(health,control,busy)==nil ? ["repair-audio"]:nil)
         for (profile,label,defaultSpeaker) in [("extended","Both monitors here","pg"),("pg","Only PG here","pg"),("benq","Only BenQ here","benq"),("away","Both monitors away","fallback")] {
             let entry=NSMenuItem(title:"Speaker: \(label)",action:nil,keyEquivalent:"");let sub=NSMenu()
-            for (speaker,title) in [("pg","PG42UQ"),("benq","BenQ"),("fallback","Built-in speakers"),("preserve","Preserve current output")] {
-                // Do not offer an inactive monitor as an audible destination.
-                if speaker == "pg" && (profile == "benq" || profile == "away"){continue}
-                if speaker == "benq" && (profile == "pg" || profile == "away"){continue}
+            for (speaker,title) in speakerChoices(profile) {
                 add(sub,title,["speaker","--profile",profile,"--speaker",speaker],checked:(preferences[profile] ?? defaultSpeaker)==speaker)
             };entry.submenu=sub;menu.addItem(entry)
         }

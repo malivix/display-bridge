@@ -9,6 +9,33 @@ class DisplaySnapshot(unittest.TestCase):
         self.config = {'host':'A','keys':{'pg':'p','benq':'b'},'baseline':{'screens':copy.deepcopy(self.rows)}}
         self.metadata = {'displays':self.rows}
 
+    def test_rotation_profiles_validate_before_activation(self):
+        from display_snapshot import validate_rotation,rotation_baseline
+        cfg=copy.deepcopy(self.config)
+        profiles={}
+        for angle in (0,90):
+            rows=copy.deepcopy(self.rows)
+            for row in rows:row.update(x=0,y=0)
+            rows[1]['rotation']=angle
+            profiles[str(angle)]={'screens':rows}
+        cfg['rotation']={'enabled':True,'sensor_map':{'1':0,'2':90},'baselines':profiles}
+        validate_rotation(cfg)
+        self.assertEqual(rotation_baseline(cfg,90),profiles['90'])
+        for field,value in [('key','unfamiliar'),('rotation',0),('width',False),('width',0),('x',2**31),('hz',float('inf')),('modeID',True),('ioFlags',-1),('strictMode','yes'),('mirrorOf','p')]:
+            broken=copy.deepcopy(cfg);broken['rotation']['baselines']['90']['screens'][1][field]=value
+            with self.subTest(field=field,value=value),self.assertRaises(ValueError):validate_rotation(broken)
+        for invalid in [True,180,float('nan')]:
+            with self.assertRaises(ValueError):rotation_baseline(cfg,invalid)
+        partial=copy.deepcopy(cfg);partial['rotation']['enabled']=False
+        del partial['rotation']['baselines']['90']
+        validate_rotation(partial)
+        with self.assertRaises(ValueError):rotation_baseline(partial,90)
+        partial['rotation']['enabled']=True
+        with self.assertRaises(ValueError):validate_rotation(partial)
+        for mapping in [{'1':True,'2':90},{'sensor':0,'2':90},[]]:
+            broken=copy.deepcopy(cfg);broken['rotation']['sensor_map']=mapping
+            with self.assertRaises(ValueError):validate_rotation(broken)
+
     def inspect(self, inputs=None, second=None):
         return report(self.config, inputs or {'pg':17,'benq':19}, self.metadata, second or self.metadata)
 

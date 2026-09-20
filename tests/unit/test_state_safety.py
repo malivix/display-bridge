@@ -19,6 +19,23 @@ class SavedStateSafety(unittest.TestCase):
                 self.assertEqual(health.call_args.args,({'host':'?'},'state-error'))
                 hardware.assert_not_called()
 
+    def test_invalid_rotation_profile_preserves_active_file(self):
+        cfg={'keys':{'pg':'p','benq':'b'},'baseline':{'screens':[]},'rotation':{'enabled':True,'sensor_map':{'1':0,'2':90},'baselines':{'90':{'screens':[{'key':'unexpected','rotation':90}]}}}}
+        with tempfile.TemporaryDirectory() as temp,patch.object(c,'ROOT',Path(temp)),patch.object(c,'command') as hardware:
+            active=Path(temp)/'rotation-active.json';active.write_text('original')
+            before=json.loads(json.dumps(cfg))
+            with self.assertRaises(RuntimeError):c.select_rotation_baseline(cfg,90)
+            self.assertEqual(active.read_text(),'original');self.assertEqual(cfg,before)
+            hardware.assert_not_called()
+
+    def test_startup_rejects_enabled_rotation_without_profiles(self):
+        cfg={'version':c.VERSION,'host':'A','poll_interval':.25,'keys':{'pg':'p','benq':'b'},'baseline':{'screens':[{'key':'p'},{'key':'b'}]},'rotation':{'enabled':True}}
+        with tempfile.TemporaryDirectory() as temp,patch.object(c,'BASELINE',Path(temp)/'baseline.json'),patch.object(c,'command') as hardware:
+            c.BASELINE.write_text(json.dumps(cfg['baseline']))
+            before=c.BASELINE.read_bytes()
+            with self.assertRaises((ValueError,RuntimeError)):c.validate_config(cfg)
+            self.assertEqual(c.BASELINE.read_bytes(),before);hardware.assert_not_called()
+
     def test_startup_missing_or_wrong_shape_fails_oneshot_without_defaults(self):
         with tempfile.TemporaryDirectory() as temp,patch.object(c,'CONFIG',Path(temp)/'config.json'),patch.object(c,'command') as hardware:
             with self.assertRaises(FileNotFoundError):c.startup_config()

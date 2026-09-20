@@ -27,6 +27,54 @@ def dimensions(row):
     return {k: row[k] for k in ('width', 'height', 'pixelWidth', 'pixelHeight')}
 
 
+def validate_rotation(config):
+    """Validate stored rotation state before selecting or activating any profile."""
+    if 'rotation' not in config:return
+    rotation=config['rotation']
+    if not isinstance(rotation,dict) or type(rotation.get('enabled',False)) is not bool:
+        raise ValueError('Invalid rotation configuration; original preserved')
+    baselines=rotation.get('baselines',{})
+    mapping=rotation.get('sensor_map',{})
+    if not isinstance(baselines,dict) or not set(baselines).issubset({'0','90'}):
+        raise ValueError('Invalid rotation profile orientations')
+    if not isinstance(mapping,dict) or any(not isinstance(k,str) or not k or any(c<'0' or c>'9' for c in k) or type(v) is not int or v not in (0,90) for k,v in mapping.items()):
+        raise ValueError('Invalid rotation sensor mapping')
+    if rotation.get('enabled') and (set(baselines)!={'0','90'} or set(mapping.values())!={0,90}):
+        raise ValueError('Enabled rotation requires both orientation profiles and sensor mapping')
+    keys=config.get('keys')
+    if not isinstance(keys,dict) or set(keys)!={'pg','benq'} or any(not isinstance(k,str) or not k for k in keys.values()) or len(set(keys.values()))!=2:
+        raise ValueError('Rotation requires two distinct enrolled identities')
+    for angle,baseline in baselines.items():
+        rows=baseline.get('screens') if isinstance(baseline,dict) else None
+        if not isinstance(rows,list) or len(rows)!=2 or any(not isinstance(row,dict) or not isinstance(row.get('key'),str) for row in rows) or {row['key'] for row in rows}!=set(keys.values()):
+            raise ValueError('Rotation profile differs from enrolled monitor pair')
+        for row in rows:
+            expected=int(angle) if row['key']==keys['benq'] else 0
+            if type(row.get('rotation')) not in (int,float) or row['rotation']!=expected:
+                raise ValueError('Rotation profile orientation does not match its label')
+            if dimensions(row) is None or row.get('mirrorOf') is not None:
+                raise ValueError('Rotation profile requires valid independent display dimensions')
+            if type(row.get('hz')) not in (int,float) or not math.isfinite(row['hz']) or row['hz']<0:
+                raise ValueError('Invalid rotation profile refresh rate')
+            if any(type(row.get(k)) is not int or not -(2**31)<=row[k]<2**31 for k in ('x','y')):
+                raise ValueError('Invalid rotation profile position')
+            if row.get('modeID') is not None and (type(row['modeID']) is not int or not -(2**31)<=row['modeID']<2**31):
+                raise ValueError('Invalid rotation profile mode identifier')
+            if row.get('ioFlags') is not None and (type(row['ioFlags']) is not int or not 0<=row['ioFlags']<2**32):
+                raise ValueError('Invalid rotation profile mode flags')
+            if row.get('strictMode') is not None and type(row['strictMode']) is not bool:
+                raise ValueError('Invalid rotation profile strict-mode policy')
+
+
+def rotation_baseline(config,angle):
+    validate_rotation(config)
+    if type(angle) not in (int,float) or angle not in (0,90):
+        raise ValueError('Unsupported rotation angle; original preserved')
+    saved=config.get('rotation',{}).get('baselines',{}).get(str(int(angle)))
+    if saved is None:raise ValueError('No calibrated baseline for BenQ rotation')
+    return saved
+
+
 def saved_layout(config, rows):
     """Select the whole saved layout using this Mac's measured BenQ orientation."""
     if not config.get('rotation', {}).get('enabled'):

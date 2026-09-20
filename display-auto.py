@@ -23,6 +23,7 @@ def record(root,event):
 from recovery_state import Recovery
 from persisted_state import StateFileError,read_state,validate_control
 
+from display_snapshot import validate_rotation, rotation_baseline
 from release_manifest import VERSION
 ROOT = Path.home() / '.config/display-auto'
 CONFIG = ROOT / 'config.json'
@@ -216,8 +217,8 @@ def stable_state(config, debounce, state, last, profile, deadline=None):
     return debounce.observe(state)
 
 def select_rotation_baseline(config,angle):
-    saved=config['rotation']['baselines'].get(str(int(angle)))
-    if not saved:raise RuntimeError('No calibrated baseline for BenQ rotation')
+    try:saved=rotation_baseline(config,angle)
+    except ValueError as error:raise RuntimeError(str(error)) from error
     path=ROOT/'rotation-active.json'
     if config.get('active_baseline_path')!=path or config['baseline']!=saved or not path.exists():
         temporary=path.with_suffix('.tmp');temporary.write_text(json.dumps(saved)+'\n');temporary.replace(path)
@@ -372,6 +373,7 @@ def validate_config(config):
         uids = [audio.get(k) for k in ('pg','benq','fallback')]
         if any(not isinstance(uid,str) or not uid for uid in uids) or len(set(uids)) != 3:
             raise RuntimeError('Invalid audio device mapping; rerun installer')
+    validate_rotation(config)
     if json.loads(BASELINE.read_text()) != config['baseline']:
         raise RuntimeError('Baseline file differs from configuration; rerun installer to repair')
 

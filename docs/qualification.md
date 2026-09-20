@@ -31,3 +31,10 @@ physical outcomes, and unresolved cases without publishing serials, UUIDs, local
 
 These do not establish a production-ready release. They remain explicit follow-up work;
 this repository remains a hardware-specific experimental controller.
+
+Stored rotation profiles are now validated at startup and again before active-profile
+replacement: enrolled pair, orientation, dimensions, native numeric fields and sensor
+mapping. Disabled partial enrollment is supported; malformed supplied profiles are rejected
+and preserved. A local saved-configuration compatibility check passed during development.
+This is structural validation, not proof that mode IDs remain available or rotation works
+on a new OS or monitor connection. Native preflight and physical qualification remain needed.

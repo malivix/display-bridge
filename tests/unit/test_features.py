@@ -91,18 +91,24 @@ class Features(unittest.TestCase):
         with patch.object(c,'new_recovery',side_effect=lambda:c.Recovery()),patch.object(c,'read_control',return_value={}),patch.object(c,'read_inputs',return_value={'pg':17,'benq':19}),patch.object(c,'read_rotation',side_effect=[0,90,90]),patch.object(c,'audio_inventory',return_value=[]),patch.object(c,'apply_rotation',side_effect=Finished) as rotate,patch.object(c,'write_health'),patch.object(c.time,'sleep'):
             with self.assertRaises(Finished):c.watch(cfg)
         self.assertEqual(rotate.call_count,1);self.assertEqual(rotate.call_args.args[2],90)
+    def rotation_config(self):
+        baselines={}
+        for angle in (0,90):
+            rows=[dict(key=k,width=1920,height=1080,pixelWidth=3840,pixelHeight=2160,hz=120,x=0,y=0,rotation=angle if k=='b' else 0) for k in ('p','b')]
+            baselines[str(angle)]={'screens':rows}
+        return {'keys':{'pg':'p','benq':'b'},'rotation':{'enabled':True,'sensor_map':{'1':0,'2':90},'baselines':baselines}}
     def test_hidden_benq_does_not_rotate(self):
-        cfg={'keys':{'pg':'p','benq':'b'},'rotation':{'enabled':True,'baselines':{'0':{'screens':[]}}}}
+        cfg=self.rotation_config()
         with tempfile.TemporaryDirectory() as temp,patch.object(c,'ROOT',Path(temp)),patch.object(c,'layout',return_value=[{'key':'b','rotation':0}]),patch.object(c,'command') as command:
             self.assertFalse(c.apply_rotation(cfg,'pg',90,{'pg':17,'benq':15}))
             command.assert_not_called()
     def test_changed_inputs_cancel_rotation(self):
-        cfg={'keys':{'pg':'p','benq':'b'},'rotation':{'enabled':True,'baselines':{'0':{'screens':[]},'90':{'screens':[]}}}}
+        cfg=self.rotation_config()
         with tempfile.TemporaryDirectory() as temp,patch.object(c,'ROOT',Path(temp)),patch.object(c,'layout',return_value=[{'key':'b','rotation':0}]),patch.object(c,'confirm_inputs',side_effect=c.InputsChanged('changed')),patch.object(c,'command') as command,patch.object(c,'apply') as apply:
             with self.assertRaises(c.InputsChanged):c.apply_rotation(cfg,'extended',90,{'pg':17,'benq':19})
             command.assert_not_called();apply.assert_not_called()
     def test_rotation_switches_to_calibrated_baseline(self):
-        cfg={'keys':{'pg':'p','benq':'b'},'rotation':{'enabled':True,'baselines':{'0':{'screens':[{'key':'b','rotation':0}]},'90':{'screens':[{'key':'b','rotation':90}]}}}}
+        cfg=self.rotation_config()
         with tempfile.TemporaryDirectory() as temp,patch.object(c,'ROOT',Path(temp)),patch.object(c,'layout',side_effect=[[{'key':'b','rotation':0}],[{'key':'b','rotation':90}]]),patch.object(c,'confirm_inputs'),patch.object(c,'command') as command,patch.object(c,'apply') as apply:
             self.assertTrue(c.apply_rotation(cfg,'extended',90,{'pg':17,'benq':19}))
             self.assertEqual(cfg['baseline'],cfg['rotation']['baselines']['90'])

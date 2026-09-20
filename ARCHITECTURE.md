@@ -1,5 +1,8 @@
 # Architecture
 
+`display_snapshot.py` validates stored rotation profiles before startup/activation and
+provides read-only mode reports. Profile validation does not replace fresh hardware guards.
+
 `display-auto.py` owns polling, debounce, profile reconciliation, rotation, and the mutation
 lock. `audio_policy.py` selects a route; `recovery_state.py` bounds retries.
 `persisted_state.py` and recovery journals preserve intent across interrupted operations.

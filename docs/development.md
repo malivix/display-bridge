@@ -65,3 +65,6 @@ exhausted audio recovery, pending retry, unreadable presets) and a Minimum windo
 mode. Preview time is a static 20-second fixture and the retry example has a static eight-second
 delay for layout inspection; neither simulates controller deadlines. Commands stay blocked, including Keep/Revert. Use real opt-in tests
 for countdown/rollback behavior; the demo cannot prove hardware or persistence outcomes.
+
+Menu state reads accept regular JSON files only, with a 1 MiB limit and no symlink following.
+Native self-tests cover malformed/oversized state and FIFO rejection without hardware access.

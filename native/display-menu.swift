@@ -15,6 +15,21 @@ final class MenuOwnership {
     deinit {Darwin.close(descriptor)}
 }
 
+// Runtime status is small JSON written by atomic replacement. Never follow a link or
+// wait on a pipe on the AppKit thread; unknown/unreadable state stays unavailable.
+func readMenuState(_ path:URL,limit:Int=1_048_576)->[String:Any] {
+    guard limit>0,limit<=1_048_576 else {return [:]}
+    let descriptor=Darwin.open(path.path,O_RDONLY|O_NONBLOCK|O_NOFOLLOW)
+    guard descriptor>=0 else {return [:]}
+    defer {Darwin.close(descriptor)}
+    var info=stat()
+    guard fstat(descriptor,&info)==0,info.st_mode & mode_t(S_IFMT)==mode_t(S_IFREG),info.st_size>=0,info.st_size<=limit else {return [:]}
+    let file=FileHandle(fileDescriptor:descriptor,closeOnDealloc:false)
+    guard let bytes=try? file.read(upToCount:limit+1),bytes.count<=limit,
+          let value=try? JSONSerialization.jsonObject(with:bytes) as? [String:Any] else {return [:]}
+    return value
+}
+
 struct CommandResult {
     let output: String
     let code: Int32
@@ -393,6 +408,24 @@ func demoState(_ scenario:String,_ name:String,_ now:Double)->[String:Any] {
     return health
 }
 if CommandLine.arguments.contains("--self-test") {
+    let stateFolder=FileManager.default.temporaryDirectory.appendingPathComponent("display-state-test-"+UUID().uuidString)
+    try! FileManager.default.createDirectory(at:stateFolder,withIntermediateDirectories:true)
+    let statePath=stateFolder.appendingPathComponent("health.json")
+    try! Data("{\"status\":\"ready\"}".utf8).write(to:statePath)
+    precondition(readMenuState(statePath)["status"] as? String == "ready")
+    precondition(readMenuState(statePath,limit:4).isEmpty)
+    let link=stateFolder.appendingPathComponent("link")
+    try! FileManager.default.createSymbolicLink(at:link,withDestinationURL:statePath)
+    precondition(readMenuState(link).isEmpty)
+    let pipe=stateFolder.appendingPathComponent("pipe")
+    precondition(mkfifo(pipe.path,0o600)==0)
+    precondition(readMenuState(pipe).isEmpty)
+    for invalid in ["{broken","[]"] {
+        try! Data(invalid.utf8).write(to:statePath)
+        precondition(readMenuState(statePath).isEmpty)
+    }
+    try! FileManager.default.removeItem(at:stateFolder)
+    print("PASS bounded regular-file menu state reads")
     let lockPath=FileManager.default.temporaryDirectory.appendingPathComponent("display-menu-test-"+UUID().uuidString).path
     var firstOwner=MenuOwnership(path:lockPath)
     precondition(firstOwner != nil)
@@ -788,7 +821,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
     }}
     func read(_ name:String)->[String:Any] {
         if demo {return demoState(demoScenario,name,Date().timeIntervalSince1970)}
-        guard let data=try? Data(contentsOf:root.appendingPathComponent(name)),let value=try? JSONSerialization.jsonObject(with:data) as? [String:Any] else{return [:]};return value
+        return readMenuState(root.appendingPathComponent(name))
     }
     func applicationDidFinishLaunching(_ notification:Notification) {
         if !demo {

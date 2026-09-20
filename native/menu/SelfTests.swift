@@ -236,6 +236,8 @@ func runMenuSelfTests() {
     print("PASS contextual recovery actions, stale clicks, busy state and changed preview tokens")
     let comparisonCurrent:[String:Any]=["modes":["pg":["width":1920,"height":1080,"pixelWidth":3840,"pixelHeight":2160]]]
     let comparisonLarger:[String:Any]=["modes":["pg":["width":1536,"height":864,"pixelWidth":3072,"pixelHeight":1728]]]
+    precondition(sizeComparison(["physical_size_percent":154.3],["physical_size_percent":98.5]).contains("PG about 98% of BenQ"))
+    precondition(sizeComparison(["physical_size_percent":true],["physical_size_percent":Double.infinity]).contains("Current: unavailable"))
     precondition(sizeComparison(comparisonCurrent,comparisonLarger).contains("25% larger"))
     precondition(sizeComparison(comparisonLarger,comparisonCurrent).contains("20% smaller"))
     precondition(sizeComparison(comparisonCurrent,comparisonCurrent).contains("unchanged"))

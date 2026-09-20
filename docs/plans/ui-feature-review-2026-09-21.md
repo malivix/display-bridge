@@ -79,9 +79,10 @@ unmanaged. Mutable activation must independently revalidate identity, ownership,
 HDR policy and pending previews; interruption preserves a usable prior installation. Never copy
 Mac A identifiers to Mac B. Compatibility does not substitute for physical Mac B testing.
 
-### 3. Calibrated physical-size matching — highest-value new feature
+### 3. Calibrated physical-size matching — model estimate implemented
 
-Add “Match interface size” to the size-preview flow. Compare physical length per logical point,
+[Model-estimated matching](../log/physical-size-match.md) now offers a PG-to-BenQ choice
+through the preview flow. Visual calibration remains to implement. Compare physical length per logical point,
 using orientation-correct panel dimensions only when trustworthy. Let the user visually compare
 a ruler or sample panel and adjust the estimate. Show the predicted size difference between
 monitors, not just a resolution pair. Retain the known-good saved pair and offer qualified HiDPI

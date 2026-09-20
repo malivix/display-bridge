@@ -632,6 +632,12 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
             var report:[String:Any] = ["preview_seconds":[20,40],"rotation":0,"options":[["label":"Current size","size":"current","fingerprint":"demo","modes":modes],["label":"Larger interface","size":"larger","fingerprint":"demo-larger","modes":["pg":["width":1536,"height":864,"pixelWidth":3072,"pixelHeight":1728],"benq":["width":1536,"height":1024,"pixelWidth":3072,"pixelHeight":2048]]]],
                 "presets":[["name":"Reading","rotation":0,"revision":"demo","available":true,"fingerprint":"demo","modes":modes],
                            ["name":"Reading","rotation":90,"revision":"demo","available":false,"reason":"Preset belongs to the other orientation"]]]
+            if var options=report["options"] as? [[String:Any]] {
+                options[0]["physical_size_percent"]=154.3
+                options.append(["label":"Match PG size to BenQ","size":"match-benq","fingerprint":"demo-match","physical_size_percent":98.5,
+                    "modes":["pg":["width":3008,"height":1692,"pixelWidth":6016,"pixelHeight":3384],"benq":modes["benq"]!]])
+                report["options"]=options
+            }
             if demoScenario=="presets-error" {report["presets"]=[];report["preset_error"]="Saved presets are unreadable. The original file was preserved. Ordinary size previews remain available."}
             if let data=try? JSONSerialization.data(withJSONObject:report),let text=String(data:data,encoding:.utf8) {chooseSize(text)}
             return

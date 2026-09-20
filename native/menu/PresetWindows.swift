@@ -26,7 +26,15 @@ func sizeComparison(_ current:[String:Any],_ selected:[String:Any])->String {
         section += "\nFramebuffer: \(dimensions(old,"pixelWidth","pixelHeight")) → \(dimensions(new,"pixelWidth","pixelHeight"))"
         lines.append(section)
     }
-    lines.append("Size estimates compare each monitor with itself in the same orientation. They do not prove equal physical size across monitors or native pixel sharpness.")
+    func physicalEstimate(_ option:[String:Any])->String {
+        guard let n=option["physical_size_percent"] as? NSNumber,CFGetTypeID(n) != CFBooleanGetTypeID(),
+              n.doubleValue.isFinite,n.doubleValue>0,n.doubleValue<=10000 else{return "unavailable"}
+        return "PG about \(String(format:"%.0f",n.doubleValue))% of BenQ"
+    }
+    if current["physical_size_percent"] != nil || selected["physical_size_percent"] != nil {
+        lines.insert("Estimated physical UI size\nCurrent: \(physicalEstimate(current))\nSelected: \(physicalEstimate(selected))\n100% means similar physical size. Model-based estimate; viewing distance and optical sharpness are not measured.",at:1)
+    }
+    lines.append("Size estimates compare each monitor with itself in the same orientation. The separate physical estimate is approximate and does not prove native pixel sharpness.")
     return lines.joined(separator:"\n\n")
 }
 

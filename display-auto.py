@@ -673,7 +673,7 @@ def run_main(resources):
     parser.add_argument('--monitor',choices=['pg','benq'])
     parser.add_argument('--feature',choices=['luminance','volume'])
     parser.add_argument('--step',type=int,choices=[-5,5])
-    parser.add_argument('--size',choices=['larger','current','more-space'])
+    parser.add_argument('--size',choices=['larger','current','more-space','match-benq'])
     parser.add_argument('--preview-seconds',type=int,choices=[20,40])
     parser.add_argument('--token')
     parser.add_argument('--fingerprint')

@@ -1,5 +1,5 @@
 import copy,unittest
-from scaling_choices import candidates,paired_sizes
+from scaling_choices import candidates,paired_sizes,physical_match,physical_size_percent
 
 
 class ScalingChoices(unittest.TestCase):
@@ -49,6 +49,27 @@ class ScalingChoices(unittest.TestCase):
             a[0]['current']['width']=value;b['displays'][0]['width']=value
             with self.subTest(value_type=type(value).__name__),self.assertRaises(ValueError):
                 candidates(a,b,k,require_rollback=False)
+
+    def test_physical_match_preserves_benq_and_handles_portrait(self):
+        for portrait in (False,True):
+            a,b,k=self.fixture()
+            if portrait:
+                for mode in [a[1]['current'],*a[1]['modes']]:
+                    mode['width'],mode['height']=mode['height'],mode['width']
+                    mode['pixelWidth'],mode['pixelHeight']=mode['pixelHeight'],mode['pixelWidth']
+                a[1]['current']['rotation']=90
+                b['displays'][1].update({f:a[1]['current'][f] for f in ('width','height','pixelWidth','pixelHeight','rotation')})
+            a[0]['modes'].append(dict(a[0]['modes'][0],modeID=3,width=3008,height=1692,pixelWidth=6016,pixelHeight=3384))
+            b['displays'][0]['modes'].append({'modeID':3,'variableRefresh':False,'proMotion':False})
+            report=candidates(a,b,k);before=copy.deepcopy(report);match=physical_match(report)
+            self.assertEqual(match['modes']['pg']['modeID'],3)
+            self.assertEqual(match['modes']['benq'],report['displays']['benq']['choices'][0])
+            self.assertLess(abs(physical_size_percent(match['modes'])-100),5)
+            self.assertEqual(report,before)
+            self.assertEqual(paired_sizes(report)[-1]['label'],'Match PG size to BenQ')
+        report=candidates(*self.fixture())
+        self.assertIsNone(physical_match(report))
+        self.assertIsNone(physical_size_percent({'pg':{},'benq':{}}))
 
     def test_non_hidpi_and_wrong_refresh_excluded(self):
         a,b,k=self.fixture()

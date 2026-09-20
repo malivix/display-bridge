@@ -70,6 +70,14 @@ and an estimated interface-size change for each monitor. It compares each monito
 itself, without promising equal physical size across monitors or native pixel sharpness.
 Escape closes the chooser without applying a preview.
 
+**Match PG size to BenQ** appears when a qualified PG mode improves the model-estimated
+physical match and gets within 5%. BenQ keeps its current mode. The comparison shows PG's
+estimated physical UI size as a percentage of BenQ's: 100% means approximately equal physical
+size, not equal resolution. The estimate uses [published panel specifications](plans/physical-size-match.md)
+and works in either supported BenQ orientation. It does not account for viewing distance or
+replace visual calibration. An older controller may omit these estimates and this option.
+If no close qualified mode exists, the matching option is absent; no custom mode is invented.
+
 Select 20 seconds (default) or 40 seconds to judge the preview, then choose **Keep size**
 within the countdown or the controller restores the previous size. Older controllers offer
 only 20 seconds. The timer starts after verified application; the existing two-minute total

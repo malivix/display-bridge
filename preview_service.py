@@ -5,11 +5,11 @@ from contextlib import contextmanager
 from scaling_preview import Preview,TERMINAL,decode_snapshot,finite,PREVIEW_SECONDS,validate_preview_seconds
 from preview_runner import Runner
 from preview_hardware import ControllerHardware
-from scaling_choices import candidates,paired_sizes
+from scaling_choices import candidates,paired_sizes,physical_size_percent
 from scaling_proposal import build
 import size_presets
 
-LABELS={'larger':'Larger interface','current':'Current size','more-space':'More space'}
+LABELS={'larger':'Larger interface','current':'Current size','more-space':'More space','match-benq':'Match PG size to BenQ'}
 
 
 def unresolved(root):
@@ -64,7 +64,7 @@ def options(c):
     for pair in paired_sizes(report):
         files=build(config,report,pair)
         result.append({'size':next(k for k,v in LABELS.items() if v==pair['label']),
-                       'label':pair['label'],'modes':pair['modes'],'fingerprint':hashlib.sha256(files['config.json']).hexdigest()})
+                       'label':pair['label'],'modes':pair['modes'],'physical_size_percent':physical_size_percent(pair['modes']),'fingerprint':hashlib.sha256(files['config.json']).hexdigest()})
     presets=[];preset_error=None
     try:entries=size_presets.read(c.ROOT/'size-presets.json',config)['presets']
     except (ValueError,OSError):

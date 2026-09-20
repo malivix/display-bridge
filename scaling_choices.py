@@ -71,4 +71,39 @@ def paired_sizes(report):
             pair[role]=copy.deepcopy(choice)
         if len(pair)==2 and abs(pair['pg']['interface_percent']-pair['benq']['interface_percent'])<=6:
             proposals.append({'label':label,'target_interface_percent':target,'modes':pair})
+    match = physical_match(report)
+    if match is not None:proposals.append(match)
     return proposals
+
+
+# Model dimensions and their sources are recorded in docs/plans/physical-size-match.md.
+# BenQ active width is inferred from the advertised diagonal and aspect ratio.
+MODEL_LONG_MM = {'pg': 919.68, 'benq': 28.2 * 25.4 * 3 / math.sqrt(13)}
+
+
+def physical_size_percent(modes):
+    """Estimated PG physical UI length relative to BenQ; orientation independent."""
+    if set(modes) != {'pg', 'benq'} or any(not valid_dimensions(modes[r]) for r in modes):
+        return None
+    lengths = {r: MODEL_LONG_MM[r] / max(modes[r]['width'], modes[r]['height']) for r in modes}
+    return round(100 * lengths['pg'] / lengths['benq'], 1)
+
+
+def physical_match(report):
+    displays = report['displays']
+    current = {r: displays[r].get('current', {}) for r in ('pg', 'benq')}
+    before = physical_size_percent(current)
+    if before is None:
+        return None
+    references = [mode for mode in displays['benq']['choices'] if mode.get('current') is True]
+    if len(references) != 1:return None
+    choices = []
+    for pg in displays['pg']['choices']:
+        pair = {'pg': pg, 'benq': references[0]}
+        estimate = physical_size_percent(pair)
+        if estimate is not None and abs(estimate - 100) <= 5 and abs(estimate - 100) + .5 < abs(before - 100):
+            choices.append((abs(estimate - 100), pg['modeID'], pair))
+    if not choices:
+        return None
+    pair = min(choices, key=lambda item: item[:2])[2]
+    return {'label': 'Match PG size to BenQ', 'modes': copy.deepcopy(pair)}

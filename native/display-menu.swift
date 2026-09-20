@@ -17,16 +17,16 @@ final class MenuOwnership {
 
 // Runtime status is small JSON written by atomic replacement. Never follow a link or
 // wait on a pipe on the AppKit thread; unknown/unreadable state stays unavailable.
-func readMenuState(_ path:URL,limit:Int=1_048_576)->[String:Any] {
-    guard limit>0,limit<=1_048_576 else {return [:]}
+func readMenuState(_ path:URL,limit:Int=1_048_576,allowMissing:Bool=false)->[String:Any]? {
+    guard limit>0,limit<=1_048_576 else {return nil}
     let descriptor=Darwin.open(path.path,O_RDONLY|O_NONBLOCK|O_NOFOLLOW)
-    guard descriptor>=0 else {return [:]}
+    guard descriptor>=0 else {return allowMissing && errno==ENOENT ? [:]:nil}
     defer {Darwin.close(descriptor)}
     var info=stat()
-    guard fstat(descriptor,&info)==0,info.st_mode & mode_t(S_IFMT)==mode_t(S_IFREG),info.st_size>=0,info.st_size<=limit else {return [:]}
+    guard fstat(descriptor,&info)==0,info.st_mode & mode_t(S_IFMT)==mode_t(S_IFREG),info.st_size>=0,info.st_size<=limit else {return nil}
     let file=FileHandle(fileDescriptor:descriptor,closeOnDealloc:false)
     guard let bytes=try? file.read(upToCount:limit+1),bytes.count<=limit,
-          let value=try? JSONSerialization.jsonObject(with:bytes) as? [String:Any] else {return [:]}
+          let value=try? JSONSerialization.jsonObject(with:bytes) as? [String:Any] else {return nil}
     return value
 }
 
@@ -89,6 +89,10 @@ func runMenuCommand(_ executable:URL,_ arguments:[String],timeout:Double=45,outp
     return CommandResult(output:String(decoding:output,as:UTF8.self),code:process.terminationStatus)
 }
 
+func controlsAvailable(_ control:[String:Any])->Bool {control["_read_unavailable"] as? Bool != true}
+func safeWithoutControls(_ action:String)->Bool {
+    ["panel","quit","status","doctor","diagnostics","support-summary","history","ddc-history","display-info","monitor-settings","notifications","preview-revert","preview-repair"].contains(action)
+}
 func automationPaused(_ control:[String:Any],_ now:Double=Date().timeIntervalSince1970)->Bool {
     let until=control["pause_until"] as? Double ?? 0
     return control["paused"] as? Bool == true && (until==0 || until>now)
@@ -104,7 +108,7 @@ func statusAge(_ health:[String:Any],_ now:Double=Date().timeIntervalSince1970)-
     return "Last report: \(Int(age)) seconds ago"
 }
 func detailPrefix(_ health:[String:Any],_ control:[String:Any],_ now:Double=Date().timeIntervalSince1970)->String {
-    statusFresh(health,now) && health["status"] as? String == "ready" && !automationPaused(control,now) ? "":"Last known · "
+    statusFresh(health,now) && controlsAvailable(control) && health["status"] as? String == "ready" && !automationPaused(control,now) ? "":"Last known · "
 }
 func operationTitle(_ action:String)->String {
     let names=["preset-remove":"Removing saved size preset","preset-save":"Saving named size preset","display-info":"Inspecting display modes","doctor":"Checking health","diagnostics":"Saving diagnostics","support-summary":"Preparing support summary","history":"Reading transition history",
@@ -137,6 +141,7 @@ func speakerChoices(_ profile:String)->[(String,String)] {
     }
 }
 func monitorControlReason(_ health:[String:Any],_ control:[String:Any],_ role:String,_ busy:Bool)->String? {
+    if !controlsAvailable(control) {return "Saved controls are unreadable. Check health; setting changes are disabled."}
     if busy {return "Waiting for the current command and monitor readback."}
     if !statusFresh(health) {return "Controller status is unavailable. Check health first."}
     if automationPaused(control) {return "Resume automation to adjust monitor settings."}
@@ -147,6 +152,7 @@ func monitorControlReason(_ health:[String:Any],_ control:[String:Any],_ role:St
     return inputs[role]==expected ? nil:"This monitor is not showing this Mac. No setting changes are available."
 }
 func audioRepairReason(_ health:[String:Any],_ control:[String:Any],_ busy:Bool)->String? {
+    if !controlsAvailable(control) {return "Saved controls are unreadable. Check health; setting changes are disabled."}
     if busy {return "Wait for the current command to finish."}
     if !statusFresh(health) {return "Controller status is unavailable; check health first."}
     if automationPaused(control) {return "Resume automation before repairing audio."}
@@ -175,6 +181,7 @@ func recoverySummary(_ health:[String:Any],_ control:[String:Any],_ now:Double=D
     let attempts=max(0,min(3,recovery["attempts"] as? Int ?? 0))
     var lines:[String]=[]
     if !statusFresh(health,now) {lines.append("Recovery status is out of date. Check health before retrying; no current retry time is known.")}
+    else if !controlsAvailable(control) {lines.append("Saved controls are unreadable. Check health and restore valid control settings; do not delete recovery journals.")}
     else if state=="state-error" {lines.append("Saved state needs attention. Check health and preserve the recovery files before restoring a known-good copy.")}
     else if state.hasPrefix("preview-") {
         let preview=health["preview"] as? [String:Any] ?? [:]
@@ -207,7 +214,7 @@ func dashboard(_ health:[String:Any],_ control:[String:Any],_ now:Double=Date().
     let fresh=statusFresh(health,now)
     let state=fresh ? health["status"] as? String ?? "unknown":"unavailable"
     let titles=["starting":"Starting controller","waiting-for-known-input":"Unrecognized monitor input; layout changes held","ready":"Ready","waiting-for-ddc":"Waiting for monitor response","inactive-setup":"Saved monitor pair is not connected","paused":"Paused","degraded":"Recovery needs attention","state-error":"Saved settings need attention","unavailable":"Controller status unavailable","settling":"Waiting for stable inputs","recovering":"Recovering"]
-    var lines=["\(titles[state] ?? state) · Mac \(health["host"] as? String ?? "?") · v\(health["version"] as? String ?? "—")"]
+    var lines=["\(controlsAvailable(control) ? (titles[state] ?? state):"Saved controls unavailable") · Mac \(health["host"] as? String ?? "?") · v\(health["version"] as? String ?? "—")"]
     if let preview=health["preview"] as? [String:Any],state.hasPrefix("preview-") {
         let phase=preview["state"] as? String ?? "unknown"
         let descriptions=["preparing":"Preparing size preview","preview":"Temporary size preview","restore-deferred":"Restoration waiting for both monitors and the original orientation","restore-pending":"Restoring your previous size","needs-repair":"Size restoration needs attention","kept":"New size saved for this orientation","reverted":"Previous size restored","request-rejected":"Preview request rejected"]
@@ -264,8 +271,8 @@ func statusSections(_ health:[String:Any],_ control:[String:Any])->[StatusSectio
                  "benq":"BenQ is the desktop; hidden PG mirrors BenQ","away":"Both monitors away; layout preserved"]
     let sensor=(rotation["sensor_degrees"] as? Int).map{"\($0)°"} ?? "unavailable"
     let audioOverride=(control["audio_manual_until"] as? Double ?? 0)>Date().timeIntervalSince1970
-    let rotationMode=rotation["enabled"] as? Bool != true ? "not calibrated":control["auto_rotate"] as? Bool == false ? "manual":"automatic"
-    let routing=automationPaused(control) ? "Automation is paused":audioOverride ? "Manual output preservation is active":"Automatic routing follows profile preferences"
+    let rotationMode = !controlsAvailable(control) ? "unavailable":rotation["enabled"] as? Bool != true ? "not calibrated":control["auto_rotate"] as? Bool == false ? "manual":"automatic"
+    let routing = !controlsAvailable(control) ? "Saved audio preferences are unavailable":automationPaused(control) ? "Automation is paused":audioOverride ? "Manual output preservation is active":"Automatic routing follows profile preferences"
     return [
         StatusSection(title:"Overview",body:(health["status"] as? String ?? "").hasPrefix("preview-") ? dashboard(health,control):headline+"\n"+statusAge(health)+"\n"+prefix+(layouts[profile] ?? "Desktop not confirmed")),
         StatusSection(title:"PG42UQ",body:prefix+owner("pg",17,18)),
@@ -385,7 +392,7 @@ struct FailureAlerts {
 }
 // Synthetic states never read or mutate the installed controller.
 func demoState(_ scenario:String,_ name:String,_ now:Double)->[String:Any] {
-    if name=="control.json" {return scenario=="paused" ? ["paused":true]:[:]}
+    if name=="control.json" {return scenario=="controls-error" ? ["_read_unavailable":true]:scenario=="paused" ? ["paused":true]:[:]}
     guard name=="health.json" else {return [:]}
     var health:[String:Any] = ["host":"A","version":"Demo","updated_at":now,
         "status":"ready","profile":"extended","inputs":["pg":17,"benq":19],
@@ -412,20 +419,28 @@ if CommandLine.arguments.contains("--self-test") {
     try! FileManager.default.createDirectory(at:stateFolder,withIntermediateDirectories:true)
     let statePath=stateFolder.appendingPathComponent("health.json")
     try! Data("{\"status\":\"ready\"}".utf8).write(to:statePath)
-    precondition(readMenuState(statePath)["status"] as? String == "ready")
-    precondition(readMenuState(statePath,limit:4).isEmpty)
+    precondition(readMenuState(statePath)?["status"] as? String == "ready")
+    precondition(readMenuState(statePath,limit:4)==nil)
     let link=stateFolder.appendingPathComponent("link")
     try! FileManager.default.createSymbolicLink(at:link,withDestinationURL:statePath)
-    precondition(readMenuState(link).isEmpty)
+    precondition(readMenuState(link)==nil)
     let pipe=stateFolder.appendingPathComponent("pipe")
     precondition(mkfifo(pipe.path,0o600)==0)
-    precondition(readMenuState(pipe).isEmpty)
+    precondition(readMenuState(pipe)==nil)
     for invalid in ["{broken","[]"] {
         try! Data(invalid.utf8).write(to:statePath)
-        precondition(readMenuState(statePath).isEmpty)
+        precondition(readMenuState(statePath)==nil)
     }
     try! FileManager.default.removeItem(at:stateFolder)
-    print("PASS bounded regular-file menu state reads")
+    precondition(readMenuState(statePath)==nil)
+    precondition(readMenuState(statePath,allowMissing:true)?.isEmpty==true)
+    let missingControl:[String:Any]=["_read_unavailable":true]
+    precondition(!controlsAvailable(missingControl) && controlsAvailable([:]))
+    precondition(safeWithoutControls("doctor") && safeWithoutControls("preview-revert") && !safeWithoutControls("preview-start"))
+    precondition(monitorControlReason([:],missingControl,"pg",false) != nil)
+    precondition(audioRepairReason([:],missingControl,false) != nil)
+    precondition(dashboard(["status":"ready","updated_at":100.0],missingControl,101).hasPrefix("Saved controls unavailable"))
+    print("PASS bounded regular-file menu state reads and unavailable controls")
     let lockPath=FileManager.default.temporaryDirectory.appendingPathComponent("display-menu-test-"+UUID().uuidString).path
     var firstOwner=MenuOwnership(path:lockPath)
     precondition(firstOwner != nil)
@@ -607,6 +622,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
     var operationResult=""
     var openMenus=Set<ObjectIdentifier>()
     var menuOpen:Bool {!openMenus.isEmpty}
+    var controlsUsable=true
     var failureAlerts=FailureAlerts(sent:Array((UserDefaults.standard.stringArray(forKey:"failureIncidents") ?? []).prefix(16)))
     func applicationShouldHandleReopen(_ sender:NSApplication,hasVisibleWindows flag:Bool)->Bool {showPanel();return true}
     func showPanel() {
@@ -737,7 +753,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
                 panelActions.append(button);scalableControls.append(button)
             }
             if demo {
-                let scenarios=NSPopUpButton();scenarios.addItems(withTitles:["ready","stale","paused","away","preview","recovery","recovery-wait","presets-error"])
+                let scenarios=NSPopUpButton();scenarios.addItems(withTitles:["ready","stale","paused","away","preview","recovery","recovery-wait","presets-error","controls-error"])
                 scenarios.target=self;scenarios.action=#selector(changeDemoScenario(_:));scenarios.setAccessibilityLabel("Synthetic scenario")
                 let compact=NSButton(title:"Minimum window",target:self,action:#selector(compactDemo))
                 let row=NSStackView(views:[scenarios,compact]);row.spacing=12;footer.addArrangedSubview(row)
@@ -821,7 +837,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
     }}
     func read(_ name:String)->[String:Any] {
         if demo {return demoState(demoScenario,name,Date().timeIntervalSince1970)}
-        return readMenuState(root.appendingPathComponent(name))
+        return readMenuState(root.appendingPathComponent(name),allowMissing:name=="control.json") ?? (name=="control.json" ? ["_read_unavailable":true]:[:])
     }
     func applicationDidFinishLaunching(_ notification:Notification) {
         if !demo {
@@ -859,21 +875,23 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
     }
     func add(_ menu:NSMenu,_ title:String,_ args:[String]?=nil,checked:Bool=false) {
         let entry=NSMenuItem(title:title,action:args == nil ? nil : #selector(act(_:)),keyEquivalent:"")
-        entry.target=self;entry.representedObject=args;entry.state=checked ? .on:.off;entry.isEnabled=args != nil && !busy;menu.addItem(entry)
+        entry.target=self;entry.representedObject=args;entry.state=checked ? .on:.off;entry.isEnabled=args != nil && !busy && (controlsUsable || safeWithoutControls(args?.first ?? ""));menu.addItem(entry)
     }
     func refresh() {
         let health=read("health.json"),control=read("control.json")
+        controlsUsable=controlsAvailable(control)
         let fresh=statusFresh(health)
         let prefix=detailPrefix(health,control)
         let state=fresh ? health["status"] as? String ?? "Unknown" : "Controller unavailable"
-        item.button?.title=state == "degraded" || state == "state-error" || !fresh ? " !" : ""
-        item.button?.toolTip="Display Auto: \(state)"
+        item.button?.title=state == "degraded" || state == "state-error" || !fresh || !controlsUsable ? " !" : ""
+        item.button?.toolTip="Display Bridge: \(controlsUsable ? state:"Controls unavailable")"
         let tracked=commandSummary(health,control)
         var progress=operationResult
         if let started=operationStarted {
             let elapsed=Int(max(0,ProcessInfo.processInfo.systemUptime-started))
             progress="\(operationName)… \(elapsed)s elapsed. Command deadline: 45s."
         }
+        if !controlsUsable {progress += "\nSaved controls are unreadable. Setting changes are disabled; check health."}
         let sections=statusSections(health,control)
         for (index,fields) in overviewFields.enumerated() where index<sections.count {
             var body=sections[index].body
@@ -884,7 +902,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
             if fields.1.stringValue != body {fields.1.stringValue=body;fields.1.setAccessibilityValue(body)}
         }
         pauseButton?.title=automationPaused(control) ? "Resume":"Pause"
-        pauseButton?.isEnabled = !busy
+        pauseButton?.isEnabled = !busy && controlsUsable
         var detail=dashboard(health,control)
         if !tracked.isEmpty {detail=tracked+"\n\n"+detail}
         if !progress.isEmpty {detail=progress+"\n\n"+detail}
@@ -904,13 +922,14 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
         monitorReason?.stringValue=monitorUnavailable ?? "Controls apply only to the selected monitor. Each adjustment waits for hardware confirmation."
         for button in monitorButtons {button.isEnabled=monitorUnavailable==nil}
         monitorSelector?.isEnabled = !busy
-        for button in panelActions {button.isEnabled = !busy}
+        for button in panelActions {button.isEnabled = !busy && (controlsUsable || safeWithoutControls(button.identifier?.rawValue ?? "doctor"))}
         let preferences=control["speaker_preferences"] as? [String:String] ?? [:]
         for (profile,popup) in speakerPopups {
+            if !controlsUsable {popup.selectItem(at:-1);popup.isEnabled=false;continue}
             let wanted=preferences[profile] ?? (profile=="away" ? "fallback":profile=="benq" ? "benq":"pg")
             if let entry=popup.itemArray.first(where:{$0.representedObject as? String==wanted}) {popup.select(entry)}
             else {popup.selectItem(at:-1)}
-            popup.isEnabled = !busy
+            popup.isEnabled = !busy && controlsUsable
         }
         let currentAudio=health["audio"] as? [String:Any] ?? [:]
         let selectedOutput=currentAudio["selected"] as? [String:Any] ?? [:]
@@ -918,6 +937,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
         if let until=control["audio_manual_until"] as? Double,until>Date().timeIntervalSince1970 {
             audioDescription += "\nManual preservation ends at \(Date(timeIntervalSince1970:until).formatted(date:.omitted,time:.shortened))."
         }
+        if !controlsUsable {audioDescription="Saved controls are unreadable. Check health before changing audio preferences.\n\n"+audioDescription}
         audioInfo?.stringValue=audioDescription
         let reason=audioRepairReason(health,control,busy)
         audioRepair?.isEnabled=reason==nil
@@ -927,10 +947,10 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
         previewToken=preview["token"] as? String
         for button in previewActions {
             let action=button.identifier?.rawValue
-            if action=="preview-options" {button.isEnabled = !busy && fresh && state=="ready" && health["profile"] as? String == "extended" && !automationPaused(control)}
+            if action=="preview-options" {button.isEnabled = !busy && controlsUsable && fresh && state=="ready" && health["profile"] as? String == "extended" && !automationPaused(control)}
             else {
                 if action=="preview-keep" {button.title="Keep (\(previewRemaining(health))s)"}
-                button.isHidden = preview["state"] as? String != "preview";button.isEnabled = !busy && fresh && previewToken != nil && preview["state"] as? String == "preview" && previewRemaining(health)>0}
+                button.isHidden = preview["state"] as? String != "preview";button.isEnabled = !busy && (controlsUsable || action=="preview-revert") && fresh && previewToken != nil && preview["state"] as? String == "preview" && previewRemaining(health)>0}
         }
         if !demo {
         notify(health,fresh:fresh)
@@ -966,7 +986,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
         add(menu,"Pause for 15 minutes",["pause-for","--minutes","15"])
         if rotation["enabled"] as? Bool == true {
             let automatic=control["auto_rotate"] as? Bool ?? true
-            add(menu,"Automatic BenQ rotation",[automatic ? "rotation-manual":"rotation-auto"],checked:automatic)
+            add(menu,"Automatic BenQ rotation",[automatic ? "rotation-manual":"rotation-auto"],checked:controlsUsable && automatic)
         }
         if paused,let until=control["pause_until"] as? Double,until>0 {
             add(menu,"Resumes at \(Date(timeIntervalSince1970:until).formatted(date:.omitted,time:.shortened))")
@@ -978,7 +998,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
         for (profile,label,defaultSpeaker) in [("extended","Both monitors here","pg"),("pg","Only PG here","pg"),("benq","Only BenQ here","benq"),("away","Both monitors away","fallback")] {
             let entry=NSMenuItem(title:"Speaker: \(label)",action:nil,keyEquivalent:"");let sub=NSMenu()
             for (speaker,title) in speakerChoices(profile) {
-                add(sub,title,["speaker","--profile",profile,"--speaker",speaker],checked:(preferences[profile] ?? defaultSpeaker)==speaker)
+                add(sub,title,["speaker","--profile",profile,"--speaker",speaker],checked:controlsUsable && (preferences[profile] ?? defaultSpeaker)==speaker)
             };entry.submenu=sub;menu.addItem(entry)
         }
         menu.addItem(.separator())
@@ -1014,6 +1034,9 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
     func menuDidClose(_ menu:NSMenu){openMenus.remove(ObjectIdentifier(menu))}
     @objc func act(_ sender:NSMenuItem){if let args=sender.representedObject as? [String]{execute(args)}}
     func execute(_ args:[String]) {
+        if !controlsAvailable(read("control.json")),!safeWithoutControls(args.first ?? "") {
+            message("Saved controls unavailable","Check health and restore valid control settings before changing preferences or starting a preview. Recovery journals were preserved.");return
+        }
         if args==["panel"]{showPanel();return}
         if args==["quit"]{NSApp.terminate(nil);return}
         if demo,args.count==1,detailReports.contains(where:{$0.0==args[0]}) {

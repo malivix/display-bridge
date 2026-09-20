@@ -138,3 +138,9 @@ Health checks also inspect the menu heartbeat/version and any saved preset store
 menu is informational because the controller can continue without it. Stale/mismatched menu
 state and unusable preset data include corrective guidance; no file is reset. A valid preset
 store does not establish current mode availability—that is checked by the size chooser.
+
+If the menu cannot read an existing controls file, it marks preferences unavailable and
+disables setting changes instead of showing default speaker choices. Health, diagnostics,
+and preview reversion remain available. A missing optional controls file still uses the
+normal defaults. Restore valid settings through the documented recovery process; the menu
+never resets the file itself.

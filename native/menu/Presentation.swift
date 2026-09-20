@@ -143,6 +143,22 @@ func recoverySummary(_ health:[String:Any],_ control:[String:Any],_ now:Double=D
     if let error=health["error"] as? String ?? recovery["error"] as? String,!error.isEmpty {lines.append("Last error: "+String(error.prefix(1000)))}
     return lines.joined(separator:"\n")
 }
+func unknownInputGuidance(_ health:[String:Any],_ now:Double=Date().timeIntervalSince1970)->String? {
+    guard statusFresh(health,now),health["status"] as? String=="waiting-for-known-input",let inputs=health["inputs"] as? [String:Any] else{return nil}
+    var lines:[String]=[]
+    for (role,name,a,b) in [("pg","PG42UQ",17,18),("benq","BenQ RD280UG",19,15)] {
+        guard let number=inputs[role] as? NSNumber,CFGetTypeID(number) != CFBooleanGetTypeID(),
+              number.doubleValue.isFinite,number.doubleValue.rounded()==number.doubleValue,
+              number.doubleValue>=0,number.doubleValue<=65535 else {
+            lines.append("\(name): no valid input number reported.");continue
+        }
+        let input=number.intValue
+        if input != a && input != b {lines.append("\(name) reports input \(input). Enrolled inputs: Mac A = \(a), Mac B = \(b).")}
+    }
+    guard !lines.isEmpty else{return nil}
+    return lines.joined(separator:"\n")+"\nCheck the monitor's selected input and cable connection against your enrolled setup, then run Health. Readback can be unreliable; this app will not guess or remap inputs automatically."
+}
+
 func dashboard(_ health:[String:Any],_ control:[String:Any],_ now:Double=Date().timeIntervalSince1970)->String {
     let fresh=statusFresh(health,now)
     let state=fresh ? health["status"] as? String ?? "unknown":"unavailable"
@@ -161,6 +177,7 @@ func dashboard(_ health:[String:Any],_ control:[String:Any],_ now:Double=Date().
     let trusted=prefix.isEmpty
     lines.append(statusAge(health,now))
     if !trusted {lines.append("\nLast reported details below may be out of date. Run Check health for a fresh inspection.")}
+    if let guidance=unknownInputGuidance(health,now) {lines.append("\n"+guidance)}
     let inputs=health["inputs"] as? [String:Int] ?? [:]
     for (key,label,a,b) in [("pg","PG42UQ",17,18),("benq","BenQ RD280UG",19,15)] {
         let input=inputs[key]
@@ -207,7 +224,7 @@ func statusSections(_ health:[String:Any],_ control:[String:Any])->[StatusSectio
     let rotationMode = !controlsAvailable(control) ? "unavailable":rotation["enabled"] as? Bool != true ? "not calibrated":control["auto_rotate"] as? Bool == false ? "manual":"automatic"
     let routing = !controlsAvailable(control) ? "Saved audio preferences are unavailable":automationPaused(control) ? "Automation is paused":audioOverride ? "Manual output preservation is active":"Automatic routing follows profile preferences"
     return [
-        StatusSection(title:"Overview",body:(health["status"] as? String ?? "").hasPrefix("preview-") ? dashboard(health,control):headline+"\n"+statusAge(health)+"\n"+prefix+(layouts[profile] ?? "Desktop not confirmed")),
+        StatusSection(title:"Overview",body:(health["status"] as? String ?? "").hasPrefix("preview-") ? dashboard(health,control):headline+"\n"+statusAge(health)+"\n"+prefix+(layouts[profile] ?? "Desktop not confirmed")+(unknownInputGuidance(health).map{"\n\n"+$0} ?? "")),
         StatusSection(title:"PG42UQ",body:prefix+owner("pg",17,18)),
         StatusSection(title:"BenQ RD280UG",body:prefix+owner("benq",19,15)+"\n\(prefix)Rotation: \(rotationMode) · sensor \(sensor)"),
         StatusSection(title:"Audio",body:prefix+(selected["name"] as? String ?? "Output not reported")+"\n"+routing+"\nSpeaker selection does not prove audible sound."),
@@ -440,6 +457,7 @@ func demoState(_ scenario:String,_ name:String,_ now:Double)->[String:Any] {
     switch scenario {
     case "stale":health["updated_at"]=now-90
     case "paused":health["status"]="paused"
+    case "unknown-input":health["status"]="waiting-for-known-input";health["profile"]="unknown";health["inputs"]=["pg":15,"benq":19]
     case "away":health["profile"]="away";health["inputs"]=["pg":18,"benq":15]
     case "preview":
         health["status"]="preview-preview"

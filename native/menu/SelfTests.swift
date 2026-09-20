@@ -4,6 +4,17 @@ import UserNotifications
 import Darwin
 
 func runMenuSelfTests() {
+    let unknownInputs:[String:Any]=["updated_at":100.0,"status":"waiting-for-known-input","inputs":["pg":15,"benq":19]]
+    let guidance=unknownInputGuidance(unknownInputs,105)!
+    precondition(guidance.contains("PG42UQ reports input 15"))
+    precondition(guidance.contains("Mac A = 17, Mac B = 18"))
+    precondition(!guidance.contains("BenQ RD280UG reports"))
+    precondition(unknownInputGuidance(unknownInputs,120)==nil)
+    var recognized=unknownInputs;recognized["inputs"]=["pg":17,"benq":19]
+    precondition(unknownInputGuidance(recognized,105)==nil)
+    var unavailable=unknownInputs;unavailable["inputs"]=["pg":true,"benq":19]
+    precondition(unknownInputGuidance(unavailable,105)!.contains("no valid input number"))
+
     let recentText=recentTimingSummary([["profile":"benq","result":"failed","seconds":["total":true]],["profile":"pg","result":"ready","seconds":["total":2.5]]])
     precondition(recentText.contains("1. Only BenQ here · Failed attempt"))
     precondition(recentText.contains("Application total: not recorded"))

@@ -121,6 +121,16 @@ func speakerChoices(_ profile:String)->[(String,String)] {
         !($0.0=="pg" && ["benq","away"].contains(profile)) && !($0.0=="benq" && ["pg","away"].contains(profile))
     }
 }
+func monitorControlReason(_ health:[String:Any],_ control:[String:Any],_ role:String,_ busy:Bool)->String? {
+    if busy {return "Waiting for the current command and monitor readback."}
+    if !statusFresh(health) {return "Controller status is unavailable. Check health first."}
+    if automationPaused(control) {return "Resume automation to adjust monitor settings."}
+    guard health["status"] as? String == "ready" else{return "Available after input switching or recovery completes."}
+    guard let host=health["host"] as? String,["A","B"].contains(host),["pg","benq"].contains(role) else{return "Monitor ownership is not confirmed."}
+    let inputs=health["inputs"] as? [String:Int] ?? [:]
+    let expected=role=="pg" ? (host=="A" ? 17:18):(host=="A" ? 19:15)
+    return inputs[role]==expected ? nil:"This monitor is not showing this Mac. No setting changes are available."
+}
 func audioRepairReason(_ health:[String:Any],_ control:[String:Any],_ busy:Bool)->String? {
     if busy {return "Wait for the current command to finish."}
     if !statusFresh(health) {return "Controller status is unavailable; check health first."}
@@ -364,6 +374,12 @@ if CommandLine.arguments.contains("--self-test") {
     precondition(statusAge(["updated_at":Double.nan],101)=="Status age unavailable")
     precondition(statusAge(live,120)=="Last report: 20 seconds ago")
     precondition(!detailPrefix(live,["paused":true],101).isEmpty)
+    let monitorHealth:[String:Any]=["host":"A","status":"ready","updated_at":Date().timeIntervalSince1970,"inputs":["pg":17,"benq":15]]
+    precondition(monitorControlReason(monitorHealth,[:],"pg",false)==nil)
+    precondition(monitorControlReason(monitorHealth,[:],"benq",false) != nil)
+    precondition(monitorControlReason(monitorHealth,["paused":true],"pg",false) != nil)
+    precondition(monitorControlReason(monitorHealth,[:],"pg",true) != nil)
+    precondition(monitorControlReason([:],[:],"pg",false) != nil)
     precondition(speakerChoices("away").map{$0.0}==["fallback","preserve"])
     precondition(!speakerChoices("benq").contains{$0.0=="pg"})
     precondition(audioRepairReason([:],[:],false) != nil)
@@ -455,7 +471,13 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
     var timer:Timer?
     var panel:NSWindow?
     var panelText:NSTextView?
+    var contentTabs:NSTabView?
     var modeText:NSTextView?
+    var monitorRole="pg"
+    var monitorSelector:NSPopUpButton?
+    var monitorButtons:[NSButton]=[]
+    var monitorReason:NSTextField?
+    var monitorFeedback:NSTextField?
     var speakerPopups:[String:NSPopUpButton]=[:]
     var audioInfo:NSTextField?
     var audioRepair:NSButton?
@@ -484,7 +506,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
             text.setAccessibilityLabel("Display status and command results")
             scroll.documentView=text;panelText=text;panel=window
             let tabs=NSTabView(frame:NSRect(x:20,y:138,width:600,height:440))
-            tabs.autoresizingMask=[.width,.height]
+            tabs.autoresizingMask=[.width,.height];contentTabs=tabs
             let overview=NSTabViewItem(identifier:"overview");overview.label="Overview"
             let overviewScroll=NSScrollView();overviewScroll.hasVerticalScroller=true;overviewScroll.autohidesScrollers=true
             let stack=NSStackView();stack.orientation = .vertical;stack.alignment = .leading;stack.spacing=18
@@ -544,6 +566,25 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
             let reason=NSTextField(wrappingLabelWithString:"");audioStack.addArrangedSubview(reason)
             reason.widthAnchor.constraint(equalTo:audioStack.widthAnchor,constant:-32).isActive=true;audioReason=reason
             audioTab.view=audioScroll;tabs.addTabViewItem(audioTab)
+            let controlsTab=NSTabViewItem(identifier:"monitor-controls");controlsTab.label="Controls"
+            let controlsScroll=NSScrollView();controlsScroll.hasVerticalScroller=true
+            let controlsStack=NSStackView();controlsStack.orientation = .vertical;controlsStack.alignment = .leading;controlsStack.spacing=18
+            controlsStack.edgeInsets=NSEdgeInsets(top:16,left:16,bottom:16,right:16)
+            controlsStack.translatesAutoresizingMaskIntoConstraints=false;controlsScroll.documentView=controlsStack
+            controlsStack.widthAnchor.constraint(equalTo:controlsScroll.contentView.widthAnchor).isActive=true
+            controlsStack.topAnchor.constraint(equalTo:controlsScroll.contentView.topAnchor).isActive=true
+            let selector=NSPopUpButton();selector.addItems(withTitles:["PG42UQ","BenQ RD280UG"])
+            selector.target=self;selector.action=#selector(selectMonitor(_:));selector.setAccessibilityLabel("Monitor to adjust")
+            controlsStack.addArrangedSubview(selector);monitorSelector=selector
+            let availability=NSTextField(wrappingLabelWithString:"");controlsStack.addArrangedSubview(availability)
+            availability.widthAnchor.constraint(equalTo:controlsStack.widthAnchor,constant:-32).isActive=true;monitorReason=availability
+            for (title,key) in [("Read brightness and volume","read"),("Brightness −5%","luminance:-5"),("Brightness +5%","luminance:5"),("Speaker volume −5%","volume:-5"),("Speaker volume +5%","volume:5")] {
+                let button=NSButton(title:title,target:self,action:#selector(adjustMonitor(_:)))
+                button.identifier=NSUserInterfaceItemIdentifier(key);controlsStack.addArrangedSubview(button);monitorButtons.append(button)
+            }
+            let feedback=NSTextField(wrappingLabelWithString:"Read settings to see confirmed hardware values. Equal brightness percentages do not mean equal light output. Speaker volume does not select the Mac audio output.")
+            controlsStack.addArrangedSubview(feedback);feedback.widthAnchor.constraint(equalTo:controlsStack.widthAnchor,constant:-32).isActive=true;monitorFeedback=feedback
+            controlsTab.view=controlsScroll;tabs.addTabViewItem(controlsTab)
             window.contentView?.addSubview(tabs)
             applyTextSize(textSizeIndex())
             let label=NSTextField(labelWithString:"Text size")
@@ -574,7 +615,27 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
         panelText?.font=NSFont.systemFont(ofSize:size)
         modeText?.font=NSFont.systemFont(ofSize:size)
         audioInfo?.font=NSFont.systemFont(ofSize:size);audioReason?.font=NSFont.systemFont(ofSize:size)
+        monitorReason?.font=NSFont.systemFont(ofSize:size);monitorFeedback?.font=NSFont.systemFont(ofSize:size)
         for (heading,body) in overviewFields {heading.font=NSFont.boldSystemFont(ofSize:size);body.font=NSFont.systemFont(ofSize:size)}
+    }
+    func showMonitorResult(_ text:String,_ role:String?) {
+        if let role=role,["pg","benq"].contains(role) {
+            monitorRole=role;monitorSelector?.selectItem(at:role=="pg" ? 0:1)
+        }
+        monitorFeedback?.stringValue=text
+        contentTabs?.selectTabViewItem(withIdentifier:"monitor-controls")
+    }
+    @objc func selectMonitor(_ sender:NSPopUpButton) {
+        monitorRole=sender.indexOfSelectedItem==0 ? "pg":"benq"
+        monitorFeedback?.stringValue="No readback for this selection yet. Read settings to inspect it."
+        refresh()
+    }
+    @objc func adjustMonitor(_ sender:NSButton) {
+        guard let key=sender.identifier?.rawValue else{return}
+        if key=="read" {execute(["monitor-settings","--monitor",monitorRole]);return}
+        let parts=key.split(separator:":").map(String.init)
+        guard parts.count==2 else{return}
+        execute(["monitor-adjust","--monitor",monitorRole,"--feature",parts[0],"--step",parts[1]])
     }
     @objc func selectSpeaker(_ sender:NSPopUpButton) {
         guard let profile=sender.identifier?.rawValue,let speaker=sender.selectedItem?.representedObject as? String else{return}
@@ -675,6 +736,10 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
             if selection.location<=length {text.setSelectedRange(NSRange(location:selection.location,length:min(selection.length,length-selection.location)))}
             if let origin=origin {text.enclosingScrollView?.contentView.scroll(to:origin)}
         }
+        let monitorUnavailable=monitorControlReason(health,control,monitorRole,busy)
+        monitorReason?.stringValue=monitorUnavailable ?? "Controls apply only to the selected monitor. Each adjustment waits for hardware confirmation."
+        for button in monitorButtons {button.isEnabled=monitorUnavailable==nil}
+        monitorSelector?.isEnabled = !busy
         for button in panelActions {button.isEnabled = !busy}
         let preferences=control["speaker_preferences"] as? [String:String] ?? [:]
         for (profile,popup) in speakerPopups {
@@ -761,7 +826,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
         for (role,label,localInput) in [("pg","PG42UQ",hostB ? 18:17),("benq","BenQ",hostB ? 15:19)] {
             let entry=NSMenuItem(title:"\(label) brightness and volume",action:nil,keyEquivalent:"")
             let sub=NSMenu()
-            let enabled=fresh && state=="ready" && !paused && inputs[role]==localInput
+            let enabled=monitorControlReason(health,control,role,busy)==nil
             add(sub,"Read current settings…",fresh && inputs[role]==localInput ? ["monitor-settings","--monitor",role]:nil)
             if !enabled {add(sub,"Available when this monitor shows this Mac and is ready")}
             for (feature,name) in [("luminance","Brightness"),("volume","Speaker volume")] {
@@ -822,7 +887,9 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
                 else if args.first=="monitor-adjust",let data=result.data(using:.utf8),let value=(try? JSONSerialization.jsonObject(with:data)) as? [String:Any] {
                     let name=value["feature"] as? String == "luminance" ? "Brightness":"Speaker volume"
                     let monitor=value["monitor"] as? String == "pg" ? "PG42UQ":"BenQ RD280UG"
-                    self.message(name,"\(monitor): \(value["percent"] as? Int ?? 0)%\nConfirmed by monitor readback. Physical steps depend on the monitor's range.")
+                    if let percent=value["percent"] as? Int,(0...100).contains(percent) {
+                        self.showMonitorResult("\(monitor) · \(name): \(percent)%\nConfirmed at \(Date().formatted(date:.omitted,time:.standard)). Refresh after using the monitor's own controls.",value["monitor"] as? String)
+                    } else {self.monitorFeedback?.stringValue="Adjustment returned an unreadable value. Read settings again; do not assume it succeeded."}
                 }
                 else if args.first=="monitor-settings",let data=result.data(using:.utf8),let value=(try? JSONSerialization.jsonObject(with:data)) as? [String:Any],let settings=value["settings"] as? [String:[String:Int]] {
                     let monitor=value["monitor"] as? String == "pg" ? "PG42UQ":"BenQ RD280UG"
@@ -831,7 +898,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
                         if let setting=settings[key] {lines.append("\(label): \(setting["percent"] ?? 0)% (\(setting["value"] ?? 0) / \(setting["maximum"] ?? 0))")}
                     }
                     lines.append("\nThese are monitor hardware settings. Speaker volume does not select the macOS audio output. Nothing was changed.")
-                    self.message("Current monitor settings",lines.joined(separator:"\n"))
+                    self.showMonitorResult(lines.joined(separator:"\n"),value["monitor"] as? String)
                 }
                 self.refresh()
             }

@@ -21,7 +21,9 @@ remains scrollable.
 - **Pause / Resume:** temporarily stop automatic reconciliation, including a timed pause.
 - **Speaker preferences:** choose the preferred available output for each profile. External
   headsets remain under your control; manual audio preservation suspends automatic routing.
-- **Brightness / volume:** explicit steps apply only to a monitor currently showing this Mac.
+- **Brightness / volume:** the Controls tab offers monitor selection, readback, and explicit
+  steps for a monitor currently showing this Mac. Confirmed values appear inline. Buttons
+  explain unavailable states and wait for each command before accepting another adjustment.
 - **Preview display size:** available when both displays are local and healthy. Keep within
   the countdown or the controller restores the previous size. This saves only the current
   orientation. If inputs or orientation change, restoration waits for the original context.

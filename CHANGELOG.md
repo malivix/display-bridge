@@ -6,6 +6,7 @@
 - Share an isolated test command with the import-safe installer.
 - Bound menu commands by deadline and output size.
 - Show command progress, status age, and last-known labels; open status from failure notifications.
+- Add direct monitor controls with inline readback and ownership-aware availability.
 - Add a separate allowlisted support summary with no automatic upload.
 - Prevent duplicate menu ownership and block app replacement while old instances remain.
 - Add an Audio tab with profile preferences and explanations for unavailable repair.

@@ -15,6 +15,8 @@ Largest-text scrolling and accessibility-tree values were checked in a hardware-
 A read-only Displays tab now presents measured/saved mode snapshots.
 An Audio tab now exposes profile preferences and manual/repair controls with availability reasons.
 The separate allowlisted support-summary preview is implemented and tested in source.
+Direct monitor controls now show readbacks inline and explain availability; continuous
+slider/coalescing and physical pacing qualification remain deferred.
 Larger controls, further advanced-menu simplification, and complete
 accessibility qualification remain. Live deployment
 and UI qualification remain separate.

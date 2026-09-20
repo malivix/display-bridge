@@ -12,16 +12,24 @@ def activate_menu(staged, app, agent, service, run, health_path, version):
     backup = staged.parent / "previous.app"
     previous_agent = agent.read_bytes() if agent.exists() else None
     running = run(["launchctl", "print", service], capture_output=True).returncode == 0
-    if running:
-        run(["launchctl", "bootout", service], check=True)
-    until = time.monotonic() + 10
-    while run(["launchctl", "print", service], capture_output=True).returncode == 0:
-        if time.monotonic() > until:
-            raise RuntimeError("Previous menu service has not stopped")
-        time.sleep(0.1)
     moved = False
     activated = False
     try:
+        if running:
+            run(["launchctl", "bootout", service], check=True)
+        until = time.monotonic() + 10
+        executable = str(app / "Contents/MacOS/display-menu")
+        while True:
+            registered = run(["launchctl", "print", service], capture_output=True).returncode == 0
+            processes = run(["/bin/ps", "-axo", "comm="], capture_output=True, text=True, check=True)
+            if not isinstance(processes.stdout, str):
+                raise RuntimeError("Could not inspect existing menu processes")
+            active = executable in {line.strip() for line in processes.stdout.splitlines()}
+            if not registered and not active:
+                break
+            if time.monotonic() > until:
+                raise RuntimeError("Existing menu is still running. Quit its menu-bar app before upgrading; no replacement was made.")
+            time.sleep(0.1)
         if app.exists():
             app.rename(backup)
             moved = True

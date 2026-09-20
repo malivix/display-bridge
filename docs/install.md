@@ -65,6 +65,10 @@ back up `~/.config/display-auto`, identify the old controller and menu plists in
 new installation works. The installer rejects conflicting plists; it does not automatically
 migrate them or permit two controllers to run together.
 
+If an upgrade reports that the menu is still running, quit the older menu-bar app and retry.
+The installer checks the exact executable path before replacement; it does not kill unrelated
+processes. New menu builds also use a per-user ownership lock to prevent duplicate heartbeats.
+
 ## Stop automation
 
 Pause from the menu for temporary work. To stop the new public installation's services:

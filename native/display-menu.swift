@@ -4,6 +4,17 @@ import UserNotifications
 import Darwin
 import CryptoKit
 
+final class MenuOwnership {
+    private let descriptor:Int32
+    init?(path:String) {
+        let handle=Darwin.open(path,O_CREAT|O_RDWR|O_NOFOLLOW,0o600)
+        guard handle>=0 else{return nil}
+        guard flock(handle,LOCK_EX|LOCK_NB)==0 else {Darwin.close(handle);return nil}
+        descriptor=handle
+    }
+    deinit {Darwin.close(descriptor)}
+}
+
 struct CommandResult {
     let output: String
     let code: Int32
@@ -313,6 +324,15 @@ struct FailureAlerts {
     mutating func clear() {sent=[];pending=nil}
 }
 if CommandLine.arguments.contains("--self-test") {
+    let lockPath=FileManager.default.temporaryDirectory.appendingPathComponent("display-menu-test-"+UUID().uuidString).path
+    var firstOwner=MenuOwnership(path:lockPath)
+    precondition(firstOwner != nil)
+    precondition(MenuOwnership(path:lockPath)==nil,"Only one menu may own heartbeat and notifications")
+    firstOwner=nil
+    let nextOwner=MenuOwnership(path:lockPath)
+    precondition(nextOwner != nil,"Exited owner's lock must be reusable")
+    try? FileManager.default.removeItem(atPath:lockPath)
+    print("PASS exclusive menu ownership and release")
     let commandStarted=ProcessInfo.processInfo.systemUptime
     let timed=runMenuCommand(URL(fileURLWithPath:"/bin/sleep"),["2"],timeout:0.1)
     precondition(timed.code==124,"Menu command must stop at its deadline")
@@ -430,6 +450,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
     let root=FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".config/display-auto")
     let command=FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".local/bin/display-auto.sh")
     let demo=CommandLine.arguments.contains("--demo") || Bundle.main.object(forInfoDictionaryKey:"DisplayBridgeDemo") as? Bool == true
+    var ownership:MenuOwnership?
     var item:NSStatusItem!
     var timer:Timer?
     var panel:NSWindow?
@@ -580,6 +601,18 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
         guard let data=try? Data(contentsOf:root.appendingPathComponent(name)),let value=try? JSONSerialization.jsonObject(with:data) as? [String:Any] else{return [:]};return value
     }
     func applicationDidFinishLaunching(_ notification:Notification) {
+        if !demo {
+            ownership=MenuOwnership(path:root.appendingPathComponent("menu.lock").path)
+            guard ownership != nil else {
+                FileHandle.standardError.write(Data("Menu already running or ownership lock unavailable.\n".utf8))
+                if let identifier=Bundle.main.bundleIdentifier {
+                    for app in NSRunningApplication.runningApplications(withBundleIdentifier:identifier) where app.processIdentifier != ProcessInfo.processInfo.processIdentifier {
+                        app.activate(options:[.activateIgnoringOtherApps])
+                    }
+                }
+                NSApp.terminate(nil);return
+            }
+        }
         NSApp.setActivationPolicy(.accessory)
         item=NSStatusBar.system.statusItem(withLength:NSStatusItem.variableLength)
         item.button?.image=NSImage(systemSymbolName:"display.2",accessibilityDescription:"Display Auto")

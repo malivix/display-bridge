@@ -7,6 +7,7 @@ MENU_BUILD = "2102"
 RUNTIME_MODULES = (
     "display-auto.py",
     "audio_policy.py",
+    "command_results.py",
     "recovery_state.py",
     "observability.py",
     "hidpi_report.py",

@@ -20,6 +20,9 @@ def validate_control(value):
     for key in ('pause_until','audio_manual_until'):
         if key in value and not number(value[key]):raise ValueError(f'{key} must be a finite nonnegative timestamp')
     if 'repair_token' in value and not isinstance(value['repair_token'],str):raise ValueError('invalid repair token')
+    if 'command_request' in value:
+        from command_results import validate_request
+        validate_request(value['command_request'])
     prefs=value.get('speaker_preferences',{})
     if not isinstance(prefs,dict) or not set(prefs).issubset({'extended','pg','benq','away'}):raise ValueError('invalid speaker profile')
     if any(v not in ('pg','benq','fallback','preserve') for v in prefs.values()):raise ValueError('invalid speaker preference')

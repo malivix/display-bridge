@@ -7,8 +7,8 @@ features below have been implemented or physically qualified.
 ## Implementation progress
 
 The first source changes add command progress, per-group last-known labels, status age,
-and default notification-click routing. They do not yet add durable controller completion
-acknowledgements, incident-specific deduplication, or the dashboard redesign. Live deployment
+and default notification-click routing. Controller request IDs and bounded durable outcomes now distinguish policy acknowledgement
+from reconciliation. Incident-specific deduplication and the dashboard redesign remain. Live deployment
 and UI qualification remain separate.
 
 ## Decision

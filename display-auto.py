@@ -12,6 +12,7 @@ import re
 import subprocess
 import sys
 import time
+import uuid
 from contextlib import ExitStack
 from audio_policy import route as audio_route, preference
 from observability import record as save_record, summary, diagnostics
@@ -326,6 +327,17 @@ def write_health(config, status, profile=None, inputs=None, **details):
     value = {'version': VERSION, 'host': config['host'], 'pid': os.getpid(),
              'updated_at': time.time(), 'status': status, 'profile': profile, 'inputs': inputs,
              'audibility': 'requires physical confirmation', 'rotation':config.get('_rotation_status',{'enabled':bool(config.get('rotation',{}).get('enabled'))}), **details}
+    request=config.get('_command_request')
+    if request:
+        from command_results import outcome, publish
+        observed_status=status
+        if request['action']=='rotation-auto' and (not config.get('rotation',{}).get('enabled') or config.get('_rotation_status',{}).get('sensor_degrees') not in (0,90)):
+            observed_status='waiting-for-sensor'
+        result_state,result_detail=outcome(request,observed_status,profile,config.get('_command_control',{}),time.time())
+        try:
+            value['command_result']=publish(ROOT/'command-results.json',request,result_state,result_detail)
+        except (OSError,ValueError,TypeError) as error:
+            value['command_tracking_error']=f'Command tracking unavailable: {error}'
     recovery=details.get('recovery')
     if recovery:
         value['retry_in_seconds']=None if recovery.get('attempts',0)>=3 else round(max(0,recovery.get('retry_at',0)-time.monotonic()),1)
@@ -407,6 +419,7 @@ def watch(config, once=False, interrupt=None):
     last, last_check, warned = None, 0, None
     inventory, next_inventory = None, 0
     preferences_before=None
+    observed_command=None
     control_token, paused_before, manual_before = work.data.get('control_token'), False, False
     status, layout_status, audio_status = 'starting', 'unverified', 'unverified'
     profile, inputs = None, None
@@ -433,6 +446,17 @@ def watch(config, once=False, interrupt=None):
         if control_failed:
             LOG.info('Saved controls valid again; requiring fresh input confirmation')
             control_failed=False;previous_poll=wall
+        request=control.get('command_request')
+        config['_command_control']=dict(control)
+        config['_command_request']=request
+        if request and request['id']!=observed_command:
+            observed_command=request['id']
+            if request['action'] in ('resume','audio-auto','repair-audio','rotation-auto'):
+                # An older Ready heartbeat must never acknowledge a new command.
+                last=None;debounce.reset();status='recovering'
+                # Repair already has a durable token and must not be replayed on restart.
+                if request['action']!='repair-audio' and not work.pending:
+                    work.request('settings request requires reconciliation')
         if config.get('audio'):
             config['audio']['preferences']=control.get('speaker_preferences',{})
         paused = automation_paused(control,wall)
@@ -604,9 +628,11 @@ def control_command(action, minutes, profile=None, speaker=None):
                 if automation_paused(control) or control.get('audio_manual_until',0)>time.time():
                     raise RuntimeError('Resume automation and automatic audio before requesting repair')
                 control['repair_token']=str(time.time_ns())
+            control['command_request']={'id':uuid.uuid4().hex,'action':action,'created_at':time.time()}
+            validate_control(control)
             temporary=CONTROL.with_suffix('.tmp')
             temporary.write_text(json.dumps(control)+'\n');temporary.replace(CONTROL)
-        print(json.dumps({'requested':action,'control':control,'note':'Applied by the running controller after its current operation'},indent=2))
+        print(json.dumps({'requested':action,'request_id':control['command_request']['id'],'control':control,'note':'Applied by the running controller after its current operation'},indent=2))
 
 def main():
     with ExitStack() as resources:

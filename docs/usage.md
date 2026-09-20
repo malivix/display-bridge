@@ -16,7 +16,11 @@ and recovery state. Physical switching and DDC delays vary; it is not an instant
 - **Repair audio / Retry size restoration:** explicit retry after the cause of failure is resolved.
 
 The status window opens when a command starts and shows its operation and elapsed time.
-A saved request is not confirmation that the controller finished applying it. Last-known
+A saved request is not confirmation that the controller finished applying it. The window
+shows acknowledgement, applying, deferred, verified, or failed for the latest settings
+request. Preference acknowledgement does not claim physical effects or audible sound.
+Results survive a menu restart; the last 20 observed requests are retained locally.
+A newer request supersedes unfinished older settings work. Last-known
 labels and report age identify details that may be stale. Clicking a failure notification
 opens the status window.
 

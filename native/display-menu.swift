@@ -89,6 +89,21 @@ func operationTitle(_ action:String)->String {
         "speaker":"Saving speaker preference","rotation-auto":"Enabling automatic rotation","rotation-manual":"Disabling automatic rotation"]
     return names[action] ?? "Running command"
 }
+func commandSummary(_ health:[String:Any],_ control:[String:Any])->String {
+    if let error=health["command_tracking_error"] as? String {return error}
+    guard let request=control["command_request"] as? [String:Any],let id=request["id"] as? String else{return ""}
+    let action=request["action"] as? String ?? "command"
+    guard let result=health["command_result"] as? [String:Any],
+          let observed=result["request"] as? [String:Any],observed["id"] as? String == id else {
+        return "Request saved (\(action)); controller acknowledgement not yet reported."
+    }
+    let titles=["policy-applied":"Preference acknowledged","verified":"Reconciliation verified",
+        "applying":"Applying request","accepted":"Request accepted","deferred":"Request deferred",
+        "failed":"Request failed","superseded":"Request superseded"]
+    let state=result["state"] as? String ?? "unknown"
+    let prefix=statusFresh(health) ? "":"Last reported · "
+    return "\(prefix)\(titles[state] ?? "Unrecognized command result") (\(action))\n\(result["detail"] as? String ?? "")"
+}
 func notificationCommand(_ identifier:String)->String? {
     switch identifier {
     case UNNotificationDefaultActionIdentifier:return "panel"
@@ -230,6 +245,12 @@ if CommandLine.arguments.contains("--self-test") {
     precondition(statusAge(["updated_at":Double.nan],101)=="Status age unavailable")
     precondition(statusAge(live,120)=="Last report: 20 seconds ago")
     precondition(!detailPrefix(live,["paused":true],101).isEmpty)
+    let trackedRequest:[String:Any]=["id":"example","action":"resume"]
+    precondition(commandSummary([:],["command_request":trackedRequest]).contains("not yet reported"))
+    let trackedHealth:[String:Any]=["updated_at":Date().timeIntervalSince1970,"command_result":["request":trackedRequest,"state":"deferred","detail":"Waiting for input"]]
+    precondition(commandSummary(trackedHealth,["command_request":trackedRequest]).contains("Request deferred"))
+    precondition(commandSummary(trackedHealth,["command_request":["id":"new","action":"pause"]]).contains("not yet reported"))
+    precondition(commandSummary(["command_tracking_error":"Damaged history"],[:])=="Damaged history")
     precondition(notificationCommand(UNNotificationDefaultActionIdentifier)=="panel")
     precondition(notificationCommand("inspect")=="doctor")
     precondition(notificationCommand("repair")=="repair-audio")
@@ -349,12 +370,14 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
         let state=fresh ? health["status"] as? String ?? "Unknown" : "Controller unavailable"
         item.button?.title=state == "degraded" || state == "state-error" || !fresh ? " !" : ""
         item.button?.toolTip="Display Auto: \(state)"
+        let tracked=commandSummary(health,control)
         var progress=operationResult
         if let started=operationStarted {
             let elapsed=Int(max(0,ProcessInfo.processInfo.systemUptime-started))
             progress="\(operationName)… \(elapsed)s elapsed. Command deadline: 45s."
         }
         var detail=dashboard(health,control)
+        if !tracked.isEmpty {detail=tracked+"\n\n"+detail}
         if !progress.isEmpty {detail=progress+"\n\n"+detail}
         let lastPreview=read("preview-status.json")
         if !state.hasPrefix("preview-"),let error=lastPreview["error"] as? String {detail += "\n\nLast size preview: \(error)"}
@@ -469,7 +492,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
                 self.busy=false;self.operationStarted=nil
                 if code != 0 {self.operationResult=code==124 ? "Command timed out; inspect status before retrying.":"Command failed; see the error for details."}
                 else if let data=result.data(using:.utf8),let response=(try? JSONSerialization.jsonObject(with:data)) as? [String:Any],response["requested"] != nil {
-                    self.operationResult="Request saved; controller completion is not tracked for this command. Check the latest status."
+                    self.operationResult=response["request_id"] == nil ? "Request saved; this controller does not report command completion.":""
                 } else {self.operationResult="Command returned. See the result and current status below."}
                 self.refresh()
                 if code != 0 {self.message("Action could not complete",result)}

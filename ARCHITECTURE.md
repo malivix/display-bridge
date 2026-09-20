@@ -3,6 +3,9 @@
 `display-auto.py` owns polling, debounce, profile reconciliation, rotation, and the mutation
 lock. `audio_policy.py` selects a route; `recovery_state.py` bounds retries.
 `persisted_state.py` and recovery journals preserve intent across interrupted operations.
+`command_results.py` records the latest observed settings requests and outcomes; it is
+observability, not an execution queue. Damaged result history is preserved and reported,
+without resetting recovery or replaying actions.
 
 `native/display-menu.swift` is a per-user menu app. It submits controller commands and reads health;
 it does not maintain an independent hardware state machine. CLI execution has bounded time

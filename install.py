@@ -29,16 +29,64 @@ def run(args, **kwargs):
     return subprocess.run(args, **kwargs)
 
 
+def preflight(package, home):
+    """Software prerequisites only; never build, create state or contact monitor helpers."""
+    import platform
+    checks=[]
+    def add(name, ok, detail):
+        checks.append({'name':name,'status':'ok' if ok else 'error','detail':detail})
+    compatible=platform.system()=='Darwin' and platform.machine()=='arm64'
+    add('Platform',compatible,'Apple-silicon macOS is required.')
+    try:
+        major=int(platform.mac_ver()[0].split('.')[0])
+    except (ValueError,IndexError):
+        major=0
+    add('macOS version',compatible and major>=13,'macOS 13 or newer is required.')
+    add('Python',sys.version_info>=(3,10),'Python 3.10 or newer is required.')
+    sources=(*RUNTIME_MODULES,'setup_menu.py','scripts/test','native/display-layout.swift',
+             'native/display-audio.m','native/display-rotate.m','native/display-mode-info.m',
+             'native/display-menu.swift','vendor/m1ddc/Makefile','tests/native/test_ddc.m')
+    missing=[name for name in sources if not (package/name).is_file()]
+    add('Source files',not missing,'Required source entry points are present.' if not missing else 'Incomplete checkout; missing: '+', '.join(missing))
+    toolchain=False
+    if compatible:
+        try:
+            sdk=run(['/usr/bin/xcrun','--sdk','macosx','--show-sdk-path'],capture_output=True,text=True,timeout=10,check=True).stdout.strip()
+            toolchain=bool(sdk) and Path(sdk).is_dir()
+            for tool in ('clang','swiftc'):
+                found=run(['/usr/bin/xcrun','--find',tool],capture_output=True,text=True,timeout=10,check=True).stdout.strip()
+                toolchain=toolchain and bool(found) and os.access(found,os.X_OK)
+            toolchain=toolchain and os.access('/usr/bin/make',os.X_OK)
+        except (OSError,subprocess.SubprocessError):
+            toolchain=False
+    add('Build tools',toolchain,'SDK, Swift, Clang and make are available.' if toolchain else 'Install or select Xcode Command Line Tools, then rerun preflight on the supported Mac.')
+    try:
+        require_service_namespace(home,'io.github.display-bridge')
+        add('Service namespace',True,'No conflicting known Display Bridge service namespace found.')
+    except (OSError,RuntimeError):
+        add('Service namespace',False,'Cannot verify service ownership. Review older LaunchAgents using docs/install.md before installation.')
+    return {'read_only':True,'status':'prerequisites-ready' if all(c['status']=='ok' for c in checks) else 'attention-required',
+            'checks':checks,'limits':'Software prerequisites only. No build, monitor read, service change or installation was performed. Display ownership, saved configuration, pending recovery, permissions and hardware behavior are not qualified. The installer rechecks its live requirements.'}
+
+
 def main(argv=None):
     import argparse
     import platform
 
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("host", choices=("A", "B"))
+    parser.add_argument("--preflight", action="store_true", help="Report software prerequisites without installing or accessing monitors")
     capture = parser.add_mutually_exclusive_group()
     capture.add_argument("--capture-fixed-120", action="store_true")
     capture.add_argument("--capture-rotation", action="store_true")
     args = parser.parse_args(argv)
+    if args.preflight:
+        if args.capture_fixed_120 or args.capture_rotation:
+            parser.error("--preflight cannot be combined with capture options")
+        result=preflight(Path(__file__).resolve().parent,Path.home())
+        print(json.dumps(dict(result,host=args.host),indent=2))
+        if result['status']!='prerequisites-ready':raise SystemExit(1)
+        return
     if platform.system() != "Darwin" or platform.machine() != "arm64":
         parser.error("Installation requires an Apple-silicon Mac")
     role = args.host

@@ -29,6 +29,7 @@ online displays; close the laptop lid if its built-in display is active.
 ```sh
 git clone https://github.com/malivix/display-bridge.git
 cd display-bridge
+python3 install.py A --preflight  # software checks only
 ./scripts/test
 python3 install.py A  # use B on the other Mac
 ```

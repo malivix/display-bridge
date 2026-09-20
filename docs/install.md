@@ -12,6 +12,24 @@
 Check `python3 --version` and `xcrun --sdk macosx --show-sdk-path` before installation.
 Connection and firmware compatibility must be qualified on your setup.
 
+## Check software prerequisites first
+
+From the checkout, run:
+
+```sh
+python3 install.py A --preflight
+```
+
+Use `B` when preparing Mac B. This reports platform/Python requirements, required source
+entry points, Xcode tool discovery and known service namespace conflicts. It creates no
+installation state, builds nothing, changes no services and does not contact monitors.
+Exit status is 0 when these software checks pass and 1 when they need attention.
+Preflight cannot be combined with either capture option.
+
+`prerequisites-ready` is not approval to deploy: input ownership, configuration, pending
+recovery, permissions and physical behavior remain unqualified. Continue with the setup
+requirements below; the actual installer still performs its own live checks.
+
 ## Input mapping
 
 | Monitor | Mac A | Mac B |

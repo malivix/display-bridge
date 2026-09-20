@@ -337,6 +337,15 @@ func statusSections(_ health:[String:Any],_ control:[String:Any])->[StatusSectio
         StatusSection(title:"Recovery",body:recoverySummary(health,control))
     ]
 }
+struct ReviewedSupportSummary {
+    private var text:String?
+    mutating func show(_ report:String,_ body:String) {
+        text=report=="support-summary" && !body.isEmpty && body.utf8.count<=1_048_576 ? body:nil
+    }
+    mutating func clear() {text=nil}
+    func body(for report:String)->String? {report=="support-summary" ? text:nil}
+}
+
 struct DisplayReading {
     var report:[String:Any]?
     var failed=false
@@ -766,6 +775,17 @@ if CommandLine.arguments.contains("--self-test") {
     precondition(automationPaused(["paused":true,"pause_until":200.0],100))
     precondition(!automationPaused(["paused":true,"pause_until":200.0],200))
     precondition(automationPaused(["paused":true],200))
+    var reviewed=ReviewedSupportSummary()
+    precondition(reviewed.body(for:"support-summary")==nil)
+    reviewed.show("doctor","private details")
+    precondition(reviewed.body(for:"support-summary")==nil)
+    reviewed.show("support-summary","reviewed report")
+    precondition(reviewed.body(for:"support-summary")=="reviewed report")
+    precondition(reviewed.body(for:"status")==nil)
+    reviewed.clear();precondition(reviewed.body(for:"support-summary")==nil)
+    reviewed.show("support-summary",String(repeating:"x",count:1_048_577))
+    precondition(reviewed.body(for:"support-summary")==nil)
+    print("PASS reviewed-summary copy scope, invalidation and size bound; clipboard untouched")
     var reading=DisplayReading()
     let snapshotJSON="{\"read_only\":true,\"inputs\":{\"pg\":17,\"benq\":19},\"displays\":[{\"monitor\":\"pg\"},{\"monitor\":\"benq\"}]}"
     var snapshotHealth:[String:Any]=["updated_at":100.0,"status":"ready","inputs":["pg":17,"benq":19]]
@@ -1121,6 +1141,17 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
     var detailReport="status"
     var reportSelector:NSPopUpButton?
     var reportStatus:NSTextField?
+    var copySummaryButton:NSButton?
+    var reviewedSummary=ReviewedSupportSummary()
+    var copySummaryNotice=""
+    @objc func copyReviewedSummary() {
+        guard !busy,let body=reviewedSummary.body(for:detailReport) else{return}
+        if demo {message("Hardware-free demo","Clipboard copying is disabled in this demo. No clipboard content was changed.");return}
+        let clipboard=NSPasteboard.general
+        clipboard.clearContents()
+        copySummaryNotice=clipboard.setString(body,forType:.string) ? "Reviewed summary copied. Nothing was uploaded.":"Could not copy the summary. Select the report text to copy manually."
+        refresh()
+    }
     var panelText:NSTextView?
     var contentTabs:NSTabView?
     var modeText:NSTextView?
@@ -1211,12 +1242,16 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
             }
             overview.view=overviewScroll;tabs.addTabViewItem(overview)
             let details=NSTabViewItem(identifier:"details");details.label="Details"
-            let detailView=NSView();let reportRow=NSStackView();reportRow.spacing=12
+            let detailView=NSView();let reportRow=NSStackView();reportRow.spacing=8;reportRow.orientation = .vertical;reportRow.alignment = .leading
+            let selectionRow=NSStackView();selectionRow.spacing=12;reportRow.addArrangedSubview(selectionRow)
             let reportPicker=NSPopUpButton();reportPicker.addItems(withTitles:detailReports.map{$0.1})
             reportPicker.target=self;reportPicker.action=#selector(selectReport(_:));reportPicker.setAccessibilityLabel("Detail report")
-            reportSelector=reportPicker;reportRow.addArrangedSubview(reportPicker);scalableControls.append(reportPicker)
+            reportSelector=reportPicker;selectionRow.addArrangedSubview(reportPicker);scalableControls.append(reportPicker)
             let refreshReport=NSButton(title:"Refresh",target:self,action:#selector(refreshReport))
-            reportRow.addArrangedSubview(refreshReport);scalableControls.append(refreshReport);panelActions.append(refreshReport)
+            selectionRow.addArrangedSubview(refreshReport);scalableControls.append(refreshReport);panelActions.append(refreshReport)
+            let copySummary=NSButton(title:"Copy reviewed summary",target:self,action:#selector(copyReviewedSummary))
+            copySummary.toolTip="Copy only the displayed support-summary body. Review it before sharing."
+            reportRow.addArrangedSubview(copySummary);copySummaryButton=copySummary;scalableControls.append(copySummary)
             let reportNote=NSTextField(wrappingLabelWithString:"");reportNote.translatesAutoresizingMaskIntoConstraints=false
             detailView.addSubview(reportNote);reportStatus=reportNote;scalableControls.append(reportNote)
             reportRow.translatesAutoresizingMaskIntoConstraints=false;scroll.translatesAutoresizingMaskIntoConstraints=false
@@ -1355,6 +1390,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
         let index=sender.indexOfSelectedItem
         guard index>=0,index<detailReports.count else {return}
         detailReport=detailReports[index].0
+        reviewedSummary.clear();copySummaryNotice=""
         panelText?.setAccessibilityLabel(detailReports[index].1+" report")
         panelText?.string=detailReport=="status" ? "":"Choose Refresh to read this report. Reports are snapshots and do not update in the background."
         refresh()
@@ -1365,10 +1401,12 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
     func showReport(_ action:String,_ text:String) {
         guard let index=detailReports.firstIndex(where:{$0.0==action}) else {return}
         detailReport=action;reportSelector?.selectItem(at:index)
+        reviewedSummary.show(action,text);copySummaryNotice=""
         panelText?.setAccessibilityLabel(detailReports[index].1+" report")
         reportStatus?.stringValue="Snapshot report; use Refresh to inspect again."
         panelText?.string="\(detailReports[index].1) · Snapshot at \(Date().formatted(date:.omitted,time:.standard))\nRefresh to inspect again.\n\n"+text
         contentTabs?.selectTabViewItem(withIdentifier:"details")
+        refresh()
     }
     func textSizeIndex()->Int {displayTextIndex ?? min(2,max(0,UserDefaults.standard.integer(forKey:"statusTextSize")))}
     func applyTextSize(_ index:Int) {
@@ -1517,7 +1555,9 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
         let lastPreview=read("preview-status.json")
         if !state.hasPrefix("preview-"),let error=lastPreview["error"] as? String {detail += "\n\nLast size preview: \(error)"}
         reportSelector?.isEnabled = !busy
-        reportStatus?.stringValue = busy ? progress : (detailReport=="status" ? "Live controller status":"Snapshot report; use Refresh to inspect again.")
+        copySummaryButton?.isHidden=detailReport != "support-summary"
+        copySummaryButton?.isEnabled = !busy && reviewedSummary.body(for:detailReport) != nil
+        reportStatus?.stringValue = busy ? progress : (!copySummaryNotice.isEmpty ? copySummaryNotice:(detailReport=="status" ? "Live controller status":"Snapshot report; use Refresh to inspect again."))
         if detailReport=="status",let text=panelText,text.string != detail {
             let selection=text.selectedRange()
             let origin=text.enclosingScrollView?.contentView.bounds.origin
@@ -1690,6 +1730,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
             };return
         }
         guard !busy else{return}
+        if args.first=="support-summary" {reviewedSummary.clear();copySummaryNotice=""}
         displayRefreshing=args.first=="display-info"
         busy=true;operationStarted=ProcessInfo.processInfo.systemUptime
         operationName=operationTitle(args.first ?? "");operationResult=""

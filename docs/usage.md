@@ -156,7 +156,10 @@ showing default preferences; health, diagnostics and preview reversion remain av
 A missing optional controls file uses normal defaults. The menu never resets damaged files.
 
 **Support summary** produces an allowlisted report excluding raw logs/errors, names,
-identifiers, paths and exact timestamps. Review before sharing. **Diagnostics** saves a
+identifiers, paths and exact timestamps. Review before sharing, then choose **Copy reviewed summary**. This copies only the shown
+support-summary body, excluding the view timestamp; it does not upload it. Copy is disabled
+until a summary is displayed and while refreshing. Changing reports or starting a summary
+refresh clears the copy target. **Diagnostics** saves a
 separate private local artifact containing device and configuration information. Neither
 uploads anything. Do not post raw configurations, logs, diagnostic bundles or screenshots
 with device information in public issues. See [security and privacy](../SECURITY.md).

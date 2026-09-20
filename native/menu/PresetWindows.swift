@@ -182,7 +182,7 @@ final class PresetDialog: NSObject, NSWindowDelegate {
     @objc func cancel(_ sender:NSButton) {arguments=nil;NSApp.stopModal()}
     func windowShouldClose(_ sender:NSWindow)->Bool {arguments=nil;NSApp.stopModal();return true}
     func run()->[String]? {
-        window.center();window.makeKeyAndOrderFront(nil);NSApp.runModal(for:window);window.orderOut(nil)
+        window.center();window.recalculateKeyViewLoop();window.makeKeyAndOrderFront(nil);NSApp.runModal(for:window);window.orderOut(nil)
         return arguments
     }
 }
@@ -248,7 +248,7 @@ final class BrightnessChooser: NSObject, NSWindowDelegate {
     @objc func selectEntry(_ sender:NSPopUpButton) {detail.stringValue=selected?.description ?? "No saved brightness presets for this monitor."}
     @objc func finish(_ sender:NSButton) {result=sender.tag;NSApp.stopModal()}
     func windowShouldClose(_ sender:NSWindow)->Bool {result = -1;NSApp.stopModal();return true}
-    func run()->Int {window.center();window.makeKeyAndOrderFront(nil);NSApp.runModal(for:window);window.orderOut(nil);return result}
+    func run()->Int {window.center();window.recalculateKeyViewLoop();window.makeKeyAndOrderFront(nil);NSApp.runModal(for:window);window.orderOut(nil);return result}
 }
 
 enum PanelShortcut: Equatable {

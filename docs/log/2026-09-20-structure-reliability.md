@@ -37,6 +37,13 @@ CI adds Python 3.10 and 3.14 unit jobs, while native checks remain on Apple-sili
 Actions are pinned and credentials remain read-only. Local checks passed 172 unit tests;
 final native/publication/hosted results are reported with the completed commit.
 
+## Hosted follow-up
+
+The first matrix run exposed a test clock coupled to logging: Python 3.10 logging
+consumed the globally mocked `time.time()` sequence, unlike Python 3.14. The wake
+regression now injects a controller-local clock and advances it through a bounded
+polling sequence. It still requires two audio refreshes across the simulated gap.
+
 ## Limits
 
 Power-loss-atomic installation and physical qualification remain outstanding. A menu command

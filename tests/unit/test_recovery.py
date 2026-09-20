@@ -118,13 +118,42 @@ class StateTests(unittest.TestCase):
 
 class WakeTests(unittest.TestCase):
     def test_unchanged_layout_after_gap_still_refreshes_audio(self):
-        refreshes=[]
-        def sync(*args,**kwargs):
+        from types import SimpleNamespace
+
+        clock = [100.0]
+        sleeps = [0]
+        refreshes = []
+
+        def sync(*args, **kwargs):
             refreshes.append(kwargs['refresh'])
-            if len(refreshes)==2:raise Finished()
-        with patch.object(c,'record'),patch.object(c,'confirm_inputs'),patch.object(c,'new_recovery',side_effect=lambda:c.Recovery()),patch.object(c,'read_control',return_value={}),patch.object(c,'audio_inventory',return_value=[]),patch.object(c,'write_health'),patch.object(c,'read_inputs',return_value={'pg':17,'benq':19}),patch.object(c,'apply',return_value=False),patch.object(c,'sync_audio',side_effect=sync),patch.object(c.time,'time',side_effect=[0,0,1,10,11]),patch.object(c.time,'sleep'):
-            with self.assertRaises(Finished):c.watch({'host':'A','poll_interval':0})
-        self.assertEqual(refreshes,[True,True])
+            if len(refreshes) == 2:
+                raise Finished()
+
+        def sleep(_):
+            sleeps[0] += 1
+            if sleeps[0] > 6:
+                self.fail('Audio was not refreshed after the polling gap')
+            # First establish a stable profile, then simulate a suspended poller.
+            clock[0] += 10 if sleeps[0] == 2 else 1
+
+        fake_time = SimpleNamespace(
+            time=lambda: clock[0], monotonic=lambda: clock[0], sleep=sleep
+        )
+        with (
+            patch.object(c, 'record'),
+            patch.object(c, 'confirm_inputs'),
+            patch.object(c, 'new_recovery', side_effect=lambda: c.Recovery()),
+            patch.object(c, 'read_control', return_value={}),
+            patch.object(c, 'audio_inventory', return_value=[]),
+            patch.object(c, 'write_health'),
+            patch.object(c, 'read_inputs', return_value={'pg': 17, 'benq': 19}),
+            patch.object(c, 'apply', return_value=False),
+            patch.object(c, 'sync_audio', side_effect=sync),
+            patch.object(c, 'time', fake_time),
+        ):
+            with self.assertRaises(Finished):
+                c.watch({'host': 'A', 'poll_interval': 1})
+        self.assertEqual(refreshes, [True, True])
 
 class ControlTests(unittest.TestCase):
     def test_controls_are_persistent_and_reversible(self):

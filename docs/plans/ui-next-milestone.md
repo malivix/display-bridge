@@ -1,5 +1,7 @@
 # UI review and next implementation milestone
 
+Historical plan. Current ordering and remaining findings: [latest UI review](ui-feature-review-2026-09-21.md).
+
 Reviewed source `f82e182` on 2026-09-20. This is the current sequencing addendum to
 [the earlier review](ui-feature-review-2026-09-20.md), whose missing-feature list is
 historical. No runtime or monitor settings changed in this review.

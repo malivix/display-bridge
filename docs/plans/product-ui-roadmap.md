@@ -1,5 +1,7 @@
 # Product and interface review: implementation plan
 
+Historical plan. Current ordering and remaining findings: [latest UI review](ui-feature-review-2026-09-21.md).
+
 Initial review: 2026-09-20 against source `b50cd91` (2.10.2, unreleased). Live UI observed
 2.10.1; the checkout was not installed. This document is a plan, not a claim that the
 features below have been implemented or physically qualified.

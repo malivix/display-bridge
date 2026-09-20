@@ -165,3 +165,10 @@ in the Save form with an inline correction message. Names use the backend's limi
 unchecked by default. Remove displays the name and orientation and requires its explicit
 button; keyboard selection alone does not remove a preset. Backend errors such as a
 concurrent replacement or changed ownership still reject the submitted command.
+
+For setup review, open Details → Setup readiness → Refresh. This runs the existing
+read-only health inspection once. Enrollment findings show this Mac's configured input
+map and whether matching landscape/portrait profiles and a sensor mapping are stored.
+The remaining checks cover controller health, installed files and monitor responses.
+Missing facts from an older controller are explicitly unreported, not assumed ready.
+This is an inspection checklist; enrollment and orientation capture still use the installer.

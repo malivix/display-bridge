@@ -99,7 +99,10 @@ Largest/minimum window, keyboard/Escape/VoiceOver, Keep/timeout/revert, menu ter
 and controller restart. Physical optical/readability comparison remains opt-in.
 Rollback retains original preview journals and preset schema.
 
-### 3. Guided setup and capability review
+### 3. Guided setup and capability review — read-only checklist implemented
+
+[Readiness view and validation](../log/setup-readiness-view.md). Enrollment mutation,
+conflicting-app detection and physical qualification remain open.
 
 Outcome: prepare Mac B and explain unmanaged monitors without editing JSON. Begin with a
 read-only checklist using enrolled identity categories, role/input mapping, calibration

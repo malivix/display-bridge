@@ -39,6 +39,39 @@ def mode_checks(config,inputs,metadata):
     return result
 
 
+def setup_checks(config):
+    """Describe saved enrollment, not physical calibration or mutation authorization."""
+    checks=[]
+    host=config.get('host')
+    if host in ('A','B'):
+        local={'A':(17,19),'B':(18,15)}[host]
+        checks.append({'name':'Host enrollment','status':'ok','detail':f'Mac {host}; expected local inputs PG={local[0]}, BenQ={local[1]}. Enrollment belongs to this Mac only.',
+                       'action':'For another Mac, run independent enrollment; do not copy device identities or recovery journals.'})
+    else:
+        checks.append({'name':'Host enrollment','status':'warning','detail':'Host role is unavailable.','action':'Review the configuration before enrollment; do not infer a role from monitor names.'})
+    rotation=config.get('rotation',{})
+    baselines=rotation.get('baselines',{}) if isinstance(rotation,dict) else {}
+    sensor_map=rotation.get('sensor_map',{}) if isinstance(rotation,dict) else {}
+    keys=config.get('keys',{})
+    found=[]
+    if isinstance(baselines,dict) and isinstance(keys,dict) and set(keys)=={'pg','benq'}:
+        for angle in ('0','90'):
+            baseline=baselines.get(angle)
+            rows=baseline.get('screens') if isinstance(baseline,dict) else None
+            if isinstance(rows,list) and len(rows)==2 and all(isinstance(row,dict) for row in rows):
+                if {row.get('key') for row in rows if isinstance(row.get('key'),str)}==set(keys.values()):
+                    benq=next((row for row in rows if row.get('key')==keys['benq']),{})
+                    if type(benq.get('rotation')) in (int,float) and benq['rotation']==int(angle):found.append(angle)
+    mapping=isinstance(sensor_map,dict) and bool(sensor_map) and all(isinstance(k,str) and type(v) is int and v in (0,90) for k,v in sensor_map.items()) and set(sensor_map.values())=={0,90}
+    enabled=isinstance(rotation,dict) and rotation.get('enabled') is True
+    complete=set(found)=={'0','90'} and mapping
+    detail='Stored landscape and portrait profiles and sensor mapping are present.' if complete else 'Rotation enrollment is incomplete: both matching orientation profiles and sensor mapping are required.'
+    detail+=' Automatic rotation is '+('configured.' if enabled else 'not configured.')
+    checks.append({'name':'Rotation enrollment','status':'ok' if complete else 'warning' if enabled else 'info','detail':detail,
+                   'action':'Confirm rotation physically after enrollment. Stored profiles do not prove sensor operation or timing.' if complete else 'Keep existing profiles. Capture the missing orientation through the installer on this Mac; do not copy profiles from another host.'})
+    return checks
+
+
 def report(root, bin_dir, version, validate_config, read_inputs, inspect_modes=None):
     checks=[]
     def add(name, status, detail, action=None):
@@ -110,6 +143,7 @@ def report(root, bin_dir, version, validate_config, read_inputs, inspect_modes=N
             except OSError:failures.append(name)
         add('Installed files','warning' if failures else 'ok',('Missing or differing manifest hashes: '+', '.join(failures)) if failures else 'Controller modules and native helpers match the installation manifest.','Reinstall from the trusted source package if these changes were unintended.' if failures else None)
     if valid:
+        checks[:0]=setup_checks(config)
         try:
             inputs=read_inputs(config)
             known=inputs.get('pg') in (17,18) and inputs.get('benq') in (19,15)

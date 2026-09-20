@@ -45,6 +45,26 @@ class HealthChecks(unittest.TestCase):
         metadata['displays'].append(dict(metadata['displays'][1]))
         self.assertEqual(mode_checks(config,{'pg':17,'benq':19},metadata)[0]['status'],'warning')
 
+    def test_setup_readiness_describes_local_role_without_identifiers(self):
+        from health_check import setup_checks
+        config,_=self.modes()
+        config['host']='B'
+        checks=setup_checks(config)
+        self.assertIn('PG=18, BenQ=15',checks[0]['detail'])
+        self.assertEqual(checks[1]['status'],'info')
+        self.assertNotIn('"keys"',json.dumps(checks))
+        rotation={'enabled':True,'sensor_map':{'1':0,'2':90},'baselines':{}}
+        for angle in (0,90):
+            rows=[dict(row) for row in config['baseline']['screens']]
+            rows[1]['rotation']=angle
+            rotation['baselines'][str(angle)]={'screens':rows}
+        config['rotation']=rotation
+        self.assertEqual(setup_checks(config)[1]['status'],'ok')
+        rotation['baselines']['90']['screens'][1]['key']='replacement'
+        self.assertEqual(setup_checks(config)[1]['status'],'warning')
+        rotation['sensor_map']={'1':True,'2':90}
+        self.assertEqual(setup_checks(config)[1]['status'],'warning')
+
     def test_invalid_configuration_never_queries_monitors_or_changes_files(self):
         with tempfile.TemporaryDirectory() as temp:
             root=Path(temp);(root/'config.json').write_text('{bad')

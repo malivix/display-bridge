@@ -1,6 +1,6 @@
 # Product and interface review: implementation plan
 
-Reviewed 2026-09-20 against source `b50cd91` (2.10.2, unreleased). Live UI observed
+Initial review: 2026-09-20 against source `b50cd91` (2.10.2, unreleased). Live UI observed
 2.10.1; the checkout was not installed. This document is a plan, not a claim that the
 features below have been implemented or physically qualified.
 
@@ -23,8 +23,10 @@ and UI qualification remain separate.
 
 ## Decision
 
-Make the existing handoff clear, readable, and recoverable first. The next work item is
-**command feedback and trustworthy status**, followed by a readable per-monitor dashboard.
+Make the existing handoff clear, readable, and recoverable first. The next work item is **whole-interface readability**, followed by named readable-size
+presets through the existing preview transaction. Command feedback and the dashboard
+are implemented; their physical qualification remains separate. See the
+[current review and acceptance plan](ui-feature-review-2026-09-20.md).
 Do not build a general BetterDisplay clone. Competitor evidence and licensing distinctions
 are in the [source-cited comparison](../research/display-app-comparison-2026-09-20.md).
 
@@ -107,7 +109,7 @@ window must never own rollback timing. Show the last verified state while an act
 
 ## Delivery sequence
 
-### 1. Trustworthy status and command feedback — next active work item
+### 1. Trustworthy status and command feedback — implemented in source
 
 Scope: `native/display-menu.swift`, control command boundary in `display-auto.py`, validated
 command result state, manifest inventory if a new module is needed, isolated tests.

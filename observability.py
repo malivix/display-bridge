@@ -19,6 +19,12 @@ def record(root, event):
     rows=(rows+[dict(event,at=time.time())])[-200:]
     temporary=path.with_suffix('.tmp');temporary.write_text(json.dumps(rows,indent=2)+'\n');temporary.replace(path)
 
+def valid_duration(value):
+    if type(value) not in (int,float):return False
+    try:return math.isfinite(value) and value>=0
+    except OverflowError:return False
+
+
 def recent_events(rows):
     """A small presentation projection; raw errors and machine identifiers stay private."""
     events=[]
@@ -29,7 +35,7 @@ def recent_events(rows):
         if isinstance(timings,dict):
             for phase in ('settling','rotation_check','layout_apply','layout','input_confirmation','audio','total'):
                 value=timings.get(phase)
-                if type(value) in (int,float) and math.isfinite(value) and value>=0:seconds[phase]=value
+                if valid_duration(value):seconds[phase]=value
         event={'profile':row['profile'],'result':row['result'],'seconds':seconds}
         attempt=row.get('attempt')
         if type(attempt) is int and 1<=attempt<=3:event['attempt']=attempt
@@ -49,8 +55,12 @@ def summary(root):
         if not samples and not failed:continue
         phases={}
         for phase in ('settling','rotation_check','layout_apply','layout','input_confirmation','audio','total'):
-            values=sorted(v for r in samples if isinstance(r.get('seconds'),dict) for v in [r['seconds'].get(phase)] if type(v) in (int,float) and math.isfinite(v) and v>=0)
-            if values:phases[phase]={'count':len(values),'mean':round(statistics.mean(values),3),'max':round(max(values),3),'median':round(statistics.median(values),3),'p95':round(values[math.ceil(.95*len(values))-1],3)}
+            values=sorted(v for r in samples if isinstance(r.get('seconds'),dict) for v in [r['seconds'].get(phase)] if valid_duration(v))
+            if values:
+                middle=len(values)//2
+                # Avoid overflow from adding two individually finite positive floats.
+                median=values[middle] if len(values)%2 else values[middle-1]+(values[middle]-values[middle-1])/2
+                phases[phase]={'count':len(values),'mean':round(statistics.mean(values),3),'max':round(max(values),3),'median':round(median,3),'p95':round(values[math.ceil(.95*len(values))-1],3)}
         result[profile]={'count':len(samples),'failed_attempts':failed,'seconds':phases}
     return {'recent_events':recent_events(rows),'history_available':isinstance(source,list),'retained_events':len(rows),'profiles':result,'note':'Total is application time only. Settling measures first valid candidate to its second matching read; physical switching and time before the first valid read are unmeasured. Rotation check includes preflight and any rotation; Layout application includes its fresh input preflight; layout includes rotation check plus layout application. Each phase has its own sample count; p95 uses nearest rank. Software readback does not prove sound.'}
 

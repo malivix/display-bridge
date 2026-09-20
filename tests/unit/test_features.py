@@ -155,6 +155,30 @@ class Features(unittest.TestCase):
             self.assertNotIn('inputs',json.dumps(recent))
             self.assertEqual(o.summary(root)['recent_events'],recent)
 
+    def test_bad_duration_does_not_hide_other_events_or_valid_phases(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root=Path(temp);path=root/'transitions.json'
+            for invalid in (10**400,-1,True,'slow',None,float('inf'),float('nan')):
+                path.write_text(json.dumps([
+                    {'profile':'pg','result':'ready','seconds':{'total':2}},
+                    {'profile':'pg','result':'ready','seconds':{'total':invalid,'audio':1.2}}]))
+                original=path.read_bytes();report=o.summary(root)
+                self.assertEqual(report['profiles']['pg']['seconds']['total']['count'],1)
+                self.assertEqual(report['profiles']['pg']['seconds']['total']['median'],2)
+                self.assertEqual(report['profiles']['pg']['seconds']['audio']['median'],1.2)
+                self.assertEqual(report['recent_events'][0]['seconds'],{'audio':1.2})
+                self.assertEqual(path.read_bytes(),original)
+
+    def test_finite_large_samples_do_not_overflow_median(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root=Path(temp)
+            (root/'transitions.json').write_text(json.dumps([
+                {'profile':'pg','result':'ready','seconds':{'total':1e308}},
+                {'profile':'pg','result':'ready','seconds':{'total':1e308}}]))
+            report=o.summary(root)
+            self.assertEqual(report['profiles']['pg']['seconds']['total']['median'],1e308)
+            json.dumps(report,allow_nan=False)
+
     def test_diagnostics_are_local_private_and_tolerate_missing_files(self):
         with tempfile.TemporaryDirectory() as temp:
             root=Path(temp);path=o.diagnostics(root,root)

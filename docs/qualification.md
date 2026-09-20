@@ -5,8 +5,12 @@ The user reported usable desktops for both-away then PG-first and both-away then
 returns. Earlier audio recovery and ordinary switching were also physically confirmed.
 These are observations from one setup, not cross-device compatibility guarantees.
 
-The public-source namespace change and generic model lookup have isolated verification;
-this publication task does not reinstall or physically qualify a new release.
+The public-source namespace was migrated on Mac A for source revision 3dd6809 (2.10.2).
+A verified private backup was retained. Saved identities/layout/audio/rotation settings were
+compared before and after, and installed hashes, ready heartbeat, both local input reads,
+and fixed-120/HDR-off mode checks passed. The newer UI was visually checked in a synthetic
+demo; the computer-use adapter retained the old installed bundle identity. This is partial
+upgrade qualification, not a new physical switching or listening qualification.
 Mac B deployment, concurrent controllers, sleep/wake, headset transitions, and all cable/
 firmware combinations remain unqualified. Raw historical evidence stays local for privacy.
 

@@ -178,3 +178,11 @@ window. It recognizes standard BetterDisplay, MonitorControl, Lunar and Display 
 bundle names. Presence alone does not establish a conflict. Review overlapping settings
 manually if needed; the app never stops another tool. Renamed bundles, background services
 and command-line tools are outside this check, so an empty list does not prove exclusivity.
+
+With the main Display Bridge window focused, use ⌘1 for Overview, ⌘2 for Details,
+⌘3 for Displays, ⌘4 for Audio and ⌘5 for Controls. ⌘R refreshes the current view:
+Details reruns its selected report, Displays reads mode details, Controls reads the
+selected local monitor's brightness/volume, and Overview/Audio reread controller state.
+These shortcuts do not change display settings. Held-key repeats are ignored, and the
+shortcuts do not apply inside modal preview/preset dialogs or other applications.
+No global keyboard monitoring or Accessibility permission is added.

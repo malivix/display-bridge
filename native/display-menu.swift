@@ -617,6 +617,21 @@ if CommandLine.arguments.contains("--self-test") {
     precondition(setupSummary("{\"read_only\":true,\"checks\":[]}").contains("older controller"))
     precondition(safeWithoutControls("setup"))
     print("PASS setup readiness marks missing enrollment information unknown")
+    precondition(panelShortcut("3",.command,false) == .tab("displays"))
+    precondition(panelShortcut("R",[.command,.capsLock],false) == .refresh)
+    for modifiers:NSEvent.ModifierFlags in [[],.control,[.command,.shift],[.command,.option]] {
+        precondition(panelShortcut("1",modifiers,false)==nil)
+    }
+    precondition(panelShortcut("r",.command,true)==nil)
+    precondition(panelShortcut("6",.command,false)==nil)
+    precondition(panelRefreshArguments("details","setup","pg")==["setup"])
+    precondition(panelRefreshArguments("details","status","pg")==nil)
+    precondition(panelRefreshArguments("details","repair-audio","pg")==nil)
+    precondition(panelRefreshArguments("displays","status","pg")==["display-info"])
+    precondition(panelRefreshArguments("monitor-controls","status","benq")==["monitor-settings","--monitor","benq"])
+    precondition(panelRefreshArguments("monitor-controls","status","unknown")==nil)
+    precondition(panelRefreshArguments("audio","status","pg")==nil)
+    print("PASS window shortcuts, modifier isolation, repeat suppression and read-only refresh targets")
     let trackedRequest:[String:Any]=["id":"example","action":"resume"]
     precondition(commandSummary([:],["command_request":trackedRequest]).contains("not yet reported"))
     let trackedHealth:[String:Any]=["updated_at":Date().timeIntervalSince1970,"command_result":["request":trackedRequest,"state":"deferred","detail":"Waiting for input"]]
@@ -855,6 +870,34 @@ final class PresetDialog: NSObject, NSWindowDelegate {
     }
 }
 
+enum PanelShortcut: Equatable {
+    case tab(String)
+    case refresh
+}
+func panelShortcut(_ key:String,_ modifiers:NSEvent.ModifierFlags,_ repeating:Bool)->PanelShortcut? {
+    guard !repeating,modifiers.intersection([.command,.option,.control,.shift]) == .command else{return nil}
+    let tabs=["1":"overview","2":"details","3":"displays","4":"audio","5":"monitor-controls"]
+    if let tab=tabs[key] {return .tab(tab)}
+    return key.lowercased()=="r" ? .refresh:nil
+}
+func panelRefreshArguments(_ tab:String,_ report:String,_ monitor:String)->[String]? {
+    switch tab {
+    case "details":return ["setup","doctor","history","ddc-history","support-summary"].contains(report) ? [report]:nil
+    case "displays":return ["display-info"]
+    case "monitor-controls":return ["pg","benq"].contains(monitor) ? ["monitor-settings","--monitor",monitor]:nil
+    default:return nil // Overview, live status and Audio reread local controller state.
+    }
+}
+final class DisplayPanel: NSWindow {
+    var onShortcut:((PanelShortcut)->Void)?
+    override func performKeyEquivalent(with event:NSEvent)->Bool {
+        guard isKeyWindow,NSApp.modalWindow==nil,attachedSheet==nil,
+              let shortcut=panelShortcut(event.charactersIgnoringModifiers ?? "",event.modifierFlags,event.isARepeat),
+              let handler=onShortcut else{return super.performKeyEquivalent(with:event)}
+        handler(shortcut);return true
+    }
+}
+
 final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotificationCenterDelegate {
     let root=FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".config/display-auto")
     let command=FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".local/bin/display-auto.sh")
@@ -900,7 +943,8 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
     func applicationShouldHandleReopen(_ sender:NSApplication,hasVisibleWindows flag:Bool)->Bool {showPanel();return true}
     func showPanel() {
         if panel==nil {
-            let window=NSWindow(contentRect:NSRect(x:0,y:0,width:640,height:600),styleMask:[.titled,.closable,.resizable,.miniaturizable],backing:.buffered,defer:false)
+            let window=DisplayPanel(contentRect:NSRect(x:0,y:0,width:640,height:600),styleMask:[.titled,.closable,.resizable,.miniaturizable],backing:.buffered,defer:false)
+            window.onShortcut={ [weak self] shortcut in self?.handlePanelShortcut(shortcut) }
             window.title=demo ? "Display Bridge — Demo":"Display Bridge";window.isReleasedWhenClosed=false;window.minSize=NSSize(width:600,height:480);window.center()
             let scroll=NSScrollView(frame:NSRect(x:20,y:138,width:600,height:440));scroll.hasVerticalScroller=true;scroll.autohidesScrollers=true
             scroll.autoresizingMask=[.width,.height]
@@ -910,6 +954,8 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
             scroll.documentView=text;panelText=text;panel=window
             let tabs=NSTabView(frame:NSRect(x:20,y:138,width:600,height:440))
             tabs.autoresizingMask=[.width,.height];contentTabs=tabs
+            tabs.toolTip="⌘1–5 selects a tab. ⌘R refreshes the current view."
+            tabs.setAccessibilityHelp("Command 1 through 5 selects a tab. Command R refreshes the current view.")
             let overview=NSTabViewItem(identifier:"overview");overview.label="Overview"
             let overviewScroll=NSScrollView();overviewScroll.hasVerticalScroller=true;overviewScroll.autohidesScrollers=true
             let stack=NSStackView();stack.orientation = .vertical;stack.alignment = .leading;stack.spacing=18
@@ -1039,6 +1085,21 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
             applyTextSize(textSizeIndex())
         }
         refresh();panel?.makeKeyAndOrderFront(nil);NSApp.activate(ignoringOtherApps:true)
+    }
+    func handlePanelShortcut(_ shortcut:PanelShortcut) {
+        switch shortcut {
+        case .tab(let identifier):
+            contentTabs?.selectTabViewItem(withIdentifier:identifier)
+            panel?.makeFirstResponder(contentTabs)
+        case .refresh:
+            guard !busy else{return}
+            let tab=contentTabs?.selectedTabViewItem?.identifier as? String ?? "overview"
+            if tab=="monitor-controls",let reason=monitorControlReason(read("health.json"),read("control.json"),monitorRole,busy) {
+                monitorFeedback?.stringValue=reason;return
+            }
+            if let arguments=panelRefreshArguments(tab,detailReport,monitorRole) {execute(arguments)}
+            else {refresh()}
+        }
     }
     @objc func changeDemoScenario(_ sender:NSPopUpButton) {
         guard demo else {return}

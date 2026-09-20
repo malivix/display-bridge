@@ -161,3 +161,7 @@ hardware feedback, Lunar's explicit targeting, and Display Pilot's model capabil
 explanations. Do not add vendor-specific MoonHalo/color writes without protocol evidence,
 auto-input switching, arbitrary virtual displays, cloud control or adaptive visual effects
 as part of this milestone. These introduce new failure paths unrelated to reliable handoff.
+
+Window-scoped tab navigation and contextual read-only refresh are implemented; see
+[keyboard navigation validation](../log/window-keyboard-navigation.md). Global keys,
+brightness shortcuts and persisted comfort presets remain separate work.

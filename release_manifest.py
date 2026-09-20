@@ -9,6 +9,7 @@ RUNTIME_MODULES = (
     "audio_policy.py",
     "command_results.py",
     "display_snapshot.py",
+    "support_summary.py",
     "recovery_state.py",
     "observability.py",
     "hidpi_report.py",

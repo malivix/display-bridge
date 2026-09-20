@@ -51,6 +51,7 @@ python3 ~/.local/bin/display-auto.py status
 python3 ~/.local/bin/display-auto.py doctor
 python3 ~/.local/bin/display-auto.py pause-for --minutes 15
 python3 ~/.local/bin/display-auto.py resume
+python3 ~/.local/bin/display-auto.py support-summary
 python3 ~/.local/bin/display-auto.py history
 python3 ~/.local/bin/display-auto.py --help
 ```
@@ -69,6 +70,10 @@ raw display/audio inventory and identifiers for local debugging. None uploads in
 | Preview awaiting restoration | Return both inputs and BenQ orientation to their original state. Preserve its journal. |
 | Saved settings need attention | Save private diagnostics and restore a known-good local backup. Deleting a damaged journal is not a repair. |
 | Menu unavailable | Open `~/Applications/Display Auto.app`; inspect controller status separately. |
+
+More controls → Preview support summary produces a small allowlisted report for review.
+It excludes raw logs, error text, device/audio names, identifiers, paths, and exact timestamps.
+Copy only the reviewed summary when sharing; private diagnostics remain a different artifact.
 
 Configuration and recovery are private state, not repository files. Rollback via `rollback.py BACKUP_TIMESTAMP` restores controller and menu together from
 new snapshots. Older backups without menu coverage are rejected; use a compatible installer. See [qualification](qualification.md) for deployment limits. Do not post raw logs,

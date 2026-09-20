@@ -4,6 +4,10 @@ This is local hardware-control software, not a security-certified application. R
 stores device identities, layout, audio routes, and diagnostics under the user's account.
 Treat diagnostic bundles, backups, logs, and screenshots as private until manually reviewed.
 Do not attach raw bundles to public issues. Use a minimal synthetic reproduction instead.
+`support-summary` creates a separate allowlisted overview without identifiers, names, paths,
+raw errors, logs, or exact timestamps. Review it before sharing: health and usage counts can
+still reveal operational information. It does not upload anything or sanitize an existing
+private bundle. Missing/damaged sections are reported explicitly.
 
 Publication gates reject private artifact paths, binaries/archives, concrete home-directory
 paths, common credentials, and UUID-shaped device identifiers outside approved synthetic

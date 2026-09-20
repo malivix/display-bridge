@@ -92,7 +92,7 @@ func detailPrefix(_ health:[String:Any],_ control:[String:Any],_ now:Double=Date
     statusFresh(health,now) && health["status"] as? String == "ready" && !automationPaused(control,now) ? "":"Last known · "
 }
 func operationTitle(_ action:String)->String {
-    let names=["display-info":"Inspecting display modes","doctor":"Checking health","diagnostics":"Saving diagnostics","history":"Reading transition history",
+    let names=["display-info":"Inspecting display modes","doctor":"Checking health","diagnostics":"Saving diagnostics","support-summary":"Preparing support summary","history":"Reading transition history",
         "ddc-history":"Reading monitor history","preview-options":"Inspecting size choices","monitor-settings":"Reading monitor settings",
         "monitor-adjust":"Adjusting monitor settings","preview-start":"Requesting size preview","preview-keep":"Requesting saved size",
         "preview-revert":"Requesting size restoration","preview-repair":"Requesting restoration retry",
@@ -771,7 +771,8 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
             }
             entry.submenu=sub;menu.addItem(entry)
         }
-        add(menu,"Save diagnostic report…",["diagnostics"])
+        add(menu,"Preview support summary…",["support-summary"])
+        add(menu,"Save private diagnostic report…",["diagnostics"])
         add(menu,"Check system health…",["doctor"])
         add(menu,"Show transition timing summary…",["history"])
         add(menu,"Show monitor communication history…",["ddc-history"])
@@ -811,6 +812,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
                 self.refresh()
                 if code != 0 {self.message("Action could not complete",result)}
                 else if args.first=="diagnostics" {NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath:result.trimmingCharacters(in:.whitespacesAndNewlines))])}
+                else if args.first=="support-summary" {self.message("Support summary — review before sharing",result)}
                 else if args.first=="history" {self.message("Transition timing summary",timingSummary(result))}
                 else if args.first=="display-info" {self.modeText?.string=displaySummary(result)}
                 else if args.first=="doctor" {self.message("System health",healthSummary(result))}

@@ -640,7 +640,7 @@ def main():
 
 def run_main(resources):
     parser = argparse.ArgumentParser()
-    parser.add_argument('action', choices=['capture', 'check', 'run', 'once', 'test-layouts', 'restore','status','pause','pause-for','resume','repair-audio','audio-manual','audio-auto','speaker','diagnostics','history','hidpi','doctor','display-info','ddc-history','monitor-adjust','monitor-settings','preview-options','preview-start','preview-keep','preview-revert','preview-repair','rotation-auto','rotation-manual'])
+    parser.add_argument('action', choices=['capture', 'check', 'run', 'once', 'test-layouts', 'restore','status','pause','pause-for','resume','repair-audio','audio-manual','audio-auto','speaker','diagnostics','support-summary','history','hidpi','doctor','display-info','ddc-history','monitor-adjust','monitor-settings','preview-options','preview-start','preview-keep','preview-revert','preview-repair','rotation-auto','rotation-manual'])
     parser.add_argument('--host', choices=['A', 'B'])
     parser.add_argument('--m1ddc', default=str(Path.home() / '.local/bin/display-ddc'))
     parser.add_argument('--minutes',type=int,default=30)
@@ -702,6 +702,9 @@ def run_main(resources):
     if args.action=='hidpi':
         from hidpi_report import analyze
         print(json.dumps(analyze(json.loads(command([HELPER,'modes']))),indent=2));return
+    if args.action=='support-summary':
+        from support_summary import report
+        print(json.dumps(report(ROOT,time.time()),indent=2));return
     if args.action=='diagnostics':
         print(diagnostics(ROOT,AUDIO.parent));return
     if args.action=='ddc-history':

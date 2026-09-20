@@ -536,6 +536,10 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
     var timer:Timer?
     var panel:NSWindow?
     var scalableControls:[NSControl]=[]
+    let detailReports=[("status","Live status"),("doctor","Health check"),("history","Transition timing"),("ddc-history","Monitor communication"),("support-summary","Support summary")]
+    var detailReport="status"
+    var reportSelector:NSPopUpButton?
+    var reportStatus:NSTextField?
     var panelText:NSTextView?
     var contentTabs:NSTabView?
     var modeText:NSTextView?
@@ -593,7 +597,19 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
                 overviewFields.append((heading,body))
             }
             overview.view=overviewScroll;tabs.addTabViewItem(overview)
-            let details=NSTabViewItem(identifier:"details");details.label="Details";details.view=scroll;tabs.addTabViewItem(details)
+            let details=NSTabViewItem(identifier:"details");details.label="Details"
+            let detailView=NSView();let reportRow=NSStackView();reportRow.spacing=12
+            let reportPicker=NSPopUpButton();reportPicker.addItems(withTitles:detailReports.map{$0.1})
+            reportPicker.target=self;reportPicker.action=#selector(selectReport(_:));reportPicker.setAccessibilityLabel("Detail report")
+            reportSelector=reportPicker;reportRow.addArrangedSubview(reportPicker);scalableControls.append(reportPicker)
+            let refreshReport=NSButton(title:"Refresh",target:self,action:#selector(refreshReport))
+            reportRow.addArrangedSubview(refreshReport);scalableControls.append(refreshReport);panelActions.append(refreshReport)
+            let reportNote=NSTextField(wrappingLabelWithString:"");reportNote.translatesAutoresizingMaskIntoConstraints=false
+            detailView.addSubview(reportNote);reportStatus=reportNote;scalableControls.append(reportNote)
+            reportRow.translatesAutoresizingMaskIntoConstraints=false;scroll.translatesAutoresizingMaskIntoConstraints=false
+            detailView.addSubview(reportRow);detailView.addSubview(scroll)
+            NSLayoutConstraint.activate([reportRow.leadingAnchor.constraint(equalTo:detailView.leadingAnchor,constant:12),reportRow.topAnchor.constraint(equalTo:detailView.topAnchor,constant:12),reportRow.trailingAnchor.constraint(lessThanOrEqualTo:detailView.trailingAnchor,constant:-12),scroll.leadingAnchor.constraint(equalTo:detailView.leadingAnchor,constant:12),scroll.trailingAnchor.constraint(equalTo:detailView.trailingAnchor,constant:-12),reportNote.topAnchor.constraint(equalTo:reportRow.bottomAnchor,constant:8),reportNote.leadingAnchor.constraint(equalTo:detailView.leadingAnchor,constant:12),reportNote.trailingAnchor.constraint(equalTo:detailView.trailingAnchor,constant:-12),scroll.topAnchor.constraint(equalTo:reportNote.bottomAnchor,constant:8),scroll.bottomAnchor.constraint(equalTo:detailView.bottomAnchor,constant:-12)])
+            details.view=detailView;tabs.addTabViewItem(details)
             let displays=NSTabViewItem(identifier:"displays");displays.label="Displays"
             let modeView=NSView(frame:NSRect(x:0,y:0,width:580,height:400))
             let modeScroll=NSScrollView(frame:NSRect(x:12,y:52,width:556,height:336))
@@ -695,6 +711,25 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
     @objc func compactDemo() {
         guard demo,let window=panel else {return}
         var frame=window.frame;frame.size=window.minSize;window.setFrame(frame,display:true)
+    }
+    @objc func selectReport(_ sender:NSPopUpButton) {
+        let index=sender.indexOfSelectedItem
+        guard index>=0,index<detailReports.count else {return}
+        detailReport=detailReports[index].0
+        panelText?.setAccessibilityLabel(detailReports[index].1+" report")
+        panelText?.string=detailReport=="status" ? "":"Choose Refresh to read this report. Reports are snapshots and do not update in the background."
+        refresh()
+    }
+    @objc func refreshReport() {
+        if detailReport=="status" {refresh()} else {execute([detailReport])}
+    }
+    func showReport(_ action:String,_ text:String) {
+        guard let index=detailReports.firstIndex(where:{$0.0==action}) else {return}
+        detailReport=action;reportSelector?.selectItem(at:index)
+        panelText?.setAccessibilityLabel(detailReports[index].1+" report")
+        reportStatus?.stringValue="Snapshot report; use Refresh to inspect again."
+        panelText?.string="\(detailReports[index].1) · Snapshot at \(Date().formatted(date:.omitted,time:.standard))\nRefresh to inspect again.\n\n"+text
+        contentTabs?.selectTabViewItem(withIdentifier:"details")
     }
     func textSizeIndex()->Int {displayTextIndex ?? min(2,max(0,UserDefaults.standard.integer(forKey:"statusTextSize")))}
     func applyTextSize(_ index:Int) {
@@ -812,7 +847,9 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
         if !progress.isEmpty {detail=progress+"\n\n"+detail}
         let lastPreview=read("preview-status.json")
         if !state.hasPrefix("preview-"),let error=lastPreview["error"] as? String {detail += "\n\nLast size preview: \(error)"}
-        if let text=panelText,text.string != detail {
+        reportSelector?.isEnabled = !busy
+        reportStatus?.stringValue = busy ? progress : (detailReport=="status" ? "Live controller status":"Snapshot report; use Refresh to inspect again.")
+        if detailReport=="status",let text=panelText,text.string != detail {
             let selection=text.selectedRange()
             let origin=text.enclosingScrollView?.contentView.bounds.origin
             text.string=detail
@@ -936,6 +973,10 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
     func execute(_ args:[String]) {
         if args==["panel"]{showPanel();return}
         if args==["quit"]{NSApp.terminate(nil);return}
+        if demo,args.count==1,detailReports.contains(where:{$0.0==args[0]}) {
+            showReport(args[0],"Synthetic report for interface inspection. No hardware or local diagnostic data was read.\n\nExample: two completed transitions; application time 2.0 seconds. These are demo values, not measurements.")
+            return
+        }
         if args==["preset-save-prompt"] {savePresetPrompt();return}
         if demo && args==["preview-options"] {
             let modes:[String:Any] = ["pg":["width":1920,"height":1080],"benq":["width":1920,"height":1280]]
@@ -972,11 +1013,11 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
                 self.refresh()
                 if code != 0 {self.message("Action could not complete",result)}
                 else if args.first=="diagnostics" {NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath:result.trimmingCharacters(in:.whitespacesAndNewlines))])}
-                else if args.first=="support-summary" {self.message("Support summary — review before sharing",result)}
-                else if args.first=="history" {self.message("Transition timing summary",timingSummary(result))}
+                else if args.first=="support-summary" {self.showReport("support-summary","Review before sharing. This report is not uploaded automatically.\n\n"+result)}
+                else if args.first=="history" {self.showReport("history",timingSummary(result))}
                 else if args.first=="display-info" {self.modeText?.string=displaySummary(result)}
-                else if args.first=="doctor" {self.message("System health",healthSummary(result))}
-                else if args.first=="ddc-history" {self.message("Monitor communication",ddcSummary(result))}
+                else if args.first=="doctor" {self.showReport("doctor",healthSummary(result))}
+                else if args.first=="ddc-history" {self.showReport("ddc-history",ddcSummary(result))}
                 else if args.first=="preset-remove",let data=result.data(using:.utf8),let value=(try? JSONSerialization.jsonObject(with:data)) as? [String:Any],value["removed"] as? Bool == true {
                     self.operationResult="Preset ‘\(value["name"] as? String ?? "")’ removed for \(value["rotation"] as? Int == 90 ? "portrait":"landscape"). Display settings were not changed."
                 }

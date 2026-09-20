@@ -122,3 +122,9 @@ while the dialog was open, removal fails and you must inspect it again.
 For CLI removal, pass the selected preset's `revision` from `preview-options` as
 `--fingerprint`, plus `--preset NAME --orientation 0` (landscape) or `90` (portrait), to
 `preset-remove`. This revision is distinct from the proposed-layout fingerprint for preview.
+
+The **Details** tab offers Live status, Health check, Transition timing, Monitor communication,
+and Support summary. Select a report and choose **Refresh**. Read-only reports remain as
+timestamped, selectable snapshots until refreshed or replaced; they are not polled in the
+background. Live status continues updating when selected. Support summaries still require
+review before sharing; no report is uploaded automatically.

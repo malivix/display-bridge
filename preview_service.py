@@ -69,7 +69,7 @@ def options(c):
         entries=[]
         preset_error='Saved presets are unreadable, damaged, or belong to another enrollment. The original file was preserved. Ordinary size previews remain available; restore a valid preset file before saving or recalling named presets.'
     for entry in entries:
-        item={'name':entry['name'],'rotation':entry['rotation'],'available':False}
+        item={'name':entry['name'],'rotation':entry['rotation'],'revision':size_presets.revision(entry),'available':False}
         try:
             pair=size_presets.resolve(entry,context['rotation'],report);files=build(config,report,pair)
             item.update(available=True,modes=pair['modes'],fingerprint=hashlib.sha256(files['config.json']).hexdigest())
@@ -100,6 +100,16 @@ def save_preset(c,label,replace=False):
         if hardware.context()!=context or c.startup_config()!=config:raise RuntimeError('Settings or orientation changed during preset inspection')
         size_presets.save(c.ROOT/'size-presets.json',config,entry,replace)
         return {'saved':True,'name':label,'rotation':context['rotation'],'modes':entry['modes']}
+
+
+def remove_preset(c,label,rotation,revision):
+    with mutation_guard(c),(c.ROOT/'install.lock').open('a') as install,(c.ROOT/'size-presets.lock').open('a') as lock:
+        try:fcntl.flock(install,fcntl.LOCK_SH|fcntl.LOCK_NB)
+        except BlockingIOError:raise RuntimeError('Installation in progress')
+        c.acquire_lock(lock,2)
+        config=c.startup_config()
+        size_presets.remove(c.ROOT/'size-presets.json',config,label,rotation,revision)
+        return {'removed':True,'name':label,'rotation':rotation}
 
 
 class Service:

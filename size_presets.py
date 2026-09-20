@@ -83,6 +83,25 @@ def save(path,config,entry,replace=False):
     matches=[e for e in store['presets'] if (e['name'],e['rotation'])==(entry['name'],entry['rotation'])]
     if matches and not replace:raise ValueError('Preset already exists; explicitly replace it or choose another name')
     store['presets']=[e for e in store['presets'] if e not in matches]+[entry]
+    write(path,store)
+    return entry
+
+
+def revision(entry):
+    return hashlib.sha256(json.dumps(entry,sort_keys=True).encode()).hexdigest()
+
+
+def remove(path,config,label,rotation,expected):
+    store=read(path,config)
+    if type(rotation) is not int or rotation not in (0,90):raise ValueError('Preset orientation required')
+    entry=find(store,label,rotation)
+    if expected!=revision(entry):raise ValueError('Preset changed; reopen the chooser before removing it')
+    store['presets'].remove(entry)
+    write(Path(path),store)
+    return entry
+
+
+def write(path,store):
     validate(store)
     fd,temp=tempfile.mkstemp(prefix='.size-presets-',dir=path.parent)
     try:
@@ -94,4 +113,3 @@ def save(path,config,entry,replace=False):
         finally:os.close(directory)
     finally:
         if os.path.exists(temp):os.unlink(temp)
-    return entry

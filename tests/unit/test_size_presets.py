@@ -1,6 +1,6 @@
 import copy,json,tempfile,unittest
 from pathlib import Path
-from size_presets import capture,find,read,resolve,save
+from size_presets import capture,find,read,resolve,save,remove,revision
 
 
 class PresetTests(unittest.TestCase):
@@ -25,6 +25,16 @@ class PresetTests(unittest.TestCase):
         self.assertEqual(pair['modes']['pg']['modeID'],42)
         self.assertNotIn('modeID',self.path.read_text())
         self.assertEqual(self.path.stat().st_mode & 0o777,0o600)
+
+    def test_removal_is_scoped_and_rejects_stale_confirmation(self):
+        save(self.path,self.config,self.entry)
+        portrait=dict(self.entry,rotation=90);save(self.path,self.config,portrait)
+        original=self.path.read_bytes()
+        with self.assertRaisesRegex(ValueError,'changed'):remove(self.path,self.config,'Reading',0,'stale')
+        self.assertEqual(self.path.read_bytes(),original)
+        remove(self.path,self.config,'Reading',0,revision(self.entry))
+        self.assertEqual(read(self.path,self.config)['presets'],[portrait])
+        with self.assertRaises(ValueError):remove(self.path,self.config,'Reading',0,revision(self.entry))
 
     def test_replacement_requires_explicit_intent(self):
         save(self.path,self.config,self.entry);original=self.path.read_bytes()

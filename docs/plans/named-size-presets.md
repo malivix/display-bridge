@@ -17,3 +17,9 @@ Acceptance includes corrupt store, unavailable/ambiguous modes, host/enrollment 
 orientation separation, stale fingerprints and existing preview rollback regressions.
 Rollback: old runtime ignores size-presets.json; unresolved preview journals remain owned
 by the established recovery path. Never copy the store to another host as enrollment.
+
+Removal uses the same writer/install/preview guards and atomic store replacement. The UI
+selects a name plus orientation and requires a Remove action. It passes the inspected entry's
+revision, so concurrent replacement invalidates stale removal rather than deleting new data.
+No monitor command runs for removal; the other orientation is preserved. This changes no
+schema and needs no migration. A removed choice can be saved again from its displayed size.

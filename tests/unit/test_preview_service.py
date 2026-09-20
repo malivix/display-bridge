@@ -56,6 +56,17 @@ class ServiceTests(unittest.TestCase):
         self.fixture.inputs={'pg':18,'benq':19}
         with self.assertRaisesRegex(RuntimeError,'both monitors'):options(self.c)
 
+    def test_removal_respects_preview_guard_and_never_calls_hardware(self):
+        from preview_service import save_preset,remove_preset,options
+        save_preset(self.c,'Reading');revision=options(self.c)['presets'][0]['revision']
+        self.start()
+        with self.assertRaisesRegex(RuntimeError,'Finish or revert'):remove_preset(self.c,'Reading',0,revision)
+        self.assertEqual(Service(self.c).step(),'reverted')
+        self.c.command=lambda *args:(_ for _ in ()).throw(AssertionError('Removal must not call hardware'))
+        result=remove_preset(self.c,'Reading',0,revision)
+        self.assertTrue(result['removed'])
+        self.assertEqual(json.loads((self.root/'size-presets.json').read_text())['presets'],[])
+
     def test_preset_writer_lock_prevents_concurrent_save(self):
         from preview_service import save_preset
         with (self.root/'size-presets.lock').open('a') as lock:

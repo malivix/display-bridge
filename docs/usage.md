@@ -111,3 +111,12 @@ or damaged preset data is reported and preserved. Ordinary relative-size preview
 available if only the preset store is unreadable; saving/recalling named presets stays blocked
 until valid data for this enrollment is restored. The native chooser uses the same
 preview transaction and fresh fingerprint checks as the CLI.
+
+To free a preset slot, open **Preview size… → Remove a saved preset…**, select the name
+and orientation, and confirm **Remove selected preset**. This changes saved choices only,
+not your current monitor sizes. The other orientation is preserved. If the preset changed
+while the dialog was open, removal fails and you must inspect it again.
+
+For CLI removal, pass the selected preset's `revision` from `preview-options` as
+`--fingerprint`, plus `--preset NAME --orientation 0` (landscape) or `90` (portrait), to
+`preset-remove`. This revision is distinct from the proposed-layout fingerprint for preview.

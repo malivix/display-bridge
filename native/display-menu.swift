@@ -92,7 +92,7 @@ func detailPrefix(_ health:[String:Any],_ control:[String:Any],_ now:Double=Date
     statusFresh(health,now) && health["status"] as? String == "ready" && !automationPaused(control,now) ? "":"Last known · "
 }
 func operationTitle(_ action:String)->String {
-    let names=["preset-save":"Saving named size preset","display-info":"Inspecting display modes","doctor":"Checking health","diagnostics":"Saving diagnostics","support-summary":"Preparing support summary","history":"Reading transition history",
+    let names=["preset-remove":"Removing saved size preset","preset-save":"Saving named size preset","display-info":"Inspecting display modes","doctor":"Checking health","diagnostics":"Saving diagnostics","support-summary":"Preparing support summary","history":"Reading transition history",
         "ddc-history":"Reading monitor history","preview-options":"Inspecting size choices","monitor-settings":"Reading monitor settings",
         "monitor-adjust":"Adjusting monitor settings","preview-start":"Requesting size preview","preview-keep":"Requesting saved size",
         "preview-revert":"Requesting size restoration","preview-repair":"Requesting restoration retry",
@@ -897,8 +897,8 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
         if demo && args==["preview-options"] {
             let modes:[String:Any] = ["pg":["width":1920,"height":1080],"benq":["width":1920,"height":1280]]
             var report:[String:Any] = ["rotation":0,"options":[["label":"Current size","size":"current","fingerprint":"demo","modes":modes]],
-                "presets":[["name":"Reading","rotation":0,"available":true,"fingerprint":"demo","modes":modes],
-                           ["name":"Reading","rotation":90,"available":false,"reason":"Preset belongs to the other orientation"]]]
+                "presets":[["name":"Reading","rotation":0,"revision":"demo","available":true,"fingerprint":"demo","modes":modes],
+                           ["name":"Reading","rotation":90,"revision":"demo","available":false,"reason":"Preset belongs to the other orientation"]]]
             if demoScenario=="presets-error" {report["presets"]=[];report["preset_error"]="Saved presets are unreadable. The original file was preserved. Ordinary size previews remain available."}
             if let data=try? JSONSerialization.data(withJSONObject:report),let text=String(data:data,encoding:.utf8) {chooseSize(text)}
             return
@@ -934,6 +934,9 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
                 else if args.first=="display-info" {self.modeText?.string=displaySummary(result)}
                 else if args.first=="doctor" {self.message("System health",healthSummary(result))}
                 else if args.first=="ddc-history" {self.message("Monitor communication",ddcSummary(result))}
+                else if args.first=="preset-remove",let data=result.data(using:.utf8),let value=(try? JSONSerialization.jsonObject(with:data)) as? [String:Any],value["removed"] as? Bool == true {
+                    self.operationResult="Preset ‘\(value["name"] as? String ?? "")’ removed for \(value["rotation"] as? Int == 90 ? "portrait":"landscape"). Display settings were not changed."
+                }
                 else if args.first=="preset-save",let data=result.data(using:.utf8),let value=(try? JSONSerialization.jsonObject(with:data)) as? [String:Any],value["saved"] as? Bool == true {
                     self.operationResult="Preset ‘\(value["name"] as? String ?? "")’ saved for \(value["rotation"] as? Int == 90 ? "portrait":"landscape"). Display settings were not changed."
                 }
@@ -986,6 +989,19 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
         if replace.state == .on {args.append("--replace")}
         execute(args)
     }
+    func removePresetPrompt(_ presets:[[String:Any]]) {
+        guard !presets.isEmpty else {return}
+        let alert=NSAlert();alert.messageText="Remove a saved size preset"
+        alert.informativeText="Select the saved name and orientation to remove. Current display settings and the other orientation will not change."
+        let selector=NSPopUpButton(frame:NSRect(x:0,y:0,width:480,height:36))
+        selector.font=NSFont.systemFont(ofSize:CGFloat([16,20,24][textSizeIndex()]));selector.setAccessibilityLabel("Saved preset and orientation to remove")
+        for preset in presets {selector.addItem(withTitle:"\(preset["name"] as? String ?? "Unnamed") — \(preset["rotation"] as? Int == 90 ? "Portrait":"Landscape")")}
+        alert.accessoryView=selector;alert.addButton(withTitle:"Remove selected preset");alert.addButton(withTitle:"Cancel").keyEquivalent="\u{1b}"
+        guard alert.runModal() == .alertFirstButtonReturn else {return}
+        let index=selector.indexOfSelectedItem
+        guard index>=0,index<presets.count,let name=presets[index]["name"] as? String,let rotation=presets[index]["rotation"] as? Int,let revision=presets[index]["revision"] as? String else {return}
+        execute(["preset-remove","--preset",name,"--orientation",String(rotation),"--fingerprint",revision])
+    }
     func chooseSize(_ json:String){
         guard let data=json.data(using:.utf8),let report=(try? JSONSerialization.jsonObject(with:data)) as? [String:Any],let relative=report["options"] as? [[String:Any]] else {message("Size preview unavailable","No qualified size choices were returned.");return}
         let presetError=report["preset_error"] as? String
@@ -1018,9 +1034,13 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
         text.isVerticallyResizable=true;text.isHorizontallyResizable=false;text.textContainer?.widthTracksTextView=true
         text.string=lines.joined(separator:"\n\n");text.setAccessibilityLabel("Size comparison and preset availability");scroll.documentView=text
         let content=NSView(frame:NSRect(x:0,y:0,width:520,height:300));content.addSubview(selector);content.addSubview(scroll);alert.accessoryView=content
-        alert.addButton(withTitle:"Preview selected size");alert.addButton(withTitle:"Save current as preset…").isEnabled = presetError == nil;alert.addButton(withTitle:"Cancel").keyEquivalent="\u{1b}"
+        alert.addButton(withTitle:"Preview selected size");alert.addButton(withTitle:"Save current as preset…").isEnabled = presetError == nil
+        let presets=report["presets"] as? [[String:Any]] ?? []
+        alert.addButton(withTitle:"Remove a saved preset…").isEnabled = presetError == nil && !presets.isEmpty
+        alert.addButton(withTitle:"Cancel").keyEquivalent="\u{1b}"
         let response=alert.runModal()
         if response == .alertSecondButtonReturn,presetError == nil {savePresetPrompt();return}
+        if response == .alertThirdButtonReturn,presetError == nil {removePresetPrompt(presets);return}
         let index=selector.indexOfSelectedItem
         guard response == .alertFirstButtonReturn,index>=0,index<choices.count,let fingerprint=choices[index]["fingerprint"] as? String else {return}
         if let preset=choices[index]["preset"] as? String {execute(["preview-start","--preset",preset,"--fingerprint",fingerprint])}

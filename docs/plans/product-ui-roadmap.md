@@ -10,7 +10,10 @@ The first source changes add command progress, per-group last-known labels, stat
 and default notification-click routing. Controller request IDs and bounded durable outcomes now distinguish policy acknowledgement
 from reconciliation. Incident-specific deduplication, a resizable window, and three status-text sizes are now
 implemented. A hardware-free demo was inspected at the largest size and a smaller window.
-The grouped dashboard, larger controls, and complete accessibility qualification remain. Live deployment
+The grouped Overview/Details dashboard and direct Pause control are now implemented.
+Largest-text scrolling and accessibility-tree values were checked in a hardware-free demo.
+Larger controls, current-mode presentation, simplified advanced settings, and complete
+accessibility qualification remain. Live deployment
 and UI qualification remain separate.
 
 ## Decision

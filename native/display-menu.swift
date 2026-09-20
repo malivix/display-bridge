@@ -162,6 +162,40 @@ func dashboard(_ health:[String:Any],_ control:[String:Any],_ now:Double=Date().
     lines.append("\nSettings and recovery details come from the controller. Speaker selection does not prove audible sound.")
     return lines.joined(separator:"\n")
 }
+struct StatusSection {
+    let title:String
+    let body:String
+}
+func statusSections(_ health:[String:Any],_ control:[String:Any])->[StatusSection] {
+    let prefix=detailPrefix(health,control)
+    let inputs=health["inputs"] as? [String:Int] ?? [:]
+    let rotation=health["rotation"] as? [String:Any] ?? [:]
+    let audio=health["audio"] as? [String:Any] ?? [:]
+    let selected=audio["selected"] as? [String:Any] ?? [:]
+    let recovery=health["recovery"] as? [String:Any] ?? [:]
+    let headline=dashboard(health,control).components(separatedBy:"\n").first ?? "Status unavailable"
+    func owner(_ role:String,_ a:Int,_ b:Int)->String {
+        guard let input=inputs[role] else{return "Ownership not reported"}
+        return input==a ? "Showing Mac A":input==b ? "Showing Mac B":"Unknown input; changes held"
+    }
+    let profile=health["profile"] as? String ?? "unknown"
+    let layouts=["extended":"Two independent desktops","pg":"PG is the desktop; hidden BenQ mirrors PG",
+                 "benq":"BenQ is the desktop; hidden PG mirrors BenQ","away":"Both monitors away; layout preserved"]
+    let sensor=(rotation["sensor_degrees"] as? Int).map{"\($0)°"} ?? "unavailable"
+    let audioOverride=(control["audio_manual_until"] as? Double ?? 0)>Date().timeIntervalSince1970
+    let rotationMode=rotation["enabled"] as? Bool != true ? "not calibrated":control["auto_rotate"] as? Bool == false ? "manual":"automatic"
+    let routing=automationPaused(control) ? "Automation is paused":audioOverride ? "Manual output preservation is active":"Automatic routing follows profile preferences"
+    let pending=recovery["pending"] as? Bool == true || health["audio_journal_pending"] as? Bool == true
+    let error=health["error"] as? String ?? recovery["error"] as? String
+    let recoveryText=error ?? (pending ? "Recovery pending; inspect Details for attempts and next steps":"No pending recovery reported")
+    return [
+        StatusSection(title:"Overview",body:(health["status"] as? String ?? "").hasPrefix("preview-") ? dashboard(health,control):headline+"\n"+statusAge(health)+"\n"+prefix+(layouts[profile] ?? "Desktop not confirmed")),
+        StatusSection(title:"PG42UQ",body:prefix+owner("pg",17,18)),
+        StatusSection(title:"BenQ RD280UG",body:prefix+owner("benq",19,15)+"\n\(prefix)Rotation: \(rotationMode) · sensor \(sensor)"),
+        StatusSection(title:"Audio",body:prefix+(selected["name"] as? String ?? "Output not reported")+"\n"+routing+"\nSpeaker selection does not prove audible sound."),
+        StatusSection(title:"Recovery",body:prefix+recoveryText)
+    ]
+}
 func healthSummary(_ json:String)->String {
     guard let data=json.data(using:.utf8),let report=(try? JSONSerialization.jsonObject(with:data)) as? [String:Any],let checks=report["checks"] as? [[String:Any]] else{return "Health report could not be read. Save a diagnostic report for details."}
     var lines=["Read-only check: \(report["status"] as? String ?? "unknown")"]
@@ -269,6 +303,13 @@ if CommandLine.arguments.contains("--self-test") {
     precondition(statusAge(["updated_at":Double.nan],101)=="Status age unavailable")
     precondition(statusAge(live,120)=="Last report: 20 seconds ago")
     precondition(!detailPrefix(live,["paused":true],101).isEmpty)
+    let sectionHealth:[String:Any]=["status":"ready","updated_at":Date().timeIntervalSince1970,"inputs":["pg":17,"benq":15],"profile":"pg"]
+    let sections=statusSections(sectionHealth,[:])
+    precondition(sections.map{$0.title}==["Overview","PG42UQ","BenQ RD280UG","Audio","Recovery"])
+    precondition(sections[1].body=="Showing Mac A" && sections[2].body.contains("Showing Mac B"))
+    precondition(statusSections([:],[:])[1].body.contains("Last known"))
+    let previewSections=statusSections(["updated_at":Date().timeIntervalSince1970,"status":"preview-active","preview":["state":"preview","remaining_seconds":20.0]],[:])
+    precondition(previewSections[0].body.contains("Keep within"))
     let trackedRequest:[String:Any]=["id":"example","action":"resume"]
     precondition(commandSummary([:],["command_request":trackedRequest]).contains("not yet reported"))
     let trackedHealth:[String:Any]=["updated_at":Date().timeIntervalSince1970,"command_result":["request":trackedRequest,"state":"deferred","detail":"Waiting for input"]]
@@ -342,6 +383,9 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
     var timer:Timer?
     var panel:NSWindow?
     var panelText:NSTextView?
+    var overviewFields:[(NSTextField,NSTextField)]=[]
+    var pauseButton:NSButton?
+    var displayTextIndex:Int?
     var panelActions:[NSButton]=[]
     var previewActions:[NSButton]=[]
     var previewToken:String?
@@ -361,19 +405,45 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
             let text=NSTextView(frame:scroll.bounds);text.isEditable=false;text.isSelectable=true;text.font=NSFont.systemFont(ofSize:CGFloat([16,20,24][textSizeIndex()]))
             text.drawsBackground=false;text.isVerticallyResizable=true;text.isHorizontallyResizable=false;text.textContainer?.widthTracksTextView=true
             text.setAccessibilityLabel("Display status and command results")
-            scroll.documentView=text;window.contentView?.addSubview(scroll);panelText=text;panel=window
+            scroll.documentView=text;panelText=text;panel=window
+            let tabs=NSTabView(frame:NSRect(x:20,y:138,width:600,height:440))
+            tabs.autoresizingMask=[.width,.height]
+            let overview=NSTabViewItem(identifier:"overview");overview.label="Overview"
+            let overviewScroll=NSScrollView();overviewScroll.hasVerticalScroller=true;overviewScroll.autohidesScrollers=true
+            let stack=NSStackView();stack.orientation = .vertical;stack.alignment = .leading;stack.spacing=18
+            stack.edgeInsets=NSEdgeInsets(top:16,left:16,bottom:16,right:16)
+            stack.translatesAutoresizingMaskIntoConstraints=false;overviewScroll.documentView=stack
+            NSLayoutConstraint.activate([stack.widthAnchor.constraint(equalTo:overviewScroll.contentView.widthAnchor),stack.topAnchor.constraint(equalTo:overviewScroll.contentView.topAnchor)])
+            for section in statusSections(read("health.json"),read("control.json")) {
+                let heading=NSTextField(labelWithString:section.title)
+                let body=NSTextField(wrappingLabelWithString:section.body);body.isSelectable=true
+                body.setAccessibilityElement(true);body.setAccessibilityRole(.staticText)
+                body.setAccessibilityLabel(section.title+" details");body.setAccessibilityValue(section.body)
+                let group=NSStackView(views:[heading,body]);group.orientation = .vertical;group.alignment = .leading;group.spacing=5
+                group.setAccessibilityElement(true);group.setAccessibilityRole(.group);group.setAccessibilityLabel(section.title)
+                stack.addArrangedSubview(group)
+                group.widthAnchor.constraint(equalTo:stack.widthAnchor,constant:-32).isActive=true
+                body.widthAnchor.constraint(equalTo:group.widthAnchor).isActive=true
+                overviewFields.append((heading,body))
+            }
+            overview.view=overviewScroll;tabs.addTabViewItem(overview)
+            let details=NSTabViewItem(identifier:"details");details.label="Details";details.view=scroll;tabs.addTabViewItem(details)
+            window.contentView?.addSubview(tabs)
+            applyTextSize(textSizeIndex())
             let label=NSTextField(labelWithString:"Text size")
             label.frame=NSRect(x:20,y:103,width:130,height:24);window.contentView?.addSubview(label)
             let sizes=NSSegmentedControl(labels:["Standard","Large","Largest"],trackingMode:.selectOne,target:self,action:#selector(changeTextSize(_:)))
-            sizes.frame=NSRect(x:170,y:98,width:350,height:32);sizes.selectedSegment=textSizeIndex()
+            sizes.frame=NSRect(x:170,y:98,width:310,height:32);sizes.selectedSegment=textSizeIndex()
             sizes.setAccessibilityLabel("Status text size");window.contentView?.addSubview(sizes)
-            let button=NSButton(title:"Open controls",target:self,action:#selector(openControls(_:)))
+            let button=NSButton(title:"More controls",target:self,action:#selector(openControls(_:)))
             button.frame=NSRect(x:20,y:16,width:140,height:28);window.contentView?.addSubview(button)
             for (index,title,action) in [(0,"Check health","doctor"),(1,"Save diagnostics","diagnostics")] {
                 let actionButton=NSButton(title:title,target:self,action:#selector(panelAction(_:)))
                 actionButton.identifier=NSUserInterfaceItemIdentifier(action);actionButton.frame=NSRect(x:170+index*180,y:16,width:170,height:28)
                 window.contentView?.addSubview(actionButton);panelActions.append(actionButton)
             }
+            let pause=NSButton(title:"Pause",target:self,action:#selector(togglePause(_:)))
+            pause.frame=NSRect(x:540,y:98,width:80,height:32);pause.autoresizingMask=[.minXMargin];window.contentView?.addSubview(pause);pauseButton=pause
             for (index,title,action) in [(0,"Preview size…","preview-options"),(1,"Keep this size","preview-keep"),(2,"Revert size","preview-revert")] {
                 let actionButton=NSButton(title:title,target:self,action:#selector(panelAction(_:)))
                 actionButton.identifier=NSUserInterfaceItemIdentifier(action);actionButton.frame=NSRect(x:20+index*180,y:54,width:170,height:28)
@@ -382,11 +452,17 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
         }
         refresh();panel?.makeKeyAndOrderFront(nil);NSApp.activate(ignoringOtherApps:true)
     }
-    func textSizeIndex()->Int {min(2,max(0,UserDefaults.standard.integer(forKey:"statusTextSize")))}
+    func textSizeIndex()->Int {displayTextIndex ?? min(2,max(0,UserDefaults.standard.integer(forKey:"statusTextSize")))}
+    func applyTextSize(_ index:Int) {
+        let size=CGFloat([16,20,24][index])
+        panelText?.font=NSFont.systemFont(ofSize:size)
+        for (heading,body) in overviewFields {heading.font=NSFont.boldSystemFont(ofSize:size);body.font=NSFont.systemFont(ofSize:size)}
+    }
+    @objc func togglePause(_ sender:NSButton) {execute([automationPaused(read("control.json")) ? "resume":"pause"])}
     @objc func changeTextSize(_ sender:NSSegmentedControl) {
         let index=min(2,max(0,sender.selectedSegment))
         if !demo {UserDefaults.standard.set(index,forKey:"statusTextSize")}
-        panelText?.font=NSFont.systemFont(ofSize:CGFloat([16,20,24][index]))
+        displayTextIndex=index;applyTextSize(index)
     }
     @objc func openControls(_ sender:NSButton){refresh();item.menu?.popUp(positioning:nil,at:NSPoint(x:0,y:sender.bounds.height),in:sender)}
     @objc func panelAction(_ sender:NSButton){if let action=sender.identifier?.rawValue {
@@ -441,6 +517,17 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
             let elapsed=Int(max(0,ProcessInfo.processInfo.systemUptime-started))
             progress="\(operationName)… \(elapsed)s elapsed. Command deadline: 45s."
         }
+        let sections=statusSections(health,control)
+        for (index,fields) in overviewFields.enumerated() where index<sections.count {
+            var body=sections[index].body
+            if index==0 {
+                if !tracked.isEmpty {body += "\n\n"+tracked}
+                if !progress.isEmpty {body += "\n\n"+progress}
+            }
+            if fields.1.stringValue != body {fields.1.stringValue=body;fields.1.setAccessibilityValue(body)}
+        }
+        pauseButton?.title=automationPaused(control) ? "Resume":"Pause"
+        pauseButton?.isEnabled = !busy
         var detail=dashboard(health,control)
         if !tracked.isEmpty {detail=tracked+"\n\n"+detail}
         if !progress.isEmpty {detail=progress+"\n\n"+detail}
@@ -460,7 +547,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
         for button in previewActions {
             let action=button.identifier?.rawValue
             if action=="preview-options" {button.isEnabled = !busy && fresh && state=="ready" && health["profile"] as? String == "extended" && !automationPaused(control)}
-            else {button.isEnabled = !busy && fresh && previewToken != nil && preview["state"] as? String == "preview" && previewRemaining(health)>0}
+            else {button.isHidden = preview["state"] as? String != "preview";button.isEnabled = !busy && fresh && previewToken != nil && preview["state"] as? String == "preview" && previewRemaining(health)>0}
         }
         if !demo {
         notify(health,fresh:fresh)

@@ -3,6 +3,10 @@
 Change monitor inputs normally. The menu reports the current profile, speaker, rotation,
 and recovery state. Physical switching and DDC delays vary; it is not an instantaneous switch.
 
+Overview groups monitor ownership, audio, and recovery. Details keeps the full report.
+Pause/Resume is available directly in the window; More controls opens the advanced menu.
+Keep/Revert buttons appear only during a size preview.
+
 The status window is resizable. Choose Standard, Large, or Largest status text; this
 changes only this app, not monitor resolution or other applications. Long status content
 remains scrollable.

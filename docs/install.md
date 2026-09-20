@@ -72,7 +72,10 @@ and BenQ directly to its left to use the current paired-size preview feature.
 ## Upgrade or replace a saved baseline
 
 Run the same installer for the same host to preserve an existing baseline and verify the
-current profile. Complete any pending size preview or recovery first.
+current profile. Complete any pending size preview or recovery first. A queued preview
+request also blocks installation, even before a preview starts. Let the controller finish
+it; preserve requests and journals if troubleshooting is needed. The installer checks
+before directory changes and again under its installation lock.
 To deliberately replace the current baseline, arrange both local displays, select fixed 120 Hz,
 then use `--capture-fixed-120`. This is a configuration change, not a repair shortcut.
 

@@ -97,3 +97,60 @@ class InstallerEntryTests(unittest.TestCase):
             errors={c['name'] for c in result['checks'] if c['status']=='error'}
             self.assertEqual(errors,{'Source files','Build tools'})
             self.assertEqual(list(Path(directory).iterdir()),[])
+
+    def test_pending_or_damaged_preview_rejected_before_directory_changes(self):
+        from scaling_preview import Preview
+        module=self.load()
+        for kind in ('request','broken-request-link','active-preview','damaged-preview'):
+            with self.subTest(kind=kind),tempfile.TemporaryDirectory() as directory:
+                home=Path(directory);root=home/'.config/display-auto';root.mkdir(parents=True)
+                if kind=='request':(root/'preview-request.json').write_text('preserve even invalid data')
+                elif kind=='broken-request-link':(root/'preview-request.json').symlink_to(root/'missing')
+                elif kind=='damaged-preview':(root/'scaling-preview.json').write_text('{invalid')
+                else:
+                    files={'config.json':b'{}','baseline.json':b'{}'}
+                    Preview(root/'scaling-preview.json').begin(files,files,{},'test',100)
+                root.chmod(0o750)
+                before={p.relative_to(home):p.read_bytes() for p in home.rglob('*') if p.is_file()}
+                paths=set(home.rglob('*'))
+                with patch('pathlib.Path.home',return_value=home),patch('platform.system',return_value='Darwin'),patch('platform.machine',return_value='arm64'),patch.object(module,'run',side_effect=AssertionError('No process before preview guard')):
+                    with self.assertRaises((RuntimeError,ValueError)):
+                        module.main(['A'])
+                self.assertEqual(root.stat().st_mode&0o777,0o750)
+                self.assertEqual(set(home.rglob('*')),paths)
+                self.assertEqual({p.relative_to(home):p.read_bytes() for p in home.rglob('*') if p.is_file()},before)
+
+    def test_request_arriving_before_install_lock_is_rechecked(self):
+        module=self.load()
+        with tempfile.TemporaryDirectory() as directory:
+            home=Path(directory);root=home/'.config/display-auto';root.mkdir(parents=True)
+            original=module.fcntl.flock
+            def flock(handle,operation):
+                original(handle,operation)
+                (root/'preview-request.json').write_text('queued before lock acquisition')
+            with patch('pathlib.Path.home',return_value=home),patch('platform.system',return_value='Darwin'),patch('platform.machine',return_value='arm64'),patch.object(module.fcntl,'flock',side_effect=flock),patch.object(module,'run',side_effect=AssertionError('No build with queued preview')):
+                held_error=None
+                try:module.main(['A'])
+                except RuntimeError as error:held_error=error
+                self.assertIsNotNone(held_error)
+                self.assertIn('request is pending',str(held_error))
+                # Keep the traceback alive: release cannot depend on garbage collection.
+                with (root/'install.lock').open('a') as released:
+                    original(released,module.fcntl.LOCK_EX | module.fcntl.LOCK_NB)
+            self.assertEqual((root/'preview-request.json').read_text(),'queued before lock acquisition')
+
+    def test_completed_preview_allows_installer_guard(self):
+        from scaling_preview import Preview
+        module=self.load()
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory)
+            module.require_install_idle(root)
+            self.assertEqual(list(root.iterdir()),[])
+            files={'config.json':b'{}','baseline.json':b'{}'}
+            preview=Preview(root/'scaling-preview.json')
+            record=preview.begin(files,files,{},'test',100)
+            record.update(phase='kept',recovery_queued=True)
+            preview.write(record)
+            before=preview.path.read_bytes()
+            module.require_install_idle(root)
+            self.assertEqual(preview.path.read_bytes(),before)

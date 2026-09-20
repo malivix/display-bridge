@@ -14,6 +14,7 @@ import sys
 import tempfile
 import time
 import fcntl
+from contextlib import ExitStack
 from deployment import atomic_link, snapshot, restore, require_service_namespace
 from release_manifest import (
     RUNTIME_MODULES,
@@ -27,6 +28,16 @@ def run(args, **kwargs):
     kwargs.setdefault("timeout", 120)
     kwargs.setdefault("env", dict(os.environ, MACOSX_DEPLOYMENT_TARGET="13.0"))
     return subprocess.run(args, **kwargs)
+
+
+def require_install_idle(root):
+    """Preserve queued requests and recovery evidence before touching installation state."""
+    from preview_service import unresolved
+    request=root/'preview-request.json'
+    if request.exists() or request.is_symlink():
+        raise RuntimeError('A size-preview request is pending. Let the controller finish it and complete any restoration before installing; preserve the request if troubleshooting is needed.')
+    if unresolved(root):
+        raise RuntimeError('Finish scaling preview recovery before installing')
 
 
 def preflight(package, home):
@@ -70,6 +81,11 @@ def preflight(package, home):
 
 
 def main(argv=None):
+    with ExitStack() as resources:
+        return run_install(argv, resources)
+
+
+def run_install(argv, resources):
     import argparse
     import platform
 
@@ -99,20 +115,20 @@ def main(argv=None):
     root = home / ".config/display-auto"
     bin_dir = home / ".local/bin"
     require_service_namespace(home, label)
+    require_install_idle(root)
     root.mkdir(mode=0o700, parents=True, exist_ok=True)
     root.chmod(0o700)
     bin_dir.mkdir(parents=True, exist_ok=True)
     plist.parent.mkdir(parents=True, exist_ok=True)
     (home / "Library/Logs").mkdir(parents=True, exist_ok=True)
-    install_lock = (root / "install.lock").open("a")
+    install_lock = resources.enter_context((root / "install.lock").open("a"))
     try:
         fcntl.flock(install_lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except BlockingIOError:
         sys.exit("Another installation is already running")
-    from preview_service import unresolved
-
-    if unresolved(root):
-        raise RuntimeError("Finish scaling preview recovery before installing")
+    # Enqueue also takes install.lock. Recheck after exclusive acquisition so a
+    # request arriving between the preliminary check and lock cannot be missed.
+    require_install_idle(root)
     sdk = run(
         ["/usr/bin/xcrun", "--sdk", "macosx", "--show-sdk-path"],
         capture_output=True,
@@ -258,13 +274,13 @@ def main(argv=None):
         for runtime_file in release.iterdir():
             runtime_file.chmod(0o555 if os.access(runtime_file, os.X_OK) else 0o444)
         child_env = dict(os.environ, DISPLAY_AUTO_INSTALLER_PID=str(os.getpid()))
-        maintenance = (root / "maintenance.lock").open("a")
+        maintenance = resources.enter_context((root / "maintenance.lock").open("a"))
         running = (
             run(["launchctl", "print", service], capture_output=True).returncode == 0
         )
         if running:
             run(["launchctl", "bootout", service], check=True)
-        controller_lock = (root / "controller.lock").open("a")
+        controller_lock = resources.enter_context((root / "controller.lock").open("a"))
         activated = False
         try:
             stop_deadline = time.monotonic() + 8

@@ -120,7 +120,9 @@ The Overview recovery section distinguishes pending, paused, ownership-held and 
 work. It shows the trigger, last error and retry eligibility without showing a current
 countdown from stale status. Normal switching does not offer repeated repair.
 
-A command opens the status window with its operation and elapsed time. A saved request is
+A command opens the status window with its active phase, elapsed phase time and deadline.
+Preset compatibility checks have a five-second phase before the separate 45-second command
+phase; a rejected check never advances to execution. A saved request is
 not confirmation that work finished. The latest settings request can be acknowledged,
 applying, deferred, verified or failed. The last 20 observed requests persist locally; newer
 requests supersede unfinished older settings work. A command timeout does not prove that

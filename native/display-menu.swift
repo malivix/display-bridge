@@ -106,13 +106,15 @@ func presetCompatibilitySummary(_ commands:Set<String>?,checking:Bool)->String {
 }
 
 // Probe only newer commands; preserve legacy inspection and recovery access.
-func runCompatibleMenuCommand(_ arguments:[String],runner:([String],Double,Int)->CommandResult)->CommandResult {
+func runCompatibleMenuCommand(_ arguments:[String],onPhase:(String,Double)->Void={_,_ in},runner:([String],Double,Int)->CommandResult)->CommandResult {
     let guarded=["brightness-list","brightness-save","brightness-apply","brightness-remove","preset-save","preset-remove"]
     if let action=arguments.first,guarded.contains(action) {
+        onPhase("Checking preset support",5)
         let probe=runner(["capabilities"],5,16_384)
         let supported=menuCapabilities(probe)?.contains(action)==true
         guard supported else {return CommandResult(output:"This command requires a compatible controller. Update the menu and controller together from the same trusted source. The requested action was not sent; status and recovery remain available.",code:78)}
     }
+    onPhase(operationTitle(arguments.first ?? ""),45)
     return runner(arguments,45,1_048_576)
 }
 
@@ -735,18 +737,21 @@ if CommandLine.arguments.contains("--self-test") {
     print("PASS unknown, checking, unsupported and partial preset availability labels")
     let supportedReport="{\"protocol\":1,\"read_only\":true,\"commands\":[\"brightness-save\"]}"
     for report in [CommandResult(output:supportedReport,code:0),CommandResult(output:supportedReport,code:124),CommandResult(output:"{}",code:0),CommandResult(output:supportedReport.replacingOccurrences(of:"brightness-save",with:"status"),code:0),CommandResult(output:supportedReport.replacingOccurrences(of:"protocol\":1",with:"protocol\":true"),code:0)] {
-        var calls:[[String]]=[]
-        let result=runCompatibleMenuCommand(["brightness-save","--monitor","pg"]){args,timeout,limit in
+        var calls:[[String]]=[];var phases:[String]=[];var deadlines:[Double]=[]
+        let result=runCompatibleMenuCommand(["brightness-save","--monitor","pg"],onPhase:{name,deadline in phases.append(name);deadlines.append(deadline)}){args,timeout,limit in
             calls.append(args)
             if args==["capabilities"] {precondition(timeout==5 && limit==16_384);return report}
             return CommandResult(output:"requested",code:0)
         }
         let valid=report.code==0 && report.output==supportedReport
         precondition(calls.count==(valid ? 2:1) && result.code==(valid ? 0:78))
+        precondition(phases.first=="Checking preset support" && phases.count==(valid ? 2:1))
+        precondition(deadlines==(valid ? [5,45]:[5]))
+        if valid {precondition(phases.last==operationTitle("brightness-save"))}
     }
-    var recoveryCalls:[[String]]=[]
-    _=runCompatibleMenuCommand(["preview-revert","--token","example"]){args,_,_ in recoveryCalls.append(args);return CommandResult(output:"legacy",code:0)}
-    precondition(recoveryCalls==[["preview-revert","--token","example"]])
+    var recoveryCalls:[[String]]=[];var recoveryDeadlines:[Double]=[]
+    _=runCompatibleMenuCommand(["preview-revert","--token","example"],onPhase:{_,deadline in recoveryDeadlines.append(deadline)}){args,_,_ in recoveryCalls.append(args);return CommandResult(output:"legacy",code:0)}
+    precondition(recoveryCalls==[["preview-revert","--token","example"]] && recoveryDeadlines==[45])
     print("PASS capability preflight blocks unsupported commands and preserves legacy recovery")
     var brightnessSample:[String:Any]=["read_only":true,"monitor":"benq","presets":[["name":"Reading","monitor":"benq","value":15,"maximum":50,"revision":String(repeating:"a",count:64)]]]
     func brightnessJSON(_ report:[String:Any])->String {String(data:try! JSONSerialization.data(withJSONObject:report),encoding:.utf8)!}
@@ -1201,6 +1206,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
     var busy=false
     var operationStarted:Double?
     var operationName=""
+    var operationDeadline:Double=45
     var operationResult=""
     var openMenus=Set<ObjectIdentifier>()
     var menuOpen:Bool {!openMenus.isEmpty}
@@ -1550,7 +1556,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
         var progress=operationResult
         if let started=operationStarted {
             let elapsed=Int(max(0,ProcessInfo.processInfo.systemUptime-started))
-            progress="\(operationName)… \(elapsed)s elapsed. Command deadline: 45s."
+            progress="\(operationName)… \(elapsed)s in this phase. Phase deadline: \(Int(operationDeadline))s."
         }
         if !controlsUsable {progress += "\nSaved controls are unreadable. Setting changes are disabled; check health."}
         let sections=statusSections(health,control)
@@ -1752,10 +1758,15 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
         if args.first=="support-summary" {reviewedSummary.clear();copySummaryNotice=""}
         displayRefreshing=args.first=="display-info"
         busy=true;operationStarted=ProcessInfo.processInfo.systemUptime
-        operationName=operationTitle(args.first ?? "");operationResult=""
+        operationName="Preparing command";operationDeadline=45;operationResult=""
         showPanel()
         DispatchQueue.global().async {
-            let response=runCompatibleMenuCommand(args==["setup"] ? ["doctor"]:args){arguments,timeout,limit in runMenuCommand(self.command,arguments,timeout:timeout,outputLimit:limit)}
+            let response=runCompatibleMenuCommand(args==["setup"] ? ["doctor"]:args,onPhase:{name,deadline in
+                let started=ProcessInfo.processInfo.systemUptime
+                DispatchQueue.main.async {
+                    self.operationName=name;self.operationDeadline=deadline;self.operationStarted=started;self.refresh()
+                }
+            }){arguments,timeout,limit in runMenuCommand(self.command,arguments,timeout:timeout,outputLimit:limit)}
             let result=response.output,code=response.code
             DispatchQueue.main.async {
                 self.busy=false;self.operationStarted=nil

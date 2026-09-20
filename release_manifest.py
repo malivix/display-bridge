@@ -8,6 +8,7 @@ MENU_BUILD = "2102"
 MENU_SOURCES = (
     "native/menu/main.swift",
     "native/menu/Commands.swift",
+    "native/menu/MonitorResults.swift",
     "native/menu/Presentation.swift",
     "native/menu/PresetWindows.swift",
     "native/menu/MenuApp.swift",

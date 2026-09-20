@@ -227,7 +227,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
                 panelActions.append(button);scalableControls.append(button)
             }
             if demo {
-                let scenarios=NSPopUpButton();scenarios.addItems(withTitles:["ready","stale","paused","away","preview","recovery","recovery-wait","presets-error","controls-error","brightness-empty","older-controller","display-refresh-failed"])
+                let scenarios=NSPopUpButton();scenarios.addItems(withTitles:["ready","stale","paused","away","preview","recovery","recovery-wait","presets-error","controls-error","brightness-empty","older-controller","display-refresh-failed","monitor-response-error"])
                 scenarios.target=self;scenarios.action=#selector(changeDemoScenario(_:));scenarios.setAccessibilityLabel("Synthetic scenario")
                 let compact=NSButton(title:"Minimum window",target:self,action:#selector(compactDemo))
                 let row=NSStackView(views:[scenarios,compact]);row.spacing=12;footer.addArrangedSubview(row)
@@ -292,6 +292,17 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
         audioInfo?.font=NSFont.systemFont(ofSize:size);audioReason?.font=NSFont.systemFont(ofSize:size)
         monitorReason?.font=NSFont.systemFont(ofSize:size);monitorFeedback?.font=NSFont.systemFont(ofSize:size)
         for (heading,body) in overviewFields {heading.font=NSFont.boldSystemFont(ofSize:size);body.font=NSFont.systemFont(ofSize:size)}
+    }
+    var verifiedMonitorReading:String?
+    func presentMonitorResponse(_ response:CommandResult,_ arguments:[String]) {
+        if let reading=MonitorResponse.decode(response,arguments:arguments) {
+            let text=reading.summary(at:Date());verifiedMonitorReading=text
+            showMonitorResult(text,reading.role)
+        } else {
+            operationResult=(response.code==0 ? "Monitor response could not be validated.":"Monitor command failed; see the error for details.")+" Read settings again; do not assume the action succeeded. It was not retried."
+            monitorFeedback?.stringValue=operationResult + (verifiedMonitorReading.map{"\n\nPrevious reading (not refreshed):\n"+$0} ?? "")
+            contentTabs?.selectTabViewItem(withIdentifier:"monitor-controls")
+        }
     }
     func showMonitorResult(_ text:String,_ role:String?) {
         if let role=role,["pg","benq"].contains(role) {
@@ -566,6 +577,12 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
         }
         if args==["panel"]{showPanel();return}
         if args==["quit"]{NSApp.terminate(nil);return}
+        if demo,demoScenario=="monitor-response-error",args.first=="monitor-settings" {
+            let fixture=#"{"monitor":"pg","read_only":true,"settings":{"luminance":{"value":30,"maximum":100,"percent":30},"volume":{"value":40,"maximum":100,"percent":40}}}"#
+            presentMonitorResponse(CommandResult(output:fixture,code:0),["monitor-settings","--monitor","pg"])
+            presentMonitorResponse(CommandResult(output:#"{"monitor":"unknown","settings":{}}"#,code:0),args)
+            refresh();return
+        }
         if demo,args.first=="brightness-list" {
             let role=args.last ?? "pg"
             var report:[String:Any]=["read_only":true,"monitor":role,"presets":[["name":"Reading","monitor":role,"value":30,"maximum":100,"revision":String(repeating:"a",count:64)],["name":"Evening","monitor":role,"value":15,"maximum":100,"revision":String(repeating:"b",count:64)]]]
@@ -625,7 +642,11 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
                     self.operationResult=response["request_id"] == nil ? "Request saved; this controller does not report command completion.":""
                 } else {self.operationResult="Command returned. See the result and current status below."}
                 self.refresh()
-                if code != 0 {self.message("Action could not complete",result)}
+                if MonitorResponse.commands.contains(args.first ?? "") {
+                    self.presentMonitorResponse(response,args)
+                    if code != 0 {self.message("Action could not complete",result)}
+                }
+                else if code != 0 {self.message("Action could not complete",result)}
                 else if args.first=="diagnostics" {NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath:result.trimmingCharacters(in:.whitespacesAndNewlines))])}
                 else if args.first=="support-summary" {self.showReport("support-summary","Review before sharing. This report is not uploaded automatically.\n\n"+result)}
                 else if args.first=="history" {self.showReport("history",timingSummary(result))}
@@ -645,22 +666,6 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
                 }
                 else if args.first=="preview-options" {self.chooseSize(result)}
                 else if args.first?.hasPrefix("preview-")==true {self.showPanel()}
-                else if ["monitor-adjust","brightness-apply"].contains(args.first ?? ""),let data=result.data(using:.utf8),let value=(try? JSONSerialization.jsonObject(with:data)) as? [String:Any] {
-                    let name=value["feature"] as? String == "luminance" ? "Brightness":"Speaker volume"
-                    let monitor=value["monitor"] as? String == "pg" ? "PG42UQ":"BenQ RD280UG"
-                    if let percent=value["percent"] as? Int,(0...100).contains(percent) {
-                        self.showMonitorResult("\(monitor) · \(name): \(percent)%\nConfirmed at \(Date().formatted(date:.omitted,time:.standard)). Refresh after using the monitor's own controls.",value["monitor"] as? String)
-                    } else {self.monitorFeedback?.stringValue="Adjustment returned an unreadable value. Read settings again; do not assume it succeeded."}
-                }
-                else if args.first=="monitor-settings",let data=result.data(using:.utf8),let value=(try? JSONSerialization.jsonObject(with:data)) as? [String:Any],let settings=value["settings"] as? [String:[String:Int]] {
-                    let monitor=value["monitor"] as? String == "pg" ? "PG42UQ":"BenQ RD280UG"
-                    var lines=["Read-only snapshot · \(monitor)"]
-                    for (key,label) in [("luminance","Brightness"),("volume","Speaker volume")] {
-                        if let setting=settings[key] {lines.append("\(label): \(setting["percent"] ?? 0)% (\(setting["value"] ?? 0) / \(setting["maximum"] ?? 0))")}
-                    }
-                    lines.append("\nThese are monitor hardware settings. Speaker volume does not select the macOS audio output. Nothing was changed.")
-                    self.showMonitorResult(lines.joined(separator:"\n"),value["monitor"] as? String)
-                }
                 self.refresh()
             }
         }

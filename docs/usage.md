@@ -100,6 +100,10 @@ Brightness presets belong to a monitor and enrollment, not an orientation, and c
 copied between Macs. They are separate from size presets and do not schedule brightness
 changes or change speaker volume.
 
+The menu validates brightness/volume responses against the requested monitor and feature.
+A failed or malformed response retains the previous reading, explicitly marked not refreshed;
+no adjustment is automatically retried. Use Read brightness and volume to inspect again.
+
 ### Preset support after upgrades
 
 Controls shows the last support check and **Check preset support**. A read-only probe runs

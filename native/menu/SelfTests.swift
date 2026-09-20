@@ -4,6 +4,36 @@ import UserNotifications
 import Darwin
 
 func runMenuSelfTests() {
+    let monitorArgs=["monitor-adjust","--monitor","pg","--feature","luminance","--step","5"]
+    let validMonitor:[String:Any]=["monitor":"pg","feature":"luminance","before":25,"value":30,"maximum":100,"percent":30,"changed":true]
+    func monitorResult(_ value:[String:Any],_ args:[String]?=nil,_ code:Int32=0)->MonitorResponse? {
+        let data=try! JSONSerialization.data(withJSONObject:value)
+        return MonitorResponse.decode(CommandResult(output:String(decoding:data,as:UTF8.self),code:code),arguments:args ?? monitorArgs)
+    }
+    precondition(monitorResult(validMonitor)?.role=="pg")
+    precondition(monitorResult(validMonitor,nil,1)==nil)
+    precondition(monitorResult(validMonitor,["brightness-apply","--monitor","pg"]) != nil)
+    for field in ["monitor","feature","before","value","maximum","percent","changed"] {
+        var missing=validMonitor;missing.removeValue(forKey:field)
+        precondition(monitorResult(missing)==nil)
+    }
+    for (field,value) in [("monitor","benq" as Any),("feature","volume"),("value",true),("maximum",true),("percent",true),("before",false),("changed",1),("maximum",0),("maximum",65536),("value",101),("value",-1),("value",30.5),("before",101),("percent",31),("changed",false)] {
+        var invalid=validMonitor;invalid[field]=value;precondition(monitorResult(invalid)==nil)
+    }
+    let setting:[String:Any]=["value":30,"maximum":100,"percent":30]
+    let snapshot:[String:Any]=["monitor":"benq","read_only":true,"settings":["luminance":setting,"volume":setting]]
+    let snapshotArgs=["monitor-settings","--monitor","benq"]
+    precondition(monitorResult(snapshot,snapshotArgs)?.summary(at:Date()).contains("Brightness: 30%") == true)
+    for (field,value) in [("read_only",1 as Any),("settings",["luminance":setting]),("monitor","pg")] {
+        var invalid=snapshot;invalid[field]=value;precondition(monitorResult(invalid,snapshotArgs)==nil)
+    }
+    for invalid in ["{broken","[]",String(repeating:" ",count:1_048_577)] {
+        precondition(MonitorResponse.decode(CommandResult(output:invalid,code:0),arguments:monitorArgs)==nil)
+    }
+    precondition(monitorResult(validMonitor,monitorArgs+["--monitor","pg"])==nil)
+    precondition(MonitorSetting(["value":1,"maximum":8,"percent":12]) != nil)
+    precondition(MonitorSetting(["value":3,"maximum":8,"percent":38]) != nil)
+
     let stateFolder=FileManager.default.temporaryDirectory.appendingPathComponent("display-state-test-"+UUID().uuidString)
     try! FileManager.default.createDirectory(at:stateFolder,withIntermediateDirectories:true)
     let statePath=stateFolder.appendingPathComponent("health.json")

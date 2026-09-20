@@ -23,7 +23,7 @@ local processes to verify timeout and output limits; it does not start the app U
 - Root Python modules: deployed controller, policy, recovery, and diagnostics; their flat layout
   matches the installed runtime. `display-auto.py` is the CLI; `install.py` is import-safe.
 - `native/menu/`: focused Swift sources for app wiring, command execution, presentation,
-  preset windows and self-tests. `main.swift` is the entry point; `MENU_SOURCES` in
+  typed monitor responses, preset windows and self-tests. `main.swift` is the entry point; `MENU_SOURCES` in
   `release_manifest.py` is shared by installation, preflight and verification.
 - Other `native/` files: Swift layout and Objective-C audio/rotation/mode helpers.
 - `tests/unit/`: isolated Python regressions. `tests/native/`: hardware-free native tests.
@@ -65,7 +65,8 @@ may target a newer OS than the development machine. Local preview bundles stay i
 
 Demo windows include a synthetic scenario selector (ready, stale, paused, away, preview,
 exhausted audio recovery, pending retry, unreadable presets) and a Minimum window action. These controls exist only in demo
-mode. Preview time is a static 20-second fixture and the retry example has a static eight-second
+mode. The monitor-response-error scenario makes Read brightness and volume retain a synthetic
+previous reading after a malformed response; it does not run a monitor command. Preview time is a static 20-second fixture and the retry example has a static eight-second
 delay for layout inspection; neither simulates controller deadlines. Commands stay blocked, including Keep/Revert. Use real opt-in tests
 for countdown/rollback behavior; the demo cannot prove hardware or persistence outcomes.
 

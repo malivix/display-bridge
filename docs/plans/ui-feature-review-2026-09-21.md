@@ -7,9 +7,10 @@ features must not be described as installed or physically qualified.
 
 ## Decision
 
-The next implementation is **validated monitor command results**: a control must never
+**Validated monitor command results are implemented in source**: a control must never
 label a missing or unexpected response as a confirmed value for a different monitor.
-Then complete the accessible preview workflow and guided independent setup. Existing
+Validation and remaining limits are recorded in [the implementation log](../log/monitor-result-validation.md).
+Next, complete the accessible preview workflow and guided independent setup. Existing
 handoff, audio recovery and rotation remain the core product.
 
 ## Review findings
@@ -39,7 +40,7 @@ window-scoped keyboard shortcuts; bounded process execution and recovery journal
 
 ## Implementation sequence and acceptance
 
-### 1. Trustworthy monitor result presentation — next
+### 1. Trustworthy monitor result presentation — implemented in source
 
 Add a small typed decoder in the menu command boundary, with explicit success, invalid
 response and command failure outcomes. Start with `monitor-settings`, `monitor-adjust`

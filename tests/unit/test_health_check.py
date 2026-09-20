@@ -35,6 +35,16 @@ class HealthChecks(unittest.TestCase):
         config['rotation']={'enabled':True,'baselines':{'90':{'screens':[config['baseline']['screens'][0],portrait]}}}
         metadata['displays'][1].update(portrait)
         self.assertEqual(mode_checks(config,{'pg':17,'benq':19},metadata)[1]['status'],'ok')
+    def test_pg_uses_orientation_specific_saved_size_too(self):
+        config,metadata=self.modes()
+        pg=dict(config['baseline']['screens'][0],width=1920,height=1080,pixelWidth=3840,pixelHeight=2160,modeID=80)
+        benq=dict(config['baseline']['screens'][1],width=853,height=1280,pixelWidth=1706,pixelHeight=2560,rotation=90)
+        config['rotation']={'enabled':True,'baselines':{'90':{'screens':[pg,benq]}}}
+        metadata['displays'][0].update(pg);metadata['displays'][1].update(benq)
+        self.assertTrue(all(row['status']=='ok' for row in mode_checks(config,{'pg':17,'benq':19},metadata)))
+        metadata['displays'].append(dict(metadata['displays'][1]))
+        self.assertEqual(mode_checks(config,{'pg':17,'benq':19},metadata)[0]['status'],'warning')
+
     def test_invalid_configuration_never_queries_monitors_or_changes_files(self):
         with tempfile.TemporaryDirectory() as temp:
             root=Path(temp);(root/'config.json').write_text('{bad')

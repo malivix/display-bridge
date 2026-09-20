@@ -6,6 +6,7 @@ import os
 import time
 from release_manifest import RUNTIME_MODULES, HELPER_HASH_FIELDS
 from persisted_state import validate_control,validate_recovery
+from display_snapshot import saved_layout
 
 
 def mode_checks(config,inputs,metadata):
@@ -21,10 +22,7 @@ def mode_checks(config,inputs,metadata):
         if len(matches)!=1:
             result.append({'name':label+' mode','status':'warning','detail':'Mode identity missing or ambiguous.','action':'Retry after the displays settle; do not substitute another monitor.'});continue
         row=matches[0]
-        baseline=config['baseline']
-        if role=='benq' and config.get('rotation',{}).get('enabled'):
-            angle=row.get('rotation')
-            baseline=config['rotation']['baselines'].get(str(int(angle))) if type(angle) in (int,float) and angle in (0,90) else None
+        baseline=saved_layout(config,rows)
         saved=next((s for s in baseline['screens'] if s['key']==config['keys'][role]),None) if baseline else None
         if not saved or any(row.get(k)!=saved.get(k) for k in ('width','height','pixelWidth','pixelHeight','rotation','modeID')):
             problems.append('Current resolution, orientation or mode differs from the saved profile')

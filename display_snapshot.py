@@ -27,6 +27,19 @@ def dimensions(row):
     return {k: row[k] for k in ('width', 'height', 'pixelWidth', 'pixelHeight')}
 
 
+def saved_layout(config, rows):
+    """Select the whole saved layout using this Mac's measured BenQ orientation."""
+    if not config.get('rotation', {}).get('enabled'):
+        return config['baseline']
+    matches=[row for row in rows if isinstance(row,dict) and row.get('key')==config['keys']['benq']]
+    if len(matches)!=1:
+        return None
+    angle=matches[0].get('rotation')
+    if type(angle) not in (int,float) or angle not in (0,90):
+        return None
+    return config['rotation'].get('baselines',{}).get(str(int(angle)))
+
+
 def report(config, inputs, first, second):
     before = rows_by_identity(first, config['keys'])
     after = rows_by_identity(second, config['keys'])
@@ -34,10 +47,7 @@ def report(config, inputs, first, second):
     for key in before:
         if any(before[key].get(k) != after[key].get(k) for k in FIELDS):
             raise ValueError('Display mode changed during inspection; refresh after switching settles')
-    baseline = config['baseline']
-    if config.get('rotation', {}).get('enabled'):
-        angle = after[config['keys']['benq']].get('rotation')
-        baseline = config['rotation'].get('baselines', {}).get(str(int(angle))) if type(angle) in (int,float) and angle in (0,90) else None
+    baseline = saved_layout(config,list(after.values()))
     result = []
     for role in ('pg', 'benq'):
         if inputs.get(role) != local[role]:

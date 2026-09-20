@@ -75,7 +75,10 @@ headset policy, keyboard focus through refresh, minimum window at Largest. No ne
 polling from UI refresh. Rollback replaces the menu only when command compatibility is
 preserved; no state migration or journal deletion.
 
-### 2. Accessible size comparison
+### 2. Accessible size comparison — comparison panel implemented
+
+[Implementation and validation](../log/accessible-size-comparison.md). Preset-management
+dialog accessibility and physical qualification remain open.
 
 Outcome: choose a readable size based on what changes, then Keep or Revert confidently.
 Use an adaptive comparison sheet with Current and Selected columns per monitor. Show

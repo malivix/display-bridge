@@ -150,3 +150,11 @@ Check health for unavailable state, Retry size restoration for a repairable prev
 or Repair audio after exhausted recovery when policy permits. Normal switching does
 not offer repeated repair. Actions recheck current status when clicked; if it changed,
 review the refreshed action before retrying. Manual audio preservation is not overridden.
+
+Preview size opens a resizable comparison window. Selecting a choice updates current
+and proposed logical dimensions, framebuffer dimensions and the estimated interface-size
+change for each monitor. The estimate compares that monitor with itself; it does not
+promise matching physical size across monitors or native pixel sharpness. The window's
+text, selector and buttons follow your interface size. Escape cancels without applying.
+Unavailable named presets include their orientation. The existing 20-second Keep/Revert
+transaction still controls any preview; opening or selecting a choice changes nothing.

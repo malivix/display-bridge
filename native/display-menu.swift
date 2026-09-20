@@ -565,6 +565,15 @@ if CommandLine.arguments.contains("--self-test") {
     precondition(recoveryAction(repairHealth,[:],103)==nil)
     precondition(recoveryAction(["updated_at":100.0,"status":"ready"],[:],103)==nil)
     print("PASS contextual recovery actions, stale clicks, busy state and changed preview tokens")
+    let comparisonCurrent:[String:Any]=["modes":["pg":["width":1920,"height":1080,"pixelWidth":3840,"pixelHeight":2160]]]
+    let comparisonLarger:[String:Any]=["modes":["pg":["width":1536,"height":864,"pixelWidth":3072,"pixelHeight":1728]]]
+    precondition(sizeComparison(comparisonCurrent,comparisonLarger).contains("25% larger"))
+    precondition(sizeComparison(comparisonLarger,comparisonCurrent).contains("20% smaller"))
+    precondition(sizeComparison(comparisonCurrent,comparisonCurrent).contains("unchanged"))
+    precondition(sizeComparison([:],comparisonLarger).contains("estimate unavailable"))
+    precondition(sizeComparison(comparisonCurrent,["modes":["pg":["width":Double.infinity]]]).contains("estimate unavailable"))
+    precondition(sizeComparison(comparisonCurrent,comparisonLarger).contains("3840 × 2160 → 3072 × 1728"))
+    print("PASS size comparison direction, missing dimensions and framebuffer labels")
     let trackedRequest:[String:Any]=["id":"example","action":"resume"]
     precondition(commandSummary([:],["command_request":trackedRequest]).contains("not yet reported"))
     let trackedHealth:[String:Any]=["updated_at":Date().timeIntervalSince1970,"command_result":["request":trackedRequest,"state":"deferred","detail":"Waiting for input"]]
@@ -637,6 +646,90 @@ if CommandLine.arguments.contains("--test-notification") {
     }
     dispatchMain()
 }
+func sizeComparison(_ current:[String:Any],_ selected:[String:Any])->String {
+    let before=current["modes"] as? [String:[String:Any]] ?? [:]
+    let after=selected["modes"] as? [String:[String:Any]] ?? [:]
+    func dimension(_ mode:[String:Any],_ key:String)->Double? {
+        guard let number=mode[key] as? NSNumber,CFGetTypeID(number) != CFBooleanGetTypeID() else{return nil}
+        let value=number.doubleValue
+        guard value.isFinite,value>0,value<=32768,value.rounded()==value else{return nil}
+        return value
+    }
+    func dimensions(_ mode:[String:Any],_ a:String,_ b:String)->String {
+        guard let width=dimension(mode,a),let height=dimension(mode,b) else{return "unavailable"}
+        return "\(Int(width)) × \(Int(height))"
+    }
+    var lines=[selected["label"] as? String ?? "Selected size"]
+    for (role,label) in [("pg","PG42UQ"),("benq","BenQ RD280UG")] {
+        let old=before[role] ?? [:],new=after[role] ?? [:]
+        var section="\(label)\nCurrent: \(dimensions(old,"width","height"))\nSelected: \(dimensions(new,"width","height"))"
+        if let oldWidth=dimension(old,"width"),let newWidth=dimension(new,"width") {
+            let delta=(oldWidth/newWidth-1)*100
+            section += abs(delta)<0.5 ? "\nInterface size: unchanged":"\nInterface size: about \(String(format:"%.0f",abs(delta)))% \(delta>0 ? "larger":"smaller")"
+        } else {section += "\nInterface size estimate unavailable"}
+        section += "\nFramebuffer: \(dimensions(old,"pixelWidth","pixelHeight")) → \(dimensions(new,"pixelWidth","pixelHeight"))"
+        lines.append(section)
+    }
+    lines.append("Size estimates compare each monitor with itself in the same orientation. They do not prove equal physical size across monitors or native pixel sharpness.")
+    return lines.joined(separator:"\n\n")
+}
+
+final class SizeChooser: NSObject, NSWindowDelegate {
+    let choices:[[String:Any]]
+    let current:[String:Any]
+    let notes:String
+    let window:NSPanel
+    let selector=NSPopUpButton()
+    let comparison=NSTextView()
+    var result = -1
+    var selectedIndex:Int {selector.indexOfSelectedItem}
+    init(choices:[[String:Any]],current:[String:Any],notes:String,orientation:String,fontSize:CGFloat,canSave:Bool,canRemove:Bool) {
+        self.choices=choices;self.current=current;self.notes=notes
+        window=NSPanel(contentRect:NSRect(x:0,y:0,width:660,height:720),styleMask:[.titled,.closable,.resizable],backing:.buffered,defer:false)
+        super.init()
+        window.title="Compare display sizes";window.minSize=NSSize(width:600,height:620);window.delegate=self
+        window.isReleasedWhenClosed=false
+        let stack=NSStackView();stack.orientation = .vertical;stack.alignment = .leading;stack.spacing=12
+        stack.translatesAutoresizingMaskIntoConstraints=false;window.contentView!.addSubview(stack)
+        NSLayoutConstraint.activate([stack.leadingAnchor.constraint(equalTo:window.contentView!.leadingAnchor,constant:20),stack.trailingAnchor.constraint(equalTo:window.contentView!.trailingAnchor,constant:-20),stack.topAnchor.constraint(equalTo:window.contentView!.topAnchor,constant:20),stack.bottomAnchor.constraint(equalTo:window.contentView!.bottomAnchor,constant:-20)])
+        let intro=NSTextField(wrappingLabelWithString:"\(orientation) · Fixed 120 Hz · 2× HiDPI · HDR off\nPreview reverts after 20 seconds unless you Keep it.")
+        intro.font=NSFont.systemFont(ofSize:fontSize);stack.addArrangedSubview(intro)
+        intro.widthAnchor.constraint(equalTo:stack.widthAnchor).isActive=true
+        selector.font=intro.font;selector.setAccessibilityLabel("Size choice to preview")
+        for choice in choices {selector.addItem(withTitle:choice["label"] as? String ?? "Size")}
+        selector.target=self;selector.action=#selector(selectionChanged(_:));stack.addArrangedSubview(selector)
+        selector.widthAnchor.constraint(equalTo:stack.widthAnchor).isActive=true
+        let scroll=NSScrollView();scroll.hasVerticalScroller=true;scroll.autohidesScrollers=true
+        comparison.isEditable=false;comparison.isSelectable=true;comparison.font=intro.font
+        comparison.isVerticallyResizable=true;comparison.isHorizontallyResizable=false;comparison.textContainer?.widthTracksTextView=true
+        comparison.autoresizingMask=[.width];comparison.setAccessibilityLabel("Current and selected size comparison")
+        scroll.documentView=comparison;stack.addArrangedSubview(scroll)
+        scroll.widthAnchor.constraint(equalTo:stack.widthAnchor).isActive=true
+        scroll.heightAnchor.constraint(greaterThanOrEqualToConstant:140).isActive=true
+        for (index,title) in ["Preview selected size","Save current as preset…","Remove a saved preset…","Cancel"].enumerated() {
+            let button=NSButton(title:title,target:self,action:#selector(finish(_:)));button.tag=index;button.font=intro.font
+            button.setContentHuggingPriority(.required,for:.vertical)
+            if index==0 {button.keyEquivalent="\r"}
+            if index==1 {button.isEnabled=canSave}
+            if index==2 {button.isEnabled=canRemove}
+            if index==3 {button.keyEquivalent="\u{1b}"}
+            stack.addArrangedSubview(button)
+        }
+        window.initialFirstResponder=selector;selectionChanged(selector)
+    }
+    @objc func selectionChanged(_ sender:NSPopUpButton) {
+        guard selectedIndex>=0,selectedIndex<choices.count else{return}
+        comparison.string=sizeComparison(current,choices[selectedIndex])+(notes.isEmpty ? "":"\n\n"+notes)
+        comparison.scrollRangeToVisible(NSRange(location:0,length:0))
+    }
+    @objc func finish(_ sender:NSButton) {result=sender.tag;NSApp.stopModal()}
+    func windowShouldClose(_ sender:NSWindow)->Bool {result = -1;NSApp.stopModal();return true}
+    func run()->Int {
+        window.center();window.makeKeyAndOrderFront(nil);NSApp.runModal(for:window);window.orderOut(nil)
+        return result
+    }
+}
+
 final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotificationCenterDelegate {
     let root=FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".config/display-auto")
     let command=FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".local/bin/display-auto.sh")
@@ -1115,8 +1208,8 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
         }
         if args==["preset-save-prompt"] {savePresetPrompt();return}
         if demo && args==["preview-options"] {
-            let modes:[String:Any] = ["pg":["width":1920,"height":1080],"benq":["width":1920,"height":1280]]
-            var report:[String:Any] = ["rotation":0,"options":[["label":"Current size","size":"current","fingerprint":"demo","modes":modes]],
+            let modes:[String:Any] = ["pg":["width":1920,"height":1080,"pixelWidth":3840,"pixelHeight":2160],"benq":["width":1920,"height":1280,"pixelWidth":3840,"pixelHeight":2560]]
+            var report:[String:Any] = ["rotation":0,"options":[["label":"Current size","size":"current","fingerprint":"demo","modes":modes],["label":"Larger interface","size":"larger","fingerprint":"demo-larger","modes":["pg":["width":1536,"height":864,"pixelWidth":3072,"pixelHeight":1728],"benq":["width":1536,"height":1024,"pixelWidth":3072,"pixelHeight":2048]]]],
                 "presets":[["name":"Reading","rotation":0,"revision":"demo","available":true,"fingerprint":"demo","modes":modes],
                            ["name":"Reading","rotation":90,"revision":"demo","available":false,"reason":"Preset belongs to the other orientation"]]]
             if demoScenario=="presets-error" {report["presets"]=[];report["preset_error"]="Saved presets are unreadable. The original file was preserved. Ordinary size previews remain available."}
@@ -1231,38 +1324,21 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
             let name=preset["name"] as? String ?? "Unnamed"
             if preset["available"] as? Bool == true {
                 var option=preset;option["label"]="Preset: "+name;option["preset"]=name;choices.append(option)
-            } else {unavailable.append(name+": "+(preset["reason"] as? String ?? "Unavailable"))}
+            } else {unavailable.append(name+" — "+(preset["rotation"] as? Int == 90 ? "Portrait":"Landscape")+": "+(preset["reason"] as? String ?? "Unavailable"))}
         }
         guard !choices.isEmpty else {message("Size preview unavailable","No qualified choices are currently available.");return}
         NSApp.activate(ignoringOtherApps:true)
-        let alert=NSAlert();alert.messageText="Preview or save display size"
-        alert.informativeText="\(report["rotation"] as? Int == 90 ? "Portrait":"Landscape") · Fixed 120 Hz · 2× HiDPI · HDR off\nPreview reverts after 20 seconds unless you Keep it."
-        let selector=NSPopUpButton(frame:NSRect(x:0,y:260,width:520,height:36))
-        selector.font=NSFont.systemFont(ofSize:CGFloat([16,20,24][textSizeIndex()]));selector.setAccessibilityLabel("Size choice to preview")
-        var lines:[String]=[]
-        for option in choices {
-            let label=option["label"] as? String ?? "Size";selector.addItem(withTitle:label)
-            if let modes=option["modes"] as? [String:[String:Any]] {
-                let pg=modes["pg"] ?? [:],benq=modes["benq"] ?? [:]
-                lines.append("\(label)\nPG \(pg["width"] ?? "?") × \(pg["height"] ?? "?") · BenQ \(benq["width"] ?? "?") × \(benq["height"] ?? "?")")
-            }
-        }
-        if let error=presetError {lines.insert("Saved presets unavailable\n"+error,at:0)}
-        if !unavailable.isEmpty {lines.append("Unavailable presets\n"+unavailable.joined(separator:"\n"))}
-        let scroll=NSScrollView(frame:NSRect(x:0,y:0,width:520,height:248));scroll.hasVerticalScroller=true
-        let text=NSTextView(frame:scroll.bounds);text.isEditable=false;text.isSelectable=true;text.font=selector.font
-        text.isVerticallyResizable=true;text.isHorizontallyResizable=false;text.textContainer?.widthTracksTextView=true
-        text.string=lines.joined(separator:"\n\n");text.setAccessibilityLabel("Size comparison and preset availability");scroll.documentView=text
-        let content=NSView(frame:NSRect(x:0,y:0,width:520,height:300));content.addSubview(selector);content.addSubview(scroll);alert.accessoryView=content
-        alert.addButton(withTitle:"Preview selected size");alert.addButton(withTitle:"Save current as preset…").isEnabled = presetError == nil
         let presets=report["presets"] as? [[String:Any]] ?? []
-        alert.addButton(withTitle:"Remove a saved preset…").isEnabled = presetError == nil && !presets.isEmpty
-        alert.addButton(withTitle:"Cancel").keyEquivalent="\u{1b}"
-        let response=alert.runModal()
-        if response == .alertSecondButtonReturn,presetError == nil {savePresetPrompt();return}
-        if response == .alertThirdButtonReturn,presetError == nil {removePresetPrompt(presets);return}
-        let index=selector.indexOfSelectedItem
-        guard response == .alertFirstButtonReturn,index>=0,index<choices.count,let fingerprint=choices[index]["fingerprint"] as? String else {return}
+        let current=relative.first(where:{$0["size"] as? String == "current"}) ?? [:]
+        var notes:[String]=[]
+        if let error=presetError {notes.append("Saved presets unavailable\n"+error)}
+        if !unavailable.isEmpty {notes.append("Unavailable presets\n"+unavailable.joined(separator:"\n"))}
+        let chooser=SizeChooser(choices:choices,current:current,notes:notes.joined(separator:"\n\n"),orientation:report["rotation"] as? Int == 90 ? "Portrait":"Landscape",fontSize:CGFloat([16,20,24][textSizeIndex()]),canSave:presetError==nil,canRemove:presetError==nil && !presets.isEmpty)
+        let response=chooser.run()
+        if response==1,presetError==nil {savePresetPrompt();return}
+        if response==2,presetError==nil {removePresetPrompt(presets);return}
+        let index=chooser.selectedIndex
+        guard response==0,index>=0,index<choices.count,let fingerprint=choices[index]["fingerprint"] as? String else {return}
         if let preset=choices[index]["preset"] as? String {execute(["preview-start","--preset",preset,"--fingerprint",fingerprint])}
         else if let size=choices[index]["size"] as? String {execute(["preview-start","--size",size,"--fingerprint",fingerprint])}
     }

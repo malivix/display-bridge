@@ -22,7 +22,7 @@ int main(int argc,const char **argv){@autoreleasepool{
         CGDirectDisplayID displayID=ids[i];
         NSString *key=[NSString stringWithFormat:@"%u:%u:%u",CGDisplayVendorNumber(displayID),CGDisplayModelNumber(displayID),CGDisplaySerialNumber(displayID)];
         CGDisplayModeRef mode=CGDisplayCopyDisplayMode(displayID);
-        NSMutableDictionary *row=[NSMutableDictionary dictionaryWithDictionary:@{@"key":key,@"id":@(displayID)}];
+        NSMutableDictionary *row=[NSMutableDictionary dictionaryWithDictionary:@{@"key":key,@"id":@(displayID),@"mirrorSourceID":@(CGDisplayMirrorsDisplay(displayID))}];
         if(!mode){row[@"error"]=@"Current mode unavailable";[rows addObject:row];continue;}
         row[@"modeID"]=@(CGDisplayModeGetIODisplayModeID(mode));
         row[@"width"]=@(CGDisplayModeGetWidth(mode));row[@"height"]=@(CGDisplayModeGetHeight(mode));

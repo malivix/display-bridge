@@ -132,6 +132,9 @@ Show ownership, source/destination of mirroring, rotation and current/saved size
 with textual accessible equivalents. This improves understanding before considering a
 layout editor. Physical-size matching needs trusted dimensions or user calibration.
 Any later editing must reuse reversible transactions rather than direct CoreGraphics calls.
+An accessible text schematic now reports observed source/mirror relationships and rotation
+in the mode snapshot; see [validation](../log/layout-snapshot.md). Proportional placement
+and physical topology qualification remain open.
 
 ## Reliability work paired with delivery
 

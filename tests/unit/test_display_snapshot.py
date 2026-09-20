@@ -9,6 +9,27 @@ class DisplaySnapshot(unittest.TestCase):
         self.config = {'host':'A','keys':{'pg':'p','benq':'b'},'baseline':{'screens':copy.deepcopy(self.rows)}}
         self.metadata = {'displays':self.rows}
 
+    def test_logical_layout_is_observed_not_inferred_from_ownership(self):
+        self.assertEqual(self.inspect()['logical_layout']['state'],'unknown')
+        self.rows[0].update(id=1,mirrorSourceID=0)
+        self.rows[1].update(id=2,mirrorSourceID=0)
+        self.assertEqual(self.inspect()['logical_layout']['state'],'extended')
+        for sources,state in [((0,1),'pg-source'),((2,0),'benq-source'),((2,1),'unknown'),((1,0),'unknown'),((0,99),'unknown'),((0,True),'unknown')]:
+            for row,source in zip(self.rows,sources):row['mirrorSourceID']=source
+            layout=self.inspect({'pg':18,'benq':15})['logical_layout']
+            self.assertEqual(layout['state'],state)
+            self.assertEqual([r['owner'] for r in layout['monitors']],['B','B'])
+            self.assertNotIn('id',str(layout))
+        self.rows[0]['id']=2
+        self.assertEqual(self.inspect()['logical_layout']['state'],'unknown')
+
+    def test_topology_change_discards_snapshot(self):
+        self.rows[0].update(id=1,mirrorSourceID=0)
+        self.rows[1].update(id=2,mirrorSourceID=0)
+        for field in ('id','mirrorSourceID'):
+            changed=copy.deepcopy(self.metadata);changed['displays'][0][field]=9
+            with self.assertRaises(ValueError):self.inspect(second=changed)
+
     def test_rotation_profiles_validate_before_activation(self):
         from display_snapshot import validate_rotation,rotation_baseline
         cfg=copy.deepcopy(self.config)

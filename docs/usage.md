@@ -221,3 +221,9 @@ menu checks once at launch without accessing monitor hardware. After a coordinat
 update, recheck to enable newly supported controls. Unsupported brightness presets and
 named size-preset save/removal are disabled; ordinary size preview and recovery remain
 independent. This display is a snapshot, so command-time checks still run before use.
+
+Displays now includes a read-only logical-layout schematic in the refreshed snapshot.
+The arrow runs from desktop source to mirror on this Mac. Each monitor lists input
+ownership and macOS rotation, followed by current/saved size details. This is not a
+physical placement diagram or an inspection of the other Mac's desktop. Missing topology
+from an older helper reports unavailable; refresh after input or layout changes.

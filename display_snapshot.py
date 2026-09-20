@@ -2,7 +2,7 @@
 """Read-only, identity-scoped mode information for the user interface."""
 import math
 
-FIELDS = ('modeID', 'width', 'height', 'pixelWidth', 'pixelHeight', 'hz', 'rotation',
+FIELDS = ('id', 'mirrorSourceID', 'modeID', 'width', 'height', 'pixelWidth', 'pixelHeight', 'hz', 'rotation',
           'variableRefresh', 'proMotion', 'hdrPreferenceEnabled', 'metadataError', 'error')
 
 
@@ -88,6 +88,29 @@ def saved_layout(config, rows):
     return config['rotation'].get('baselines',{}).get(str(int(angle)))
 
 
+def logical_layout(config, inputs, rows):
+    """This Mac's observed logical connections, independent of physical input ownership."""
+    pair=[rows[config['keys'][role]] for role in ('pg','benq')]
+    ids=[row.get('id') for row in pair]
+    sources=[row.get('mirrorSourceID') for row in pair]
+    valid=all(type(value) is int and 0<value<2**32 for value in ids) and len(set(ids))==2
+    valid=valid and all(type(value) is int and 0<=value<2**32 for value in sources)
+    state='unknown'
+    if valid:
+        if sources==[0,0]:state='extended'
+        elif sources==[0,ids[0]]:state='pg-source'
+        elif sources==[ids[1],0]:state='benq-source'
+    monitors=[]
+    for role,row in zip(('pg','benq'),pair):
+        ports={'pg':{17:'A',18:'B'},'benq':{19:'A',15:'B'}}[role]
+        value=inputs.get(role)
+        owner=ports.get(value) if type(value) is int else None
+        angle=row.get('rotation')
+        rotation=angle if type(angle) in (int,float) and angle in (0,90,180,270) else None
+        monitors.append({'monitor':role,'owner':owner,'rotation':rotation})
+    return {'state':state,'monitors':monitors}
+
+
 def report(config, inputs, first, second):
     before = rows_by_identity(first, config['keys'])
     after = rows_by_identity(second, config['keys'])
@@ -118,4 +141,5 @@ def report(config, inputs, first, second):
                        'hdr_preference':row.get('hdrPreferenceEnabled') if metadata_ok and type(row.get('hdrPreferenceEnabled')) is bool else None,
                        'saved_mode_matches':None if not saved else all(row.get(k)==saved.get(k) for k in ('modeID','width','height','pixelWidth','pixelHeight','rotation'))})
     return {'read_only':True, 'inputs':dict(inputs), 'displays':result,
+            'logical_layout':logical_layout(config,inputs,after),
             'limits':'Snapshot only. Logical size and framebuffer size are distinct. HiDPI is not proof of native pixel sharpness. HDR preference is not a measurement of panel output.'}

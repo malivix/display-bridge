@@ -337,6 +337,26 @@ func statusSections(_ health:[String:Any],_ control:[String:Any])->[StatusSectio
         StatusSection(title:"Recovery",body:recoverySummary(health,control))
     ]
 }
+func layoutSummary(_ value:Any?)->String {
+    guard let layout=value as? [String:Any],let state=layout["state"] as? String,
+          let monitors=layout["monitors"] as? [[String:Any]],monitors.count==2,
+          monitors.compactMap({$0["monitor"] as? String}).sorted()==["benq","pg"] else {return "Logical layout unavailable. Refresh after updating both helper and menu."}
+    let relationships=["extended":"[PG42UQ]    [BenQ RD280UG]\nTwo independent desktops",
+        "pg-source":"[PG42UQ] → [BenQ RD280UG]\nPG is the source; BenQ mirrors PG on this Mac",
+        "benq-source":"[BenQ RD280UG] → [PG42UQ]\nBenQ is the source; PG mirrors BenQ on this Mac"]
+    var lines=["Logical layout on this Mac — snapshot",relationships[state] ?? "Mirroring relationship not confirmed"]
+    for role in ["pg","benq"] {
+        let row=monitors.first{$0["monitor"] as? String==role}!
+        let owner=row["owner"] as? String
+        let ownership=["A","B"].contains(owner ?? "") ? "Showing Mac \(owner!)":"Input ownership unknown"
+        var rotation="Rotation not reported"
+        if let angle=row["rotation"] as? NSNumber,CFGetTypeID(angle) != CFBooleanGetTypeID(),[0.0,90,180,270].contains(angle.doubleValue) {rotation="macOS rotation \(angle.intValue)°"}
+        lines.append("\(role=="pg" ? "PG42UQ":"BenQ RD280UG"): \(ownership) · \(rotation)")
+    }
+    lines.append("Arrow means source to mirror, not cable direction or physical position. Another Mac's desktop is not inspected.")
+    return lines.joined(separator:"\n")
+}
+
 func displaySummary(_ json:String)->String {
     guard let data=json.data(using:.utf8),let report=(try? JSONSerialization.jsonObject(with:data)) as? [String:Any],
           report["read_only"] as? Bool == true,let rows=report["displays"] as? [[String:Any]] else{return "Display snapshot could not be read. Refresh after switching settles."}
@@ -344,6 +364,7 @@ func displaySummary(_ json:String)->String {
     if let stamp=report["observed_at"] as? Double,stamp.isFinite {
         lines.append("Observed: \(Date(timeIntervalSince1970:stamp).formatted(date:.abbreviated,time:.standard))")
     }
+    lines.append("\n"+layoutSummary(report["logical_layout"]))
     func size(_ value:Any?)->String {
         guard let mode=value as? [String:Any],let width=mode["width"] as? Int,let height=mode["height"] as? Int,
               let pixelsWide=mode["pixelWidth"] as? Int,let pixelsHigh=mode["pixelHeight"] as? Int else{return "Not available"}
@@ -713,6 +734,15 @@ if CommandLine.arguments.contains("--self-test") {
     precondition(automationPaused(["paused":true,"pause_until":200.0],100))
     precondition(!automationPaused(["paused":true,"pause_until":200.0],200))
     precondition(automationPaused(["paused":true],200))
+    let sampleLayout:[String:Any]=["state":"pg-source","monitors":[["monitor":"pg","owner":"A","rotation":0],["monitor":"benq","owner":"B","rotation":90]]]
+    precondition(layoutSummary(sampleLayout).contains("BenQ mirrors PG"))
+    precondition(layoutSummary(sampleLayout).contains("Showing Mac B"))
+    precondition(layoutSummary(nil).contains("unavailable"))
+    var unknownLayout=sampleLayout;unknownLayout["state"]="unexpected"
+    precondition(layoutSummary(unknownLayout).contains("not confirmed"))
+    unknownLayout["monitors"]=[["monitor":"pg"],["monitor":"pg"]]
+    precondition(layoutSummary(unknownLayout).contains("unavailable"))
+    print("PASS logical layout direction, remote ownership and unknown topology labels")
     precondition(displaySummary("invalid").contains("could not be read"))
     precondition(displaySummary("{\"read_only\":true,\"displays\":[{\"monitor\":\"pg\",\"available\":false,\"reason\":\"Away\"}]}").contains("Away"))
     precondition(healthSummary("{\"status\":\"ok\",\"checks\":[]}").contains("Read-only check: ok"))
@@ -1589,7 +1619,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
             return
         }
         if demo && args==["display-info"] {
-            modeText?.string=displaySummary(#"{"read_only":true,"displays":[{"monitor":"pg","available":true,"current":{"width":1920,"height":1080,"pixelWidth":3840,"pixelHeight":2160},"saved":{"width":1920,"height":1080,"pixelWidth":3840,"pixelHeight":2160},"hz":120,"hidpi":true,"fixed_refresh":true,"hdr_preference":false,"saved_mode_matches":true},{"monitor":"benq","available":false,"reason":"Synthetic example: monitor showing the other Mac"}],"limits":"Demo data only. No monitor was inspected or changed."}"#)
+            modeText?.string=displaySummary(#"{"read_only":true,"logical_layout":{"state":"pg-source","monitors":[{"monitor":"pg","owner":"A","rotation":0},{"monitor":"benq","owner":"B","rotation":90}]},"displays":[{"monitor":"pg","available":true,"current":{"width":1920,"height":1080,"pixelWidth":3840,"pixelHeight":2160},"saved":{"width":1920,"height":1080,"pixelWidth":3840,"pixelHeight":2160},"hz":120,"hidpi":true,"fixed_refresh":true,"hdr_preference":false,"saved_mode_matches":true},{"monitor":"benq","available":false,"reason":"Synthetic example: monitor showing the other Mac"}],"limits":"Demo data only. No monitor was inspected or changed."}"#)
             return
         }
         if demo {message("Hardware-free demo","This preview uses synthetic status. Monitor, audio, diagnostic and notification actions are disabled.");return}

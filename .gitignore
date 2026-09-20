@@ -1,0 +1,26 @@
+# Private machine state and historical material remain local.
+.local-only/
+evidence/
+__pycache__/
+*.py[cod]
+.DS_Store
+.env
+.env.*
+*.pem
+*.key
+*.p12
+*.pfx
+*.zip
+*.log
+*.jsonl
+*.dmg
+*.app/
+/display-layout
+/vendor/m1ddc/m1ddc
+/vendor/m1ddc/.objects/
+/vendor/m1ddc/library/
+/build/
+/dist/
+.coverage
+.claude/
+.codex/

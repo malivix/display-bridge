@@ -1,0 +1,14 @@
+#!/usr/bin/env python3
+"""Validate a commit-message file or subjects reachable in a supplied Git range."""
+import re
+import subprocess
+import sys
+from pathlib import Path
+
+PATTERN = re.compile(r'^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\([a-z0-9][a-z0-9._/-]*\))?!?: .+')
+if len(sys.argv) != 3 or sys.argv[1] not in ('--file', '--range'):
+    raise SystemExit('Usage: check-commit --file MESSAGE | --range REVISION')
+subjects = (Path(sys.argv[2]).read_text().splitlines()[:1] if sys.argv[1] == '--file'
+            else subprocess.check_output(['git', 'log', '--format=%s', sys.argv[2]], text=True).splitlines())
+if not subjects or any(not PATTERN.fullmatch(subject) for subject in subjects):
+    raise SystemExit('Use Conventional Commits: type(scope): imperative summary')

@@ -1,0 +1,65 @@
+#!/usr/bin/env python3
+"""Isolated checks; physical tests and installation are deliberately separate."""
+import argparse
+import ast
+import os
+from pathlib import Path
+import platform
+import shutil
+import subprocess
+import sys
+import tempfile
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def run(*args, **kwargs):
+    subprocess.run(list(args), cwd=ROOT, check=True, **kwargs)
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--native', action='store_true')
+    args = parser.parse_args()
+    for source in ROOT.glob('*.py'):
+        ast.parse(source.read_text(), filename=source.name)
+    for source in (ROOT/'scripts').iterdir():
+        if source.read_text().startswith('#!/usr/bin/env python3'):
+            ast.parse(source.read_text(), filename=str(source.relative_to(ROOT)))
+    with tempfile.TemporaryDirectory(prefix='display-bridge-test-home-') as test_home:
+        run(sys.executable, '-m', 'unittest', 'discover', '-p', 'test_*.py',
+            env=dict(os.environ, HOME=test_home))
+    run(str(ROOT/'scripts/public-check'))
+    if not args.native:
+        print('PASS isolated checks; native compilation and physical tests not run')
+        return
+    if platform.system() != 'Darwin' or platform.machine() != 'arm64':
+        raise SystemExit('--native requires an Apple-silicon macOS host')
+    sdk = subprocess.check_output(['xcrun', '--sdk', 'macosx', '--show-sdk-path'], text=True).strip()
+    with tempfile.TemporaryDirectory(prefix='display-bridge-verify-') as directory:
+        build = Path(directory)
+        for name in ('display-layout', 'display-menu'):
+            run('swiftc', '-sdk', sdk, '-target', 'arm64-apple-macos13.0', '-O',
+                str(ROOT/(name+'.swift')), '-o', str(build/name))
+        for name, frameworks in (
+            ('display-audio', ('Foundation', 'CoreAudio')),
+            ('display-rotate', ('Foundation', 'CoreGraphics')),
+            ('display-mode-info', ('Foundation', 'CoreGraphics')),
+        ):
+            links = [part for framework in frameworks for part in ('-framework', framework)]
+            run('clang', '-isysroot', sdk, '-fobjc-arc', '-Wall', '-Wextra',
+                *links, str(ROOT/(name+'.m')), '-o', str(build/name))
+        ddc = build/'m1ddc'
+        shutil.copytree(ROOT/'vendor/m1ddc', ddc,
+                        ignore=shutil.ignore_patterns('.objects', 'm1ddc', 'library', '.git'))
+        run('make', '-C', str(ddc), 'binary', 'CC=/usr/bin/clang', env=dict(os.environ, SDKROOT=sdk))
+        run('clang', '-isysroot', sdk, '-fmodules', '-I', str(ddc/'headers'),
+            str(ROOT/'test_ddc.m'), str(ddc/'sources/i2c.m'), '-framework', 'Foundation',
+            '-framework', 'CoreDisplay', '-o', str(build/'test-ddc'))
+        run(str(build/'test-ddc'))
+        run(str(build/'display-menu'), '--self-test')
+    print('PASS native builds and isolated self-tests; physical tests not run')
+
+
+if __name__ == '__main__':
+    main()

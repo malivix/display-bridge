@@ -6,6 +6,7 @@
 - Share an isolated test command with the import-safe installer.
 - Bound menu commands by deadline and output size.
 - Show command progress, status age, and last-known labels; open status from failure notifications.
+- Add read-only display-mode snapshots with measured/saved comparisons and ownership checks.
 - Group status into Overview and Details, expose Pause directly, and hide inactive preview decisions.
 - Add a resizable status window, three text sizes, and a hardware-free UI demo.
 - Deduplicate failure alerts per incident and ignore stale notification repair actions.

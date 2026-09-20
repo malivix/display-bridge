@@ -81,7 +81,7 @@ func detailPrefix(_ health:[String:Any],_ control:[String:Any],_ now:Double=Date
     statusFresh(health,now) && health["status"] as? String == "ready" && !automationPaused(control,now) ? "":"Last known · "
 }
 func operationTitle(_ action:String)->String {
-    let names=["doctor":"Checking health","diagnostics":"Saving diagnostics","history":"Reading transition history",
+    let names=["display-info":"Inspecting display modes","doctor":"Checking health","diagnostics":"Saving diagnostics","history":"Reading transition history",
         "ddc-history":"Reading monitor history","preview-options":"Inspecting size choices","monitor-settings":"Reading monitor settings",
         "monitor-adjust":"Adjusting monitor settings","preview-start":"Requesting size preview","preview-keep":"Requesting saved size",
         "preview-revert":"Requesting size restoration","preview-repair":"Requesting restoration retry",
@@ -195,6 +195,33 @@ func statusSections(_ health:[String:Any],_ control:[String:Any])->[StatusSectio
         StatusSection(title:"Audio",body:prefix+(selected["name"] as? String ?? "Output not reported")+"\n"+routing+"\nSpeaker selection does not prove audible sound."),
         StatusSection(title:"Recovery",body:prefix+recoveryText)
     ]
+}
+func displaySummary(_ json:String)->String {
+    guard let data=json.data(using:.utf8),let report=(try? JSONSerialization.jsonObject(with:data)) as? [String:Any],
+          report["read_only"] as? Bool == true,let rows=report["displays"] as? [[String:Any]] else{return "Display snapshot could not be read. Refresh after switching settles."}
+    var lines=["Read-only mode snapshot — use Refresh after changing inputs or display settings."]
+    if let stamp=report["observed_at"] as? Double,stamp.isFinite {
+        lines.append("Observed: \(Date(timeIntervalSince1970:stamp).formatted(date:.abbreviated,time:.standard))")
+    }
+    func size(_ value:Any?)->String {
+        guard let mode=value as? [String:Any],let width=mode["width"] as? Int,let height=mode["height"] as? Int,
+              let pixelsWide=mode["pixelWidth"] as? Int,let pixelsHigh=mode["pixelHeight"] as? Int else{return "Not available"}
+        return "\(width) × \(height) logical; \(pixelsWide) × \(pixelsHigh) framebuffer"
+    }
+    for row in rows {
+        lines.append("\n"+(row["monitor"] as? String == "pg" ? "PG42UQ":"BenQ RD280UG"))
+        guard row["available"] as? Bool == true else {lines.append(row["reason"] as? String ?? "Not available");continue}
+        lines.append("Measured: \(size(row["current"]))")
+        lines.append("Saved: \(size(row["saved"]))")
+        let hz=(row["hz"] as? Double).map{String(format:"%.2f Hz",$0)} ?? "Unknown refresh rate"
+        let fixed=(row["fixed_refresh"] as? Bool).map{$0 ? "fixed":"variable or adaptive"} ?? "refresh type unknown"
+        lines.append("\(hz) · \(fixed)")
+        lines.append("2× HiDPI: \((row["hidpi"] as? Bool).map{$0 ? "yes":"no"} ?? "unknown")")
+        lines.append("HDR preference: \((row["hdr_preference"] as? Bool).map{$0 ? "on":"off"} ?? "unknown")")
+        lines.append("Saved mode match: \((row["saved_mode_matches"] as? Bool).map{$0 ? "yes":"no"} ?? "not available")")
+    }
+    lines.append("\n"+(report["limits"] as? String ?? "Readback does not establish optical quality."))
+    return lines.joined(separator:"\n")
 }
 func healthSummary(_ json:String)->String {
     guard let data=json.data(using:.utf8),let report=(try? JSONSerialization.jsonObject(with:data)) as? [String:Any],let checks=report["checks"] as? [[String:Any]] else{return "Health report could not be read. Save a diagnostic report for details."}
@@ -326,6 +353,8 @@ if CommandLine.arguments.contains("--self-test") {
     precondition(automationPaused(["paused":true,"pause_until":200.0],100))
     precondition(!automationPaused(["paused":true,"pause_until":200.0],200))
     precondition(automationPaused(["paused":true],200))
+    precondition(displaySummary("invalid").contains("could not be read"))
+    precondition(displaySummary("{\"read_only\":true,\"displays\":[{\"monitor\":\"pg\",\"available\":false,\"reason\":\"Away\"}]}").contains("Away"))
     precondition(healthSummary("{\"status\":\"ok\",\"checks\":[]}").contains("Read-only check: ok"))
     precondition(ddcSummary("invalid").contains("could not be read"))
     precondition(ddcSummary("{\"episodes\":[],\"ddc_interruptions\":0}").contains("No interruptions recorded"))
@@ -383,6 +412,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
     var timer:Timer?
     var panel:NSWindow?
     var panelText:NSTextView?
+    var modeText:NSTextView?
     var overviewFields:[(NSTextField,NSTextField)]=[]
     var pauseButton:NSButton?
     var displayTextIndex:Int?
@@ -428,6 +458,20 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
             }
             overview.view=overviewScroll;tabs.addTabViewItem(overview)
             let details=NSTabViewItem(identifier:"details");details.label="Details";details.view=scroll;tabs.addTabViewItem(details)
+            let displays=NSTabViewItem(identifier:"displays");displays.label="Displays"
+            let modeView=NSView(frame:NSRect(x:0,y:0,width:580,height:400))
+            let modeScroll=NSScrollView(frame:NSRect(x:12,y:52,width:556,height:336))
+            modeScroll.hasVerticalScroller=true;modeScroll.autoresizingMask=[.width,.height]
+            let modeContent=NSTextView(frame:modeScroll.bounds)
+            modeContent.isEditable=false;modeContent.isSelectable=true;modeContent.drawsBackground=false
+            modeContent.isVerticallyResizable=true;modeContent.isHorizontallyResizable=false;modeContent.textContainer?.widthTracksTextView=true
+            modeContent.string="Refresh to inspect the enrolled displays. This reads current modes without changing settings. Values are a snapshot, not continuous monitoring."
+            modeContent.setAccessibilityLabel("Measured display modes")
+            modeScroll.documentView=modeContent;modeView.addSubview(modeScroll);modeText=modeContent
+            let refreshModes=NSButton(title:"Refresh display details",target:self,action:#selector(panelAction(_:)))
+            refreshModes.identifier=NSUserInterfaceItemIdentifier("display-info");refreshModes.frame=NSRect(x:12,y:12,width:220,height:32)
+            modeView.addSubview(refreshModes);panelActions.append(refreshModes)
+            displays.view=modeView;tabs.addTabViewItem(displays)
             window.contentView?.addSubview(tabs)
             applyTextSize(textSizeIndex())
             let label=NSTextField(labelWithString:"Text size")
@@ -456,6 +500,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
     func applyTextSize(_ index:Int) {
         let size=CGFloat([16,20,24][index])
         panelText?.font=NSFont.systemFont(ofSize:size)
+        modeText?.font=NSFont.systemFont(ofSize:size)
         for (heading,body) in overviewFields {heading.font=NSFont.boldSystemFont(ofSize:size);body.font=NSFont.systemFont(ofSize:size)}
     }
     @objc func togglePause(_ sender:NSButton) {execute([automationPaused(read("control.json")) ? "resume":"pause"])}
@@ -637,6 +682,10 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
     func execute(_ args:[String]) {
         if args==["panel"]{showPanel();return}
         if args==["quit"]{NSApp.terminate(nil);return}
+        if demo && args==["display-info"] {
+            modeText?.string=displaySummary(#"{"read_only":true,"displays":[{"monitor":"pg","available":true,"current":{"width":1920,"height":1080,"pixelWidth":3840,"pixelHeight":2160},"saved":{"width":1920,"height":1080,"pixelWidth":3840,"pixelHeight":2160},"hz":120,"hidpi":true,"fixed_refresh":true,"hdr_preference":false,"saved_mode_matches":true},{"monitor":"benq","available":false,"reason":"Synthetic example: monitor showing the other Mac"}],"limits":"Demo data only. No monitor was inspected or changed."}"#)
+            return
+        }
         if demo {message("Hardware-free demo","This preview uses synthetic status. Monitor, audio, diagnostic and notification actions are disabled.");return}
         if args==["notifications"] {
             UNUserNotificationCenter.current().requestAuthorization(options:[.alert]){granted,error in
@@ -660,6 +709,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
                 if code != 0 {self.message("Action could not complete",result)}
                 else if args.first=="diagnostics" {NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath:result.trimmingCharacters(in:.whitespacesAndNewlines))])}
                 else if args.first=="history" {self.message("Transition timing summary",timingSummary(result))}
+                else if args.first=="display-info" {self.modeText?.string=displaySummary(result)}
                 else if args.first=="doctor" {self.message("System health",healthSummary(result))}
                 else if args.first=="ddc-history" {self.message("Monitor communication",ddcSummary(result))}
                 else if args.first=="preview-options" {self.chooseSize(result)}

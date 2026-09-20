@@ -4,6 +4,9 @@ Change monitor inputs normally. The menu reports the current profile, speaker, r
 and recovery state. Physical switching and DDC delays vary; it is not an instantaneous switch.
 
 Overview groups monitor ownership, audio, and recovery. Details keeps the full report.
+Displays → Refresh display details reads current and saved modes without changing settings.
+It labels logical/framebuffer size, refresh, HiDPI, and HDR preference separately. Refresh
+after input or display changes; these are timestamped snapshots, not continuous monitoring.
 Pause/Resume is available directly in the window; More controls opens the advanced menu.
 Keep/Revert buttons appear only during a size preview.
 

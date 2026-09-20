@@ -640,7 +640,7 @@ def main():
 
 def run_main(resources):
     parser = argparse.ArgumentParser()
-    parser.add_argument('action', choices=['capture', 'check', 'run', 'once', 'test-layouts', 'restore','status','pause','pause-for','resume','repair-audio','audio-manual','audio-auto','speaker','diagnostics','history','hidpi','doctor','ddc-history','monitor-adjust','monitor-settings','preview-options','preview-start','preview-keep','preview-revert','preview-repair','rotation-auto','rotation-manual'])
+    parser.add_argument('action', choices=['capture', 'check', 'run', 'once', 'test-layouts', 'restore','status','pause','pause-for','resume','repair-audio','audio-manual','audio-auto','speaker','diagnostics','history','hidpi','doctor','display-info','ddc-history','monitor-adjust','monitor-settings','preview-options','preview-start','preview-keep','preview-revert','preview-repair','rotation-auto','rotation-manual'])
     parser.add_argument('--host', choices=['A', 'B'])
     parser.add_argument('--m1ddc', default=str(Path.home() / '.local/bin/display-ddc'))
     parser.add_argument('--minutes',type=int,default=30)
@@ -685,6 +685,20 @@ def run_main(resources):
             args_monitor=args.monitor
             result=inspect(config,args.monitor,request) if args.action=='monitor-settings' else adjust(config,args.monitor,args.feature,args.step,request)
         print(json.dumps(result));return
+    if args.action=='display-info':
+        from display_snapshot import report
+        with (ROOT/'maintenance.lock').open('a') as maintenance:
+            try:fcntl.flock(maintenance,fcntl.LOCK_SH|fcntl.LOCK_NB)
+            except BlockingIOError:raise RuntimeError('Installation in progress; try again later')
+            config=startup_config()
+            inputs=read_inputs(config)
+            first=json.loads(command([MODE_INFO,'status']))
+            second=json.loads(command([MODE_INFO,'status']))
+            if read_inputs(config)!=inputs:raise RuntimeError('Inputs changed during inspection; refresh after switching settles')
+            snapshot=report(config,inputs,first,second)
+            snapshot['observed_at']=time.time()
+            print(json.dumps(snapshot))
+        return
     if args.action=='hidpi':
         from hidpi_report import analyze
         print(json.dumps(analyze(json.loads(command([HELPER,'modes']))),indent=2));return

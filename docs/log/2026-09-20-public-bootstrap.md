@@ -43,3 +43,8 @@ An additional isolated publication test proved that private staged bytes are rej
 when the working-tree file has already been cleaned. Personal agent override files and
 runtime-state filenames are now explicitly blocked as well. Initial history scanning passed;
 GitHub secret scanning, push protection, and private vulnerability reporting are enabled.
+
+Hosted verification [run 35524216899](https://github.com/malivix/display-bridge/actions/runs/35524216899)
+passed all 161 Python tests, native builds/self-tests, staged/history scans, and commit-subject
+checks. Its checkout-runtime deprecation warning prompted an update to the SHA-pinned
+checkout v7.0.1 action (Node 24). No deployed controller changes were made.

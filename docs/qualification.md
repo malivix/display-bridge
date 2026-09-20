@@ -15,14 +15,15 @@ physical outcomes, and unresolved cases without publishing serials, UUIDs, local
 
 ## Known engineering limits
 
-- Manual rollback covers controller files and configuration, not the companion menu bundle.
-  Keep compatible menu/controller versions together; cross-version rollback needs explicit review.
+- New snapshots include controller files, configuration, the companion menu bundle, and its
+  LaunchAgent. Older snapshots without companion coverage are rejected. Coordinated rollback
+  has isolated tests; physical rollback qualification is still pending.
 - Installer backups recover caught failures, but installation is not a power-loss-atomic
   transaction across configuration, LaunchAgents, and the menu bundle.
-- The menu's child-process reader has no overall watchdog beyond controller command timeouts;
-  an OS-level stalled child can leave actions busy until the menu app is restarted.
+- Menu commands have a 45-second deadline and a 1 MiB output cap. Terminating the CLI does
+  not cancel work already queued in the daemon; inspect status before retrying.
 - Read/validate/write ownership checks narrow hardware races but cannot atomically lock a
   physical input switch made on another computer.
 
 These do not establish a production-ready release. They remain explicit follow-up work;
-this initial publication is source for a hardware-specific experimental controller.
+this repository remains a hardware-specific experimental controller.

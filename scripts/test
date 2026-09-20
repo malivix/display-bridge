@@ -1,0 +1,36 @@
+#!/usr/bin/env python3
+"""Run syntax and unit checks with disposable machine state; no hardware or Git required."""
+
+import ast
+import os
+from pathlib import Path
+import subprocess
+import sys
+import tempfile
+
+ROOT = Path(__file__).resolve().parents[1]
+
+for source in [*ROOT.glob("*.py"), *(ROOT / "tests").rglob("*.py")]:
+    ast.parse(source.read_text(), filename=str(source.relative_to(ROOT)))
+for source in (ROOT / "scripts").iterdir():
+    if source.is_file() and source.read_text().startswith("#!/usr/bin/env python3"):
+        ast.parse(source.read_text(), filename=str(source.relative_to(ROOT)))
+with tempfile.TemporaryDirectory(prefix="display-bridge-test-home-") as test_home:
+    environment = dict(
+        os.environ, HOME=test_home, PYTHONPATH=str(ROOT), PYTHONDONTWRITEBYTECODE="1"
+    )
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "unittest",
+            "discover",
+            "-s",
+            str(ROOT / "tests/unit"),
+            "-p",
+            "test_*.py",
+        ],
+        cwd=ROOT,
+        env=environment,
+    )
+raise SystemExit(result.returncode)

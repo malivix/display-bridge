@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MIT
 """Install the same local controller on either Mac; captures machine-local modes."""
+
 from pathlib import Path
 import datetime
 import hashlib
@@ -14,199 +15,472 @@ import tempfile
 import time
 import fcntl
 from deployment import atomic_link, snapshot, restore, require_service_namespace
-from release_manifest import RUNTIME_MODULES, INSTALLED_FILES, HELPER_HASH_FIELDS
+from release_manifest import (
+    RUNTIME_MODULES,
+    INSTALLED_FILES,
+    HELPER_HASH_FIELDS,
+    VERSION,
+)
+
 
 def run(args, **kwargs):
     kwargs.setdefault("timeout", 120)
     return subprocess.run(args, **kwargs)
 
-if len(sys.argv) not in (2,3) or sys.argv[1] not in ('A', 'B') or (len(sys.argv)==3 and sys.argv[2] not in ('--capture-fixed-120','--capture-rotation')):
-    sys.exit('Usage: python3 install.py A|B [--capture-fixed-120|--capture-rotation]')
-role = sys.argv[1]
-package = Path(__file__).resolve().parent
-home = Path.home()
-python = str(Path(sys.executable).resolve())
-label = 'io.github.display-bridge'
-service = f'gui/{os.getuid()}/{label}'
-plist = home / 'Library/LaunchAgents' / (label + '.plist')
-root = home / '.config/display-auto'
-bin_dir = home / '.local/bin'
-require_service_namespace(home, label)
-root.mkdir(mode=0o700, parents=True, exist_ok=True)
-root.chmod(0o700)
-bin_dir.mkdir(parents=True, exist_ok=True)
-plist.parent.mkdir(parents=True, exist_ok=True)
-(home / 'Library/Logs').mkdir(parents=True, exist_ok=True)
-install_lock = (root/'install.lock').open('a')
-try:
-    fcntl.flock(install_lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-except BlockingIOError:
-    sys.exit('Another installation is already running')
-from preview_service import unresolved
-if unresolved(root):raise RuntimeError('Finish scaling preview recovery before installing')
-sdk = run(['/usr/bin/xcrun','--sdk','macosx','--show-sdk-path'], capture_output=True, text=True, check=True).stdout.strip()
-build_env = dict(os.environ, SDKROOT=sdk)
-m1ddc = bin_dir / 'display-ddc'
-run([python, str(package / 'test_controller.py')], check=True)
-run([python, str(package / 'test_audio_policy.py')], check=True)
-run([python, str(package / 'test_recovery.py')], check=True)
-run([python, str(package / 'test_deployment.py')], check=True)
-run([python,str(package/'test_features.py')],check=True)
-run([python,str(package/'test_hidpi.py')],check=True)
-run([python,'-m','unittest','test_health_check','test_state_safety','test_ddc_log_report','test_monitor_controls','test_menu_deployment','test_preview_service','test_preview_hardware','test_preview_runner','test_scaling_preview','test_scaling_choices','test_scaling_proposal'],cwd=package,check=True)
-with tempfile.TemporaryDirectory(prefix='display-auto-build-') as temp:
-    built = Path(temp) / 'display-layout'
-    run(['/usr/bin/swiftc', '-sdk', sdk, '-target','arm64-apple-macos13.0','-O', str(package/'display-layout.swift'), '-o', str(built)], check=True)
-    audio_built = Path(temp) / 'display-audio'
-    run(['/usr/bin/clang','-isysroot',sdk,'-fobjc-arc','-Wall','-Wextra',
-         '-framework','Foundation','-framework','CoreAudio',str(package/'display-audio.m'),'-o',str(audio_built)],check=True)
-    rotate_built=Path(temp)/'display-rotate'
-    run(['/usr/bin/clang','-isysroot',sdk,'-target','arm64-apple-macos13.0','-fobjc-arc','-Wall','-Wextra','-Werror','-framework','Foundation','-framework','CoreGraphics',str(package/'display-rotate.m'),'-o',str(rotate_built)],check=True)
-    mode_info_built=Path(temp)/'display-mode-info'
-    run(['/usr/bin/clang','-isysroot',sdk,'-target','arm64-apple-macos13.0','-fobjc-arc','-Wall','-Wextra','-Werror','-framework','Foundation','-framework','CoreGraphics',str(package/'display-mode-info.m'),'-o',str(mode_info_built)],check=True)
-    ddc_source = Path(temp) / 'm1ddc'
-    shutil.copytree(package/'vendor/m1ddc', ddc_source,
-                    ignore=shutil.ignore_patterns('.objects', 'm1ddc', 'library', '.git'))
-    run(['/usr/bin/make','-C',str(ddc_source),'binary','CC=/usr/bin/clang'],check=True,env=build_env)
-    test_ddc = Path(temp) / 'test-ddc'
-    run(['/usr/bin/clang','-isysroot',sdk,'-fmodules','-I',str(ddc_source/'headers'),
-                    str(package/'test_ddc.m'),str(ddc_source/'sources/i2c.m'),
-                    '-framework','Foundation','-framework','CoreDisplay','-o',str(test_ddc)],check=True)
-    run([str(test_ddc)],check=True)
-    stamp = datetime.datetime.now().strftime('%Y%m%d-%H%M%S-%f')
-    backup = root / 'backups' / stamp
-    files = [bin_dir/name for name in (*INSTALLED_FILES, 'display-auto.sh')]
-    files += [root/name for name in ('config.json', 'baseline.json', 'manifest.json')]
-    files.append(plist)
-    current = root/'current'
-    snapshot(files,backup,current)
-    release=root/'releases'/('2.10.1-'+stamp)
-    release.mkdir(parents=True)
-    for name in RUNTIME_MODULES:
-        shutil.copy2(package/name,release/name)
-    shutil.copy2(built,release/'display-layout')
-    shutil.copy2(audio_built,release/'display-audio')
-    shutil.copy2(rotate_built,release/'display-rotate')
-    shutil.copy2(mode_info_built,release/'display-mode-info')
-    shutil.copy2(ddc_source/'m1ddc',release/'display-ddc')
-    for runtime_file in release.iterdir():
-        runtime_file.chmod(0o555 if os.access(runtime_file,os.X_OK) else 0o444)
-    child_env=dict(os.environ,DISPLAY_AUTO_INSTALLER_PID=str(os.getpid()))
-    maintenance=(root/'maintenance.lock').open('a')
-    running = run(['launchctl','print',service],capture_output=True).returncode == 0
-    if running:
-        run(['launchctl','bootout',service],check=True)
-    controller_lock = (root/'controller.lock').open('a')
-    activated=False
+
+def main(argv=None):
+    import argparse
+    import platform
+
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("host", choices=("A", "B"))
+    capture = parser.add_mutually_exclusive_group()
+    capture.add_argument("--capture-fixed-120", action="store_true")
+    capture.add_argument("--capture-rotation", action="store_true")
+    args = parser.parse_args(argv)
+    if platform.system() != "Darwin" or platform.machine() != "arm64":
+        parser.error("Installation requires an Apple-silicon Mac")
+    role = args.host
+    package = Path(__file__).resolve().parent
+    home = Path.home()
+    python = str(Path(sys.executable).resolve())
+    label = "io.github.display-bridge"
+    service = f"gui/{os.getuid()}/{label}"
+    plist = home / "Library/LaunchAgents" / (label + ".plist")
+    root = home / ".config/display-auto"
+    bin_dir = home / ".local/bin"
+    require_service_namespace(home, label)
+    root.mkdir(mode=0o700, parents=True, exist_ok=True)
+    root.chmod(0o700)
+    bin_dir.mkdir(parents=True, exist_ok=True)
+    plist.parent.mkdir(parents=True, exist_ok=True)
+    (home / "Library/Logs").mkdir(parents=True, exist_ok=True)
+    install_lock = (root / "install.lock").open("a")
     try:
-        stop_deadline = time.monotonic() + 8
-        while True:
-            try:
-                fcntl.flock(maintenance, fcntl.LOCK_EX | fcntl.LOCK_NB)
-                fcntl.flock(controller_lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-                break
-            except BlockingIOError:
-                if time.monotonic() >= stop_deadline:
-                    raise RuntimeError('Previous controller has not stopped; no new files installed')
-                time.sleep(.05)
-        activated=True
-        atomic_link(release,current)
-        for name in INSTALLED_FILES:
-            atomic_link(current/name,bin_dir/name)
-        # A simple wrapper preserves the familiar entry point without shell eval.
-        import shlex
-        (bin_dir/'display-auto.sh').write_text('#!/bin/zsh\nif (( $# == 0 )); then set -- run; fi\nexec '+shlex.quote(python)+' "$HOME/.local/bin/display-auto.py" "$@"\n')
-        (bin_dir/'display-auto.sh').chmod(0o755)
-        fcntl.flock(controller_lock, fcntl.LOCK_UN)
-        previous = json.loads((root/'config.json').read_text()) if (root/'config.json').exists() else None
-        if previous and previous.get('host') == role and previous.get('version','').startswith('2.'):
-            previous['version'] = '2.10.1'
-            previous['m1ddc'] = str(m1ddc)
-            if 'ddc_identifiers' not in previous:
-                import importlib.util
-                identity_spec=importlib.util.spec_from_file_location('identity_controller',package/'display-auto.py')
-                identity_controller=importlib.util.module_from_spec(identity_spec);identity_spec.loader.exec_module(identity_controller)
-                previous['ddc_identifiers']=identity_controller.capture_identifiers(m1ddc)
-            if '--capture-fixed-120' in sys.argv or '--capture-rotation' in sys.argv:
-                screens=json.loads(run([str(bin_dir/'display-layout'),'status'],capture_output=True,text=True,check=True).stdout)['screens']
-                if len(screens)!=2 or set(x['key'] for x in screens)!=set(previous['keys'].values()) or any(x.get('mirrorOf') or abs(x['hz']-120)>.2 for x in screens):
-                    raise RuntimeError('Select fixed 120 Hz on both local extended displays before capture')
-                previous['baseline']={'screens':[dict(x,strictMode=True) for x in screens]}
-                angle=next(s['rotation'] for s in screens if s['key']==previous['keys']['benq'])
-                if previous.get('rotation') or '--capture-rotation' in sys.argv:
-                    value=run([str(m1ddc),'display',previous['ddc_identifiers']['benq'],'get','orientation'],check=True,capture_output=True,text=True).stdout.strip()
-                    if {'1':0,'2':90}.get(value)!=angle:raise RuntimeError('Physical sensor and macOS rotation must agree at 0 or 90 degrees')
-                    rotation=previous.setdefault('rotation',{'sensor_map':{'1':0,'2':90},'baselines':{}})
-                    rotation['baselines'][str(int(angle))]=previous['baseline']
-                    rotation['enabled']=set(rotation['baselines'])=={'0','90'}
-            if 'audio' not in previous:
-                import importlib.util
-                sys.path.insert(0, str(package))
-                module_spec = importlib.util.spec_from_file_location('display_controller',package/'display-auto.py')
-                controller = importlib.util.module_from_spec(module_spec)
-                module_spec.loader.exec_module(controller)
-                previous['audio'] = controller.capture_audio()
-            if 'refresh_on_transition' not in previous['audio']:
-                enabled = previous['audio'].pop('refresh_pg_on_transition', True)
-                previous['audio']['refresh_on_transition'] = ['pg','benq'] if enabled else []
-            (root/'config.json').write_text(json.dumps(previous,indent=2)+'\n')
-            (root/'baseline.json').write_text(json.dumps(previous['baseline'],indent=2)+'\n')
-            print('Preserved existing display baseline; checking current profile.')
-            run([python,str(bin_dir/'display-auto.py'),'once'],check=True,timeout=20,env=child_env)
-        else:
-            run([python,str(bin_dir/'display-auto.py'),'capture','--host',role,'--m1ddc',str(m1ddc)],check=True,env=child_env)
-            run([python,str(bin_dir/'display-auto.py'),'test-layouts'],check=True,env=child_env)
-        spec={'Label':label,'ProgramArguments':[python,str(bin_dir/'display-auto.py'),'run'],
-              'RunAtLoad':True,'KeepAlive':True,'ThrottleInterval':10,'ProcessType':'Background',
-              'StandardOutPath':str(home/'Library/Logs/display-auto-v2-launch.log'),
-              'StandardErrorPath':str(home/'Library/Logs/display-auto-v2-launch-error.log')}
-        plist.write_bytes(plistlib.dumps(spec))
-        source_files = [p for pattern in ('*.py', '*.swift', '*.m') for p in package.glob(pattern)]
-        source_files += [p for p in (package/'vendor/m1ddc').rglob('*') if p.is_file() and
-                         (p.suffix in ('.m','.h') or p.name in ('Makefile','LICENSE','LOCAL-CHANGES.md'))]
-        hashes={str(p.relative_to(package)):hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(source_files)}
-        manifest={'version':'2.10.1','host':role,'source_sha256':hashes,'python':python,
-                  'ddc_version':'m1ddc-04d9497+read-fix2'}
-        manifest.update({field:hashlib.sha256((bin_dir/name).read_bytes()).hexdigest()
-                         for name,field in HELPER_HASH_FIELDS.items()})
-        (root/'manifest.json').write_text(json.dumps(manifest,indent=2)+'\n')
-        shutil.copy2(root/'manifest.json',release/'manifest.json')
-        fcntl.flock(maintenance,fcntl.LOCK_UN)
-        launched_at = time.time()
-        run(['launchctl','bootstrap',f'gui/{os.getuid()}',str(plist)],check=True,timeout=10)
-        deadline = time.monotonic() + 20
-        while True:
-            try:
-                health = json.loads((root/'health.json').read_text())
-                service_state = run(['launchctl','print',service],capture_output=True,text=True,timeout=5)
-                import re
-                pid = re.search(r'\bpid = (\d+)', service_state.stdout)
-                if (health['updated_at'] >= launched_at and health['version'] == '2.10.1'
-                    and health['host'] == role and health['status'] == 'ready'
-                    and pid and int(pid.group(1)) == health['pid']):
+        fcntl.flock(install_lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        sys.exit("Another installation is already running")
+    from preview_service import unresolved
+
+    if unresolved(root):
+        raise RuntimeError("Finish scaling preview recovery before installing")
+    sdk = run(
+        ["/usr/bin/xcrun", "--sdk", "macosx", "--show-sdk-path"],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+    build_env = dict(os.environ, SDKROOT=sdk)
+    m1ddc = bin_dir / "display-ddc"
+    run([python, str(package / "scripts/test")], check=True)
+    with tempfile.TemporaryDirectory(prefix="display-auto-build-") as temp:
+        built = Path(temp) / "display-layout"
+        run(
+            [
+                "/usr/bin/swiftc",
+                "-sdk",
+                sdk,
+                "-target",
+                "arm64-apple-macos13.0",
+                "-O",
+                str(package / "native/display-layout.swift"),
+                "-o",
+                str(built),
+            ],
+            check=True,
+        )
+        audio_built = Path(temp) / "display-audio"
+        run(
+            [
+                "/usr/bin/clang",
+                "-isysroot",
+                sdk,
+                "-fobjc-arc",
+                "-Wall",
+                "-Wextra",
+                "-framework",
+                "Foundation",
+                "-framework",
+                "CoreAudio",
+                str(package / "native/display-audio.m"),
+                "-o",
+                str(audio_built),
+            ],
+            check=True,
+        )
+        rotate_built = Path(temp) / "display-rotate"
+        run(
+            [
+                "/usr/bin/clang",
+                "-isysroot",
+                sdk,
+                "-target",
+                "arm64-apple-macos13.0",
+                "-fobjc-arc",
+                "-Wall",
+                "-Wextra",
+                "-Werror",
+                "-framework",
+                "Foundation",
+                "-framework",
+                "CoreGraphics",
+                str(package / "native/display-rotate.m"),
+                "-o",
+                str(rotate_built),
+            ],
+            check=True,
+        )
+        mode_info_built = Path(temp) / "display-mode-info"
+        run(
+            [
+                "/usr/bin/clang",
+                "-isysroot",
+                sdk,
+                "-target",
+                "arm64-apple-macos13.0",
+                "-fobjc-arc",
+                "-Wall",
+                "-Wextra",
+                "-Werror",
+                "-framework",
+                "Foundation",
+                "-framework",
+                "CoreGraphics",
+                str(package / "native/display-mode-info.m"),
+                "-o",
+                str(mode_info_built),
+            ],
+            check=True,
+        )
+        ddc_source = Path(temp) / "m1ddc"
+        shutil.copytree(
+            package / "vendor/m1ddc",
+            ddc_source,
+            ignore=shutil.ignore_patterns(".objects", "m1ddc", "library", ".git"),
+        )
+        run(
+            ["/usr/bin/make", "-C", str(ddc_source), "binary", "CC=/usr/bin/clang"],
+            check=True,
+            env=build_env,
+        )
+        test_ddc = Path(temp) / "test-ddc"
+        run(
+            [
+                "/usr/bin/clang",
+                "-isysroot",
+                sdk,
+                "-fmodules",
+                "-I",
+                str(ddc_source / "headers"),
+                str(package / "tests/native/test_ddc.m"),
+                str(ddc_source / "sources/i2c.m"),
+                "-framework",
+                "Foundation",
+                "-framework",
+                "CoreDisplay",
+                "-o",
+                str(test_ddc),
+            ],
+            check=True,
+        )
+        run([str(test_ddc)], check=True)
+        stamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S-%f")
+        backup = root / "backups" / stamp
+        files = [bin_dir / name for name in (*INSTALLED_FILES, "display-auto.sh")]
+        files += [
+            root / name for name in ("config.json", "baseline.json", "manifest.json")
+        ]
+        files += [
+            plist,
+            home / "Applications/Display Auto.app",
+            home / "Library/LaunchAgents/io.github.display-bridge.menu.plist",
+        ]
+        current = root / "current"
+        snapshot(files, backup, current)
+        release = root / "releases" / (VERSION + "-" + stamp)
+        release.mkdir(parents=True)
+        for name in RUNTIME_MODULES:
+            shutil.copy2(package / name, release / name)
+        shutil.copy2(built, release / "display-layout")
+        shutil.copy2(audio_built, release / "display-audio")
+        shutil.copy2(rotate_built, release / "display-rotate")
+        shutil.copy2(mode_info_built, release / "display-mode-info")
+        shutil.copy2(ddc_source / "m1ddc", release / "display-ddc")
+        for runtime_file in release.iterdir():
+            runtime_file.chmod(0o555 if os.access(runtime_file, os.X_OK) else 0o444)
+        child_env = dict(os.environ, DISPLAY_AUTO_INSTALLER_PID=str(os.getpid()))
+        maintenance = (root / "maintenance.lock").open("a")
+        running = (
+            run(["launchctl", "print", service], capture_output=True).returncode == 0
+        )
+        if running:
+            run(["launchctl", "bootout", service], check=True)
+        controller_lock = (root / "controller.lock").open("a")
+        activated = False
+        try:
+            stop_deadline = time.monotonic() + 8
+            while True:
+                try:
+                    fcntl.flock(maintenance, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    fcntl.flock(controller_lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
                     break
-            except (OSError, ValueError, KeyError):
-                pass
-            if time.monotonic() >= deadline:
-                raise RuntimeError('Service did not become ready within 20 seconds')
-            time.sleep(.25)
-        # Keep companion failures inside the controller rollback boundary.
-        from setup_menu import install_menu
-        install_menu(package)
-    except BaseException:
-        fcntl.flock(controller_lock, fcntl.LOCK_UN)
-        run(['launchctl','bootout',service],capture_output=True)
-        if activated:
-            from rollback import lock_bounded
-            lock_bounded(maintenance);lock_bounded(controller_lock)
-            journal=root/'audio-refresh.json'
-            if journal.exists():
-                run([str(release/'display-audio'),'recover',str(journal)],check=True,timeout=6)
-            restore(backup)
-            fcntl.flock(controller_lock,fcntl.LOCK_UN)
-        fcntl.flock(maintenance,fcntl.LOCK_UN)
-        if running: run(['launchctl','bootstrap',f'gui/{os.getuid()}',str(plist)])
-        print(f'Installation failed; prior files restored from {backup}',file=sys.stderr)
-        raise
-print(f'Installed shared v2.10.1 for Mac {role}. Backup: {backup}')
-print(f'Check: {python} {bin_dir}/display-auto.py check')
+                except BlockingIOError:
+                    if time.monotonic() >= stop_deadline:
+                        raise RuntimeError(
+                            "Previous controller has not stopped; no new files installed"
+                        )
+                    time.sleep(0.05)
+            activated = True
+            atomic_link(release, current)
+            for name in INSTALLED_FILES:
+                atomic_link(current / name, bin_dir / name)
+            # A simple wrapper preserves the familiar entry point without shell eval.
+            import shlex
+
+            (bin_dir / "display-auto.sh").write_text(
+                "#!/bin/zsh\nif (( $# == 0 )); then set -- run; fi\nexec "
+                + shlex.quote(python)
+                + ' "$HOME/.local/bin/display-auto.py" "$@"\n'
+            )
+            (bin_dir / "display-auto.sh").chmod(0o755)
+            fcntl.flock(controller_lock, fcntl.LOCK_UN)
+            previous = (
+                json.loads((root / "config.json").read_text())
+                if (root / "config.json").exists()
+                else None
+            )
+            if (
+                previous
+                and previous.get("host") == role
+                and previous.get("version", "").startswith("2.")
+            ):
+                previous["version"] = VERSION
+                previous["m1ddc"] = str(m1ddc)
+                if "ddc_identifiers" not in previous:
+                    import importlib.util
+
+                    identity_spec = importlib.util.spec_from_file_location(
+                        "identity_controller", package / "display-auto.py"
+                    )
+                    identity_controller = importlib.util.module_from_spec(identity_spec)
+                    identity_spec.loader.exec_module(identity_controller)
+                    previous["ddc_identifiers"] = (
+                        identity_controller.capture_identifiers(m1ddc)
+                    )
+                if args.capture_fixed_120 or args.capture_rotation:
+                    screens = json.loads(
+                        run(
+                            [str(bin_dir / "display-layout"), "status"],
+                            capture_output=True,
+                            text=True,
+                            check=True,
+                        ).stdout
+                    )["screens"]
+                    if (
+                        len(screens) != 2
+                        or set(x["key"] for x in screens)
+                        != set(previous["keys"].values())
+                        or any(
+                            x.get("mirrorOf") or abs(x["hz"] - 120) > 0.2
+                            for x in screens
+                        )
+                    ):
+                        raise RuntimeError(
+                            "Select fixed 120 Hz on both local extended displays before capture"
+                        )
+                    previous["baseline"] = {
+                        "screens": [dict(x, strictMode=True) for x in screens]
+                    }
+                    angle = next(
+                        s["rotation"]
+                        for s in screens
+                        if s["key"] == previous["keys"]["benq"]
+                    )
+                    if previous.get("rotation") or args.capture_rotation:
+                        value = run(
+                            [
+                                str(m1ddc),
+                                "display",
+                                previous["ddc_identifiers"]["benq"],
+                                "get",
+                                "orientation",
+                            ],
+                            check=True,
+                            capture_output=True,
+                            text=True,
+                        ).stdout.strip()
+                        if {"1": 0, "2": 90}.get(value) != angle:
+                            raise RuntimeError(
+                                "Physical sensor and macOS rotation must agree at 0 or 90 degrees"
+                            )
+                        rotation = previous.setdefault(
+                            "rotation",
+                            {"sensor_map": {"1": 0, "2": 90}, "baselines": {}},
+                        )
+                        rotation["baselines"][str(int(angle))] = previous["baseline"]
+                        rotation["enabled"] = set(rotation["baselines"]) == {"0", "90"}
+                if "audio" not in previous:
+                    import importlib.util
+
+                    sys.path.insert(0, str(package))
+                    module_spec = importlib.util.spec_from_file_location(
+                        "display_controller", package / "display-auto.py"
+                    )
+                    controller = importlib.util.module_from_spec(module_spec)
+                    module_spec.loader.exec_module(controller)
+                    previous["audio"] = controller.capture_audio()
+                if "refresh_on_transition" not in previous["audio"]:
+                    enabled = previous["audio"].pop("refresh_pg_on_transition", True)
+                    previous["audio"]["refresh_on_transition"] = (
+                        ["pg", "benq"] if enabled else []
+                    )
+                (root / "config.json").write_text(json.dumps(previous, indent=2) + "\n")
+                (root / "baseline.json").write_text(
+                    json.dumps(previous["baseline"], indent=2) + "\n"
+                )
+                print("Preserved existing display baseline; checking current profile.")
+                run(
+                    [python, str(bin_dir / "display-auto.py"), "once"],
+                    check=True,
+                    timeout=20,
+                    env=child_env,
+                )
+            else:
+                run(
+                    [
+                        python,
+                        str(bin_dir / "display-auto.py"),
+                        "capture",
+                        "--host",
+                        role,
+                        "--m1ddc",
+                        str(m1ddc),
+                    ],
+                    check=True,
+                    env=child_env,
+                )
+                run(
+                    [python, str(bin_dir / "display-auto.py"), "test-layouts"],
+                    check=True,
+                    env=child_env,
+                )
+            spec = {
+                "Label": label,
+                "ProgramArguments": [python, str(bin_dir / "display-auto.py"), "run"],
+                "RunAtLoad": True,
+                "KeepAlive": True,
+                "ThrottleInterval": 10,
+                "ProcessType": "Background",
+                "StandardOutPath": str(
+                    home / "Library/Logs/display-auto-v2-launch.log"
+                ),
+                "StandardErrorPath": str(
+                    home / "Library/Logs/display-auto-v2-launch-error.log"
+                ),
+            }
+            plist.write_bytes(plistlib.dumps(spec))
+            source_files = list(package.glob("*.py"))
+            source_files += [
+                p
+                for directory in ("native", "tests")
+                for p in (package / directory).rglob("*")
+                if p.suffix in (".py", ".swift", ".m")
+            ]
+            source_files.append(package / "scripts/test")
+            source_files += [
+                p
+                for p in (package / "vendor/m1ddc").rglob("*")
+                if p.is_file()
+                and (
+                    p.suffix in (".m", ".h")
+                    or p.name in ("Makefile", "LICENSE", "LOCAL-CHANGES.md")
+                )
+            ]
+            hashes = {
+                str(p.relative_to(package)): hashlib.sha256(p.read_bytes()).hexdigest()
+                for p in sorted(source_files)
+            }
+            manifest = {
+                "version": VERSION,
+                "host": role,
+                "source_sha256": hashes,
+                "python": python,
+                "ddc_version": "m1ddc-04d9497+read-fix2",
+            }
+            manifest.update(
+                {
+                    field: hashlib.sha256((bin_dir / name).read_bytes()).hexdigest()
+                    for name, field in HELPER_HASH_FIELDS.items()
+                }
+            )
+            (root / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
+            shutil.copy2(root / "manifest.json", release / "manifest.json")
+            fcntl.flock(maintenance, fcntl.LOCK_UN)
+            launched_at = time.time()
+            run(
+                ["launchctl", "bootstrap", f"gui/{os.getuid()}", str(plist)],
+                check=True,
+                timeout=10,
+            )
+            deadline = time.monotonic() + 20
+            while True:
+                try:
+                    health = json.loads((root / "health.json").read_text())
+                    service_state = run(
+                        ["launchctl", "print", service],
+                        capture_output=True,
+                        text=True,
+                        timeout=5,
+                    )
+                    import re
+
+                    pid = re.search(r"\bpid = (\d+)", service_state.stdout)
+                    if (
+                        health["updated_at"] >= launched_at
+                        and health["version"] == VERSION
+                        and health["host"] == role
+                        and health["status"] == "ready"
+                        and pid
+                        and int(pid.group(1)) == health["pid"]
+                    ):
+                        break
+                except (OSError, ValueError, KeyError):
+                    pass
+                if time.monotonic() >= deadline:
+                    raise RuntimeError("Service did not become ready within 20 seconds")
+                time.sleep(0.25)
+            # Keep companion failures inside the controller rollback boundary.
+            from setup_menu import install_menu
+
+            install_menu(package)
+        except BaseException:
+            fcntl.flock(controller_lock, fcntl.LOCK_UN)
+            run(["launchctl", "bootout", service], capture_output=True)
+            if activated:
+                from rollback import lock_bounded
+
+                lock_bounded(maintenance)
+                lock_bounded(controller_lock)
+                journal = root / "audio-refresh.json"
+                if journal.exists():
+                    run(
+                        [str(release / "display-audio"), "recover", str(journal)],
+                        check=True,
+                        timeout=6,
+                    )
+                restore(backup)
+                fcntl.flock(controller_lock, fcntl.LOCK_UN)
+            fcntl.flock(maintenance, fcntl.LOCK_UN)
+            if running:
+                run(["launchctl", "bootstrap", f"gui/{os.getuid()}", str(plist)])
+            print(
+                f"Installation failed; prior files restored from {backup}",
+                file=sys.stderr,
+            )
+            raise
+    print(f"Installed Display Bridge v{VERSION} for Mac {role}. Backup: {backup}")
+    print(f"Check: {python} {bin_dir}/display-auto.py check")
+
+
+if __name__ == "__main__":
+    main()

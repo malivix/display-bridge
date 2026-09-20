@@ -22,7 +22,7 @@ def record(root,event):
 from recovery_state import Recovery
 from persisted_state import StateFileError,read_state,validate_control
 
-VERSION = '2.10.1'
+from release_manifest import VERSION
 ROOT = Path.home() / '.config/display-auto'
 CONFIG = ROOT / 'config.json'
 BASELINE = ROOT / 'baseline.json'

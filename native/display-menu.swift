@@ -1,6 +1,66 @@
 // SPDX-License-Identifier: MIT
 import AppKit
 import UserNotifications
+import Darwin
+
+struct CommandResult {
+    let output: String
+    let code: Int32
+}
+
+func runMenuCommand(_ executable:URL,_ arguments:[String],timeout:Double=45,outputLimit:Int=1_048_576)->CommandResult {
+    guard timeout.isFinite && timeout>0 && outputLimit>0 else {
+        return CommandResult(output:"Invalid command limits",code:1)
+    }
+    let process=Process(),pipe=Pipe()
+    process.executableURL=executable;process.arguments=arguments
+    process.standardOutput=pipe;process.standardError=pipe
+    let descriptor=pipe.fileHandleForReading.fileDescriptor
+    defer {try? pipe.fileHandleForReading.close();try? pipe.fileHandleForWriting.close()}
+    let flags=fcntl(descriptor,F_GETFL)
+    guard flags>=0 && fcntl(descriptor,F_SETFL,flags|O_NONBLOCK)>=0 else {
+        return CommandResult(output:"Cannot prepare command output",code:1)
+    }
+    do {try process.run()} catch {return CommandResult(output:error.localizedDescription,code:1)}
+    try? pipe.fileHandleForWriting.close()
+    let deadline=ProcessInfo.processInfo.systemUptime+timeout
+    var output=Data(),buffer=[UInt8](repeating:0,count:65536)
+    var failure:CommandResult?
+    while true {
+        if ProcessInfo.processInfo.systemUptime>=deadline {
+            failure=CommandResult(output:"Command timed out. Check status before retrying; any queued controller work may still finish.",code:124)
+            break
+        }
+        let count=Darwin.read(descriptor,&buffer,buffer.count)
+        if count>0 {
+            if output.count+count>outputLimit {
+                failure=CommandResult(output:"Command output exceeded its limit. Check status before retrying.",code:125)
+                break
+            }
+            output.append(contentsOf:buffer.prefix(count))
+            continue
+        }
+        if count<0 && errno != EAGAIN && errno != EINTR {
+            failure=CommandResult(output:"Could not read command output",code:1)
+            break
+        }
+        if !process.isRunning && count==0 {break}
+        Thread.sleep(forTimeInterval:0.01)
+    }
+    if let failure=failure {
+        if process.isRunning {
+            process.terminate()
+            let grace=ProcessInfo.processInfo.systemUptime+0.25
+            while process.isRunning && ProcessInfo.processInfo.systemUptime<grace {
+                Thread.sleep(forTimeInterval:0.01)
+            }
+            if process.isRunning {kill(process.processIdentifier,SIGKILL)}
+        }
+        return failure
+    }
+    process.waitUntilExit()
+    return CommandResult(output:String(decoding:output,as:UTF8.self),code:process.terminationStatus)
+}
 
 func automationPaused(_ control:[String:Any],_ now:Double=Date().timeIntervalSince1970)->Bool {
     let until=control["pause_until"] as? Double ?? 0
@@ -107,6 +167,18 @@ func notificationDecision(_ state:String,_ fresh:Bool,_ sent:Bool)->String {
     return (state=="degraded" || state=="state-error" || state=="preview-needs-repair") && !sent ? "send":"none"
 }
 if CommandLine.arguments.contains("--self-test") {
+    let commandStarted=ProcessInfo.processInfo.systemUptime
+    let timed=runMenuCommand(URL(fileURLWithPath:"/bin/sleep"),["2"],timeout:0.1)
+    precondition(timed.code==124,"Menu command must stop at its deadline")
+    precondition(ProcessInfo.processInfo.systemUptime-commandStarted<1.5)
+    let echo=runMenuCommand(URL(fileURLWithPath:"/bin/echo"),["ready"])
+    precondition(echo.code==0 && echo.output=="ready\n")
+    let failed=runMenuCommand(URL(fileURLWithPath:"/usr/bin/false"),[])
+    precondition(failed.code != 0)
+    let noisy=runMenuCommand(URL(fileURLWithPath:"/usr/bin/yes"),[],outputLimit:1024)
+    precondition(noisy.code==125)
+    print("PASS menu command completion, failure, deadline, and output limit")
+
     precondition(previewRemaining(["updated_at":100.0,"preview":["state":"preview","remaining_seconds":20.0]],105)==15)
     precondition(previewRemaining(["updated_at":100.0,"preview":["state":"preview","remaining_seconds":20.0]],120)==0)
     let live:[String:Any]=["updated_at":100.0,"status":"ready","host":"A","inputs":["pg":17,"benq":15],"profile":"pg"]
@@ -328,9 +400,8 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
         }
         guard !busy else{return};busy=true
         DispatchQueue.global().async {
-            let p=Process(),pipe=Pipe();p.executableURL=self.command;p.arguments=args;p.standardOutput=pipe;p.standardError=pipe
-            var result="",code:Int32=1
-            do {try p.run();let data=pipe.fileHandleForReading.readDataToEndOfFile();p.waitUntilExit();result=String(decoding:data,as:UTF8.self);code=p.terminationStatus}catch{result=error.localizedDescription}
+            let response=runMenuCommand(self.command,args)
+            let result=response.output,code=response.code
             DispatchQueue.main.async {
                 self.busy=false
                 if code != 0 {self.message("Action could not complete",result)}

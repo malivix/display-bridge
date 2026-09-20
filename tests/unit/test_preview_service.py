@@ -45,6 +45,13 @@ class ServiceTests(unittest.TestCase):
         self.service.runner.clock=lambda:time.monotonic()+30
         self.assertEqual(self.service.step(),'reverted')
         self.assertEqual(len(list(self.root.glob('preview-request.rejected-*.json'))),1)
+    def test_huge_request_timestamp_cannot_block_preview_restoration(self):
+        self.start()
+        (self.root/'preview-request.json').write_text(json.dumps({'action':'keep','created_at':10**1000}))
+        self.service.runner.clock=lambda:time.monotonic()+30
+        self.assertEqual(self.service.step(),'reverted')
+        self.assertFalse(unresolved(self.root))
+
     def test_install_lock_rejects_requests(self):
         with (self.root/'install.lock').open('a') as lock:
             fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)

@@ -1,6 +1,16 @@
 # Changelog
 
-## Unreleased
+## 2.10.2 — unreleased
+
+- Separate native sources, unit tests, native tests, and physical tests.
+- Share an isolated test command with the import-safe installer.
+- Bound menu commands by deadline and output size.
+- Reject oversized request timestamps without blocking preview restoration.
+- Validate backup payloads before restoration and roll back controller/menu together.
+- Clarify installation, usage, troubleshooting, development, and qualification docs.
+- Centralize the controller/menu version and test Python compatibility in CI.
+
+## Public bootstrap — based on 2.10.1
 
 - Initialize Display Bridge as a public source repository from controller 2.10.1.
 - Add agent guidance, developer workflow, privacy checks, hooks, and CI.

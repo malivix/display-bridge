@@ -2,8 +2,9 @@
 
 Local macOS display and audio automation for a specifically enrolled monitor pair.
 Read [ARCHITECTURE.md](ARCHITECTURE.md) before changing controller boundaries.
-Read [docs/development.md](docs/development.md) for setup, verification, deployment,
-and changes to persisted state. Read [SECURITY.md](SECURITY.md) before publication,
+Read [docs/development.md](docs/development.md) for the source map and verification;
+read [docs/install.md](docs/install.md) for deployment
+and [docs/qualification.md](docs/qualification.md) for unresolved limits. Read [SECURITY.md](SECURITY.md) before publication,
 diagnostics, dependency changes, or handling machine state.
 
 ## Invariants

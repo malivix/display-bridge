@@ -1,47 +1,146 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MIT
-"""Restore an installer snapshot, then converge against current physical inputs."""
-import datetime,fcntl,json,os,subprocess,sys,time
+"""Restore a coordinated controller/menu snapshot and verify current physical inputs."""
+
+import datetime
+import fcntl
+import os
 from pathlib import Path
-from deployment import snapshot,restore
+import subprocess
+import sys
+import time
+from deployment import snapshot, restore, validate_snapshot
+from release_manifest import INSTALLED_FILES
+
 
 def lock_bounded(file):
-    deadline=time.monotonic()+8
+    deadline = time.monotonic() + 8
     while True:
-        try:fcntl.flock(file,fcntl.LOCK_EX|fcntl.LOCK_NB);return
-        except BlockingIOError:
-            if time.monotonic()>=deadline:raise RuntimeError('Controller has not stopped; rollback not applied')
-            time.sleep(.05)
-def run(args,**kwargs):return subprocess.run(args,timeout=25,**kwargs)
-def main():
-    root=Path.home()/'.config/display-auto'
-    if len(sys.argv)!=2:raise RuntimeError('Usage: python3 rollback.py BACKUP_TIMESTAMP')
-    backup=(root/'backups'/sys.argv[1]).resolve()
-    if backup.parent!=(root/'backups').resolve():raise RuntimeError('Use a timestamp from the local backups directory')
-    metadata=json.loads((backup/'metadata.json').read_text())
-    service=f'gui/{os.getuid()}/io.github.display-bridge';plist=Path.home()/'Library/LaunchAgents/io.github.display-bridge.plist'
-    with (root/'install.lock').open('a') as install,(root/'maintenance.lock').open('a') as maintenance,(root/'controller.lock').open('a') as controller:
-        fcntl.flock(install,fcntl.LOCK_EX|fcntl.LOCK_NB)
-        from preview_service import unresolved
-        if unresolved(root):raise RuntimeError('Finish scaling preview recovery before rollback')
-        running=run(['launchctl','print',service],capture_output=True).returncode==0
-        if running:run(['launchctl','bootout',service],check=True)
-        undo=None
         try:
-            lock_bounded(maintenance);lock_bounded(controller)
-            journal=root/'audio-refresh.json'
-            if journal.exists():run([str(Path.home()/'.local/bin/display-audio'),'recover',str(journal)],check=True)
-            undo=root/'backups'/('before-rollback-'+datetime.datetime.now().strftime('%Y%m%d-%H%M%S-%f'))
-            snapshot([Path(x['path']) for x in metadata['files']],undo,root/'current')
+            fcntl.flock(file, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            return
+        except BlockingIOError:
+            if time.monotonic() >= deadline:
+                raise RuntimeError("Controller has not stopped; rollback not applied")
+            time.sleep(0.05)
+
+
+def run(args, **kwargs):
+    return subprocess.run(args, timeout=25, **kwargs)
+
+
+def main(argv=None):
+    args = sys.argv[1:] if argv is None else argv
+    if len(args) != 1:
+        raise RuntimeError("Usage: python3 rollback.py BACKUP_TIMESTAMP")
+    home = Path.home()
+    root = home / ".config/display-auto"
+    backup = (root / "backups" / args[0]).resolve()
+    if backup.parent != (root / "backups").resolve():
+        raise RuntimeError("Use a timestamp from the local backups directory")
+    metadata = validate_snapshot(backup)
+    menu_agent = home / "Library/LaunchAgents/io.github.display-bridge.menu.plist"
+    menu_app = home / "Applications/Display Auto.app"
+    if not {str(menu_agent), str(menu_app)}.issubset(
+        item["path"] for item in metadata["files"]
+    ):
+        raise RuntimeError(
+            "Backup predates coordinated menu rollback; use a compatible installer instead"
+        )
+    agents = [home / "Library/LaunchAgents/io.github.display-bridge.plist", menu_agent]
+    allowed = {
+        home / ".local/bin" / name for name in (*INSTALLED_FILES, "display-auto.sh")
+    }
+    allowed.update(
+        root / name for name in ("config.json", "baseline.json", "manifest.json")
+    )
+    allowed.update([menu_app, *agents])
+    if Path(metadata["current"]) != root / "current" or any(
+        Path(item["path"]) not in allowed for item in metadata["files"]
+    ):
+        raise RuntimeError(
+            "Backup paths do not belong to this installation; nothing restored"
+        )
+    previous = metadata["previous_release"]
+    if previous is not None:
+        previous_path = Path(previous)
+        if not previous_path.is_absolute():
+            previous_path = root / previous_path
+        if previous_path.resolve().parent != (root / "releases").resolve():
+            raise RuntimeError(
+                "Backup release is outside this installation; nothing restored"
+            )
+    services = [(f"gui/{os.getuid()}/{path.stem}", path) for path in agents]
+    with (
+        (root / "install.lock").open("a") as install,
+        (root / "maintenance.lock").open("a") as maintenance,
+        (root / "controller.lock").open("a") as controller,
+    ):
+        fcntl.flock(install, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        from preview_service import unresolved
+
+        if unresolved(root):
+            raise RuntimeError("Finish scaling preview recovery before rollback")
+        running = [
+            (service, path)
+            for service, path in services
+            if run(["launchctl", "print", service], capture_output=True).returncode == 0
+        ]
+        stopped = []
+        undo = None
+        try:
+            for service, path in reversed(running):
+                run(["launchctl", "bootout", service], check=True)
+                stopped.insert(0, (service, path))
+            lock_bounded(maintenance)
+            lock_bounded(controller)
+            journal = root / "audio-refresh.json"
+            if journal.exists():
+                run(
+                    [str(home / ".local/bin/display-audio"), "recover", str(journal)],
+                    check=True,
+                )
+            candidate = (
+                root
+                / "backups"
+                / (
+                    "before-rollback-"
+                    + datetime.datetime.now().strftime("%Y%m%d-%H%M%S-%f")
+                )
+            )
+            snapshot(
+                [Path(item["path"]) for item in metadata["files"]],
+                candidate,
+                root / "current",
+            )
+            undo = candidate
             restore(backup)
-            fcntl.flock(controller,fcntl.LOCK_UN)
-            env=dict(os.environ,DISPLAY_AUTO_INSTALLER_PID=str(os.getpid()))
-            run([str(Path.home()/'.local/bin/display-auto.sh'),'once'],env=env,check=True)
+            fcntl.flock(controller, fcntl.LOCK_UN)
+            launcher = home / ".local/bin/display-auto.sh"
+            if launcher.exists():
+                run(
+                    [str(launcher), "once"],
+                    env=dict(os.environ, DISPLAY_AUTO_INSTALLER_PID=str(os.getpid())),
+                    check=True,
+                )
         except BaseException:
-            if undo:restore(undo)
+            if undo is not None:
+                lock_bounded(controller)
+                restore(undo)
             raise
         finally:
-            fcntl.flock(controller,fcntl.LOCK_UN);fcntl.flock(maintenance,fcntl.LOCK_UN)
-            if running:run(['launchctl','bootstrap',f'gui/{os.getuid()}',str(plist)],check=True)
-    print(f'Restored {backup.name}; current physical inputs were verified. Undo snapshot: {undo}')
-if __name__=='__main__':main()
+            fcntl.flock(controller, fcntl.LOCK_UN)
+            fcntl.flock(maintenance, fcntl.LOCK_UN)
+            for service, path in stopped:
+                if path.exists():
+                    run(
+                        ["launchctl", "bootstrap", f"gui/{os.getuid()}", str(path)],
+                        check=True,
+                    )
+    print(
+        f"Restored {backup.name}; controller and menu restored together. Undo snapshot: {undo}"
+    )
+
+
+if __name__ == "__main__":
+    main()

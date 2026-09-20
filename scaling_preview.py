@@ -8,19 +8,15 @@ import base64
 import copy
 import hashlib
 import json
-import math
 import os
 from pathlib import Path
 import tempfile
 import uuid
+from persisted_state import number as finite
 
 FILES={'config.json','baseline.json','rotation-active.json'}
 TERMINAL={'kept','reverted'}
 PHASES={'prepared','applying','preview','committing','restoring','restore-failed'}|TERMINAL
-
-
-def finite(value):
-    return type(value) in (int,float) and math.isfinite(value) and value>=0
 
 
 def keep_eligible(record,session,now,context,requested_at):

@@ -2,7 +2,7 @@ import importlib.util,json,os,tempfile,unittest
 from pathlib import Path
 from unittest.mock import patch
 from health_check import report,mode_checks
-spec=importlib.util.spec_from_file_location('controller_health',Path(__file__).with_name('display-auto.py'))
+spec=importlib.util.spec_from_file_location('controller_health',(Path(__file__).resolve().parents[2]/'display-auto.py'))
 c=importlib.util.module_from_spec(spec);spec.loader.exec_module(c)
 
 class HealthChecks(unittest.TestCase):

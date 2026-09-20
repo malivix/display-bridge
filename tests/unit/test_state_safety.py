@@ -1,7 +1,7 @@
 import importlib.util,json,tempfile,unittest,base64,hashlib
 from pathlib import Path
 from unittest.mock import patch
-spec=importlib.util.spec_from_file_location('state_controller',Path(__file__).with_name('display-auto.py'))
+spec=importlib.util.spec_from_file_location('state_controller',(Path(__file__).resolve().parents[2]/'display-auto.py'))
 c=importlib.util.module_from_spec(spec);spec.loader.exec_module(c)
 import observability
 

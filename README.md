@@ -1,75 +1,74 @@
 # Display Bridge
 
-Local display and audio automation for two Macs sharing an ASUS PG42UQ and a BenQ RD280UG.
-When one monitor shows the other Mac, its hidden desktop mirrors the visible monitor.
-When both return, the saved extended layout is restored.
+Automatically manage the desktop and speakers when two Macs share an **ASUS PG42UQ**
+and **BenQ RD280UG**. Change inputs on the monitors as usual; Display Bridge observes
+which screens show this Mac and adjusts its desktop.
 
-The controller also provides automatic speaker routing and bounded audio recovery, BenQ
-rotation tracking after calibration, a menu-bar status window, brightness/volume controls, local diagnostics,
-and reversible display-size previews. Runtime uses Python's standard library and locally
-compiled Apple helpers; BetterDisplay is not called.
+| Screens showing this Mac | Desktop behavior |
+| --- | --- |
+| Both | Restore the saved extended layout |
+| Only PG | Hidden BenQ desktop mirrors PG |
+| Only BenQ | Hidden PG desktop mirrors BenQ |
+| Neither | Preserve the layout and continue observing |
 
-## Status and scope
+The menu app provides status, pause/resume, speaker preferences, brightness and volume,
+local diagnostics, and reversible size previews. BenQ auto-rotation requires calibration.
+Speaker selection preserves an external headset. Runtime stays local and does not call BetterDisplay.
 
-This is an early, hardware-specific project, derived from controller version 2.10.1.
-It is not a universal display manager. macOS private mode metadata and DDC behavior may
-change with OS, monitor firmware, adapters, and cables. Mac B and sleep/wake qualification
-remain incomplete. See [qualification](docs/qualification.md).
+**Early, hardware-specific software.** Apple-silicon macOS 13+, Python 3.10+, and Xcode
+Command Line Tools are required. Mac B and sleep/wake qualification remain incomplete.
+Private macOS APIs and DDC behavior can change. Read the [qualification limits](docs/qualification.md).
 
-Default input mapping:
+## Install
 
-| Monitor | Mac A | Mac B |
-| --- | --- | --- |
-| PG42UQ | HDMI 1: 17 | HDMI 2: 18 |
-| BenQ RD280UG | 19 | 15 |
-
-The installer captures each Mac's local display identities and baseline; mode IDs and
-configuration must not be copied between hosts. Other monitor setups are left idle.
-The currently used policy is fixed 120 Hz and HDR off; configure desired sizes first.
-
-## Getting started
-
-Requires Apple-silicon macOS, Python 3.10 or newer, Xcode Command Line Tools, and the
-supported monitor pair with DDC communication available. Review the code before installation.
+First put both monitors on the Mac being configured, use an extended desktop, and choose
+fixed 120 Hz, HDR off, and comfortable sizes. The installer requires exactly these two
+online displays; close the laptop lid if its built-in display is active.
 
 ```sh
 git clone https://github.com/malivix/display-bridge.git
 cd display-bridge
-./scripts/setup-hooks
-./scripts/verify
-./scripts/verify --native
-# On the intended host, with both monitors showing that host:
+./scripts/test
 python3 install.py A  # use B on the other Mac
 ```
 
-Installation changes the logged-in user's display setup and starts per-user LaunchAgents.
-It needs no administrator privileges. Verify extended, single-visible, both-away, and return
-orders on each host before relying on it. Existing HiDPI modes may depend on prior display
-configuration; this project does not create arbitrary fractional-scale modes.
+Installation builds locally and starts per-user services. The first installation briefly tests
+mirroring and restores the saved desktop. It needs no administrator access. Capture settings
+separately on each Mac; never copy mode IDs or device identities between hosts.
+See the [installation guide](docs/install.md) for prerequisites, input mapping, rotation,
+upgrades, and older installations.
 
-Installed state lives under `~/.config/display-auto`, helpers under `~/.local/bin`, and the
-menu app at `~/Applications/Display Auto.app`. These are private runtime locations, not repo
-content. The service namespace for new public installations is `io.github.display-bridge`.
-An earlier installation using another namespace must be stopped and its old LaunchAgents
-moved aside before reinstalling; the installer refuses a conflicting service.
+## Use
+
+Open **Display Auto** from your user Applications folder to see status and controls.
+The installed app retains this name for compatibility. The background controller continues
+if you close the menu app.
 
 ```sh
-python3 ~/.local/bin/display-auto.py --help
-python3 ~/.local/bin/display-auto.py check
+python3 ~/.local/bin/display-auto.py status
 python3 ~/.local/bin/display-auto.py doctor
 ```
 
-Automatic rotation needs separately captured landscape and portrait baselines. After a
-normal installation, place both monitors on the current host, set BenQ's physical and macOS
-orientation to agree, then run `python3 install.py A --capture-rotation` for each orientation
-(use `B` on Mac B). Rotation becomes enabled after both profiles are captured. This changes
-installation state; do it deliberately, outside ordinary verification.
+See [everyday use and troubleshooting](docs/usage.md). Diagnostics contain private device
+information; keep them local. Read [SECURITY.md](SECURITY.md) before sharing any report.
 
-See [development](docs/development.md), [architecture](ARCHITECTURE.md),
-[security and privacy](SECURITY.md), [changes](CHANGELOG.md), and
-[repository research](docs/repository-research.md).
+## Develop
+
+```sh
+brew install gitleaks  # if Homebrew is already installed
+./scripts/setup-hooks
+./scripts/verify --native
+```
+
+`./scripts/test` runs isolated Python tests without Git, Gitleaks, or hardware access.
+`./scripts/verify` adds publication checks; `--native` also builds and self-tests native helpers.
+Physical tests under `tests/hardware/` are opt-in and excluded from these commands.
+
+Read [development](docs/development.md), [architecture](ARCHITECTURE.md), and
+[agent instructions](AGENTS.md). The [documentation index](docs/README.md) links reviews,
+work logs, research, and current limitations.
 
 ## License
 
-MIT. Vendored m1ddc retains its upstream MIT license and attribution; see
+MIT; vendored m1ddc retains its MIT license and attribution. See
 [third-party notices](THIRD_PARTY_NOTICES.md). No association with monitor vendors is implied.

@@ -3,7 +3,7 @@ from pathlib import Path
 from unittest.mock import patch
 import observability as o
 from audio_policy import route,preference
-spec=importlib.util.spec_from_file_location('c',Path(__file__).with_name('display-auto.py'));c=importlib.util.module_from_spec(spec);spec.loader.exec_module(c)
+spec=importlib.util.spec_from_file_location('c',(Path(__file__).resolve().parents[2]/'display-auto.py'));c=importlib.util.module_from_spec(spec);spec.loader.exec_module(c)
 class Features(unittest.TestCase):
     def test_fast_sensor_confirmation_rejects_bounce_and_failure(self):
         cfg={'rotation':{'enabled':True}}

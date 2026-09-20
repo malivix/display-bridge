@@ -4,8 +4,9 @@
 lock. `audio_policy.py` selects a route; `recovery_state.py` bounds retries.
 `persisted_state.py` and recovery journals preserve intent across interrupted operations.
 
-`display-menu.swift` is a per-user menu app. It submits controller commands and reads health;
-it does not maintain an independent hardware state machine. `observability.py`,
+`native/display-menu.swift` is a per-user menu app. It submits controller commands and reads health;
+it does not maintain an independent hardware state machine. CLI execution has bounded time
+and output, so a stalled child does not permanently disable menu actions. `observability.py`,
 `health_check.py`, and `ddc_log_report.py` report state and timing locally.
 
 `scaling_choices.py` qualifies modes, `scaling_proposal.py` creates candidate configuration,
@@ -15,15 +16,16 @@ Confirmation preserves the original request time while respecting the hard recov
 
 Native boundaries:
 
-- `display-layout.swift`: CoreGraphics layout and mode operations.
-- `display-audio.m`: CoreAudio selection and targeted sample-rate recovery.
-- `display-rotate.m`: rotation.
-- `display-mode-info.m`: private mode metadata, which can become unavailable.
+- `native/display-layout.swift`: CoreGraphics layout and mode operations.
+- `native/display-audio.m`: CoreAudio selection and targeted sample-rate recovery.
+- `native/display-rotate.m`: rotation.
+- `native/display-mode-info.m`: private mode metadata, which can become unavailable.
 - `vendor/m1ddc`: pinned DDC implementation with local validation and retry fixes.
 
 `install.py` builds locally, stages immutable runtime files, backs up state, activates a
-release, and coordinates menu installation. `rollback.py` restores saved controller deployment state; it does not restore the menu app.
-`release_manifest.py` defines the installed inventory used by installation and health checks.
+release, and coordinates menu installation. `rollback.py` restores coordinated controller/menu snapshots. Backup contents are checked
+before mutation; a failed post-restore check restores the pre-rollback snapshot.
+`release_manifest.py` defines the version and installed inventory used by installation and health checks.
 The checkout is independent from the running installed release.
 
 Stored display keys and audio UIDs belong only in per-machine runtime configuration.

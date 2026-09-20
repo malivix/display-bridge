@@ -53,3 +53,11 @@ The first remote run exposed a floating-point cancellation error in journal life
 A deterministic service-level regression reproduced it, and the comparison now uses absolute
 deadlines rather than a subtraction that can exceed 120 through rounding. This preserves the
 hard deadline and does not relax the safety limit. Remote execution remains part of completion.
+
+## Follow-up review: structure and recovery
+
+The [structure/reliability work log](log/2026-09-20-structure-reliability.md) records later fixes.
+The earlier menu-watchdog and companion-rollback findings above are historical: version 2.10.2
+adds bounded command execution and coordinated snapshots. The current remaining limits are
+maintained in [qualification](qualification.md). Physical qualification is still distinct from
+passing unit/native checks.

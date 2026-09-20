@@ -5,7 +5,7 @@ from pathlib import Path
 from unittest.mock import patch
 import unittest
 
-spec=importlib.util.spec_from_file_location('controller',Path(__file__).with_name('display-auto.py'))
+spec=importlib.util.spec_from_file_location('controller',(Path(__file__).resolve().parents[2]/'display-auto.py'))
 c=importlib.util.module_from_spec(spec);spec.loader.exec_module(c)
 class Finished(Exception): pass
 class RegressionTests(unittest.TestCase):

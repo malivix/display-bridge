@@ -3,7 +3,7 @@ import runpy
 from pathlib import Path
 import unittest
 
-check = runpy.run_path(str(Path(__file__).parent/'scripts/public-check'))['check_blob']
+check = runpy.run_path(str(Path(__file__).resolve().parents[2]/'scripts/public-check'))['check_blob']
 
 
 class PublicationTests(unittest.TestCase):

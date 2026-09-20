@@ -59,3 +59,9 @@ requests, and does not write the controller heartbeat or save text preferences. 
 allows layout/accessibility inspection without installing or controlling monitors. Build
 with the same macOS 13 deployment target used by `scripts/verify`; the compiler default
 may target a newer OS than the development machine. Local preview bundles stay ignored.
+
+Demo windows include a synthetic scenario selector (ready, stale, paused, away, preview,
+exhausted audio recovery) and a Minimum window action. These controls exist only in demo
+mode. Preview time is a static 20-second fixture for layout inspection, not a simulation of
+controller deadlines. Commands stay blocked, including Keep/Revert. Use real opt-in tests
+for countdown/rollback behavior; the demo cannot prove hardware or persistence outcomes.

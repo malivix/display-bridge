@@ -333,6 +333,27 @@ struct FailureAlerts {
     }
     mutating func clear() {sent=[];pending=nil}
 }
+// Synthetic states never read or mutate the installed controller.
+func demoState(_ scenario:String,_ name:String,_ now:Double)->[String:Any] {
+    if name=="control.json" {return scenario=="paused" ? ["paused":true]:[:]}
+    guard name=="health.json" else {return [:]}
+    var health:[String:Any] = ["host":"A","version":"Demo","updated_at":now,
+        "status":"ready","profile":"extended","inputs":["pg":17,"benq":19],
+        "rotation":["enabled":true,"sensor_degrees":90],"audio":["selected":["name":"Example monitor speakers"]]]
+    switch scenario {
+    case "stale":health["updated_at"]=now-90
+    case "paused":health["status"]="paused"
+    case "away":health["profile"]="away";health["inputs"]=["pg":18,"benq":15]
+    case "preview":
+        health["status"]="preview-preview"
+        health["preview"]=["state":"preview","token":"synthetic-preview","remaining_seconds":20.0]
+    case "recovery":
+        health["status"]="degraded"
+        health["recovery"]=["pending":true,"attempts":3,"error":"Audio recovery exhausted after three attempts. Inspect health before retrying."]
+    default:break
+    }
+    return health
+}
 if CommandLine.arguments.contains("--self-test") {
     let lockPath=FileManager.default.temporaryDirectory.appendingPathComponent("display-menu-test-"+UUID().uuidString).path
     var firstOwner=MenuOwnership(path:lockPath)
@@ -466,6 +487,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
     let root=FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".config/display-auto")
     let command=FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".local/bin/display-auto.sh")
     let demo=CommandLine.arguments.contains("--demo") || Bundle.main.object(forInfoDictionaryKey:"DisplayBridgeDemo") as? Bool == true
+    var demoScenario="ready"
     var ownership:MenuOwnership?
     var item:NSStatusItem!
     var timer:Timer?
@@ -611,9 +633,24 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
                 button.identifier=NSUserInterfaceItemIdentifier(action);actions.addArrangedSubview(button)
                 panelActions.append(button);scalableControls.append(button)
             }
+            if demo {
+                let scenarios=NSPopUpButton();scenarios.addItems(withTitles:["ready","stale","paused","away","preview","recovery"])
+                scenarios.target=self;scenarios.action=#selector(changeDemoScenario(_:));scenarios.setAccessibilityLabel("Synthetic scenario")
+                let compact=NSButton(title:"Minimum window",target:self,action:#selector(compactDemo))
+                let row=NSStackView(views:[scenarios,compact]);row.spacing=12;footer.addArrangedSubview(row)
+                scalableControls.append(contentsOf:[scenarios,compact])
+            }
             applyTextSize(textSizeIndex())
         }
         refresh();panel?.makeKeyAndOrderFront(nil);NSApp.activate(ignoringOtherApps:true)
+    }
+    @objc func changeDemoScenario(_ sender:NSPopUpButton) {
+        guard demo else {return}
+        demoScenario=sender.titleOfSelectedItem ?? "ready";refresh()
+    }
+    @objc func compactDemo() {
+        guard demo,let window=panel else {return}
+        var frame=window.frame;frame.size=window.minSize;window.setFrame(frame,display:true)
     }
     func textSizeIndex()->Int {displayTextIndex ?? min(2,max(0,UserDefaults.standard.integer(forKey:"statusTextSize")))}
     func applyTextSize(_ index:Int) {
@@ -661,12 +698,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
         else {execute([action])}
     }}
     func read(_ name:String)->[String:Any] {
-        if demo {
-            if name=="health.json" {return ["host":"A","version":"Demo","updated_at":Date().timeIntervalSince1970,
-                "status":"ready","profile":"extended","inputs":["pg":17,"benq":19],
-                "rotation":["enabled":true,"sensor_degrees":90],"audio":["selected":["name":"Example monitor speakers"]]]}
-            return [:]
-        }
+        if demo {return demoState(demoScenario,name,Date().timeIntervalSince1970)}
         guard let data=try? Data(contentsOf:root.appendingPathComponent(name)),let value=try? JSONSerialization.jsonObject(with:data) as? [String:Any] else{return [:]};return value
     }
     func applicationDidFinishLaunching(_ notification:Notification) {
@@ -772,7 +804,9 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
         for button in previewActions {
             let action=button.identifier?.rawValue
             if action=="preview-options" {button.isEnabled = !busy && fresh && state=="ready" && health["profile"] as? String == "extended" && !automationPaused(control)}
-            else {button.isHidden = preview["state"] as? String != "preview";button.isEnabled = !busy && fresh && previewToken != nil && preview["state"] as? String == "preview" && previewRemaining(health)>0}
+            else {
+                if action=="preview-keep" {button.title="Keep (\(previewRemaining(health))s)"}
+                button.isHidden = preview["state"] as? String != "preview";button.isEnabled = !busy && fresh && previewToken != nil && preview["state"] as? String == "preview" && previewRemaining(health)>0}
         }
         if !demo {
         notify(health,fresh:fresh)

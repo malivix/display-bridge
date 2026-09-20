@@ -4,6 +4,16 @@
 VERSION = "2.10.2"
 MENU_BUILD = "2102"
 
+# One source inventory for menu installation, prerequisite checks and native verification.
+MENU_SOURCES = (
+    "native/menu/main.swift",
+    "native/menu/Commands.swift",
+    "native/menu/Presentation.swift",
+    "native/menu/PresetWindows.swift",
+    "native/menu/MenuApp.swift",
+    "native/menu/SelfTests.swift",
+)
+
 RUNTIME_MODULES = (
     "display-auto.py",
     "audio_policy.py",

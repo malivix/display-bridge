@@ -1,0 +1,765 @@
+// SPDX-License-Identifier: MIT
+import AppKit
+import UserNotifications
+
+final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotificationCenterDelegate {
+    let root=FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".config/display-auto")
+    let command=FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".local/bin/display-auto.sh")
+    let demo=CommandLine.arguments.contains("--demo") || Bundle.main.object(forInfoDictionaryKey:"DisplayBridgeDemo") as? Bool == true
+    var demoScenario="ready"
+    var ownership:MenuOwnership?
+    var item:NSStatusItem!
+    var timer:Timer?
+    var panel:NSWindow?
+    var scalableControls:[NSControl]=[]
+    let detailReports=[("status","Live status"),("setup","Setup readiness"),("doctor","Health check"),("history","Transition timing"),("ddc-history","Monitor communication"),("support-summary","Support summary")]
+    var detailReport="status"
+    var reportSelector:NSPopUpButton?
+    var reportStatus:NSTextField?
+    var copySummaryButton:NSButton?
+    var reviewedSummary=ReviewedSupportSummary()
+    var copySummaryNotice=""
+    @objc func copyReviewedSummary() {
+        guard !busy,let body=reviewedSummary.body(for:detailReport) else{return}
+        if demo {message("Hardware-free demo","Clipboard copying is disabled in this demo. No clipboard content was changed.");return}
+        copySummaryNotice=writeReviewedSummary(body,to:.general) ? "Reviewed summary copied. Nothing was uploaded.":"Could not copy the summary. Select the report text to copy manually."
+        refresh()
+    }
+    var panelText:NSTextView?
+    var contentTabs:NSTabView?
+    var modeText:NSTextView?
+    var modeStatus:NSTextField?
+    var displayReading=DisplayReading()
+    var displayRefreshing=false
+    func acceptDisplayReading(_ json:String) {
+        if displayReading.accept(json) {modeText?.string=displaySummary(json)}
+        refresh()
+    }
+    var monitorRole="pg"
+    var monitorSelector:NSPopUpButton?
+    var monitorButtons:[NSButton]=[]
+    var monitorReason:NSTextField?
+    var monitorFeedback:NSTextField?
+    var speakerPopups:[String:NSPopUpButton]=[:]
+    var audioInfo:NSTextField?
+    var audioRepair:NSButton?
+    var audioReason:NSTextField?
+    var overviewFields:[(NSTextField,NSTextField)]=[]
+    var recoveryButton:NSButton?
+    var presentedRecoveryAction:RecoveryAction?
+    var pauseButton:NSButton?
+    var displayTextIndex:Int?
+    var panelActions:[NSButton]=[]
+    var previewActions:[NSButton]=[]
+    var previewToken:String?
+    var busy=false
+    var operationStarted:Double?
+    var operationName=""
+    var operationDeadline:Double=45
+    var operationResult=""
+    var openMenus=Set<ObjectIdentifier>()
+    var menuOpen:Bool {!openMenus.isEmpty}
+    var controlsUsable=true
+    var presetCapabilities:Set<String>?
+    var checkingCapabilities=false
+    var compatibilityLabel:NSTextField?
+    var compatibilityButton:NSButton?
+    var visibleCapabilities:Set<String>? {demo ? (demoScenario=="older-controller" ? []:PresetCommands.all):presetCapabilities}
+    @objc func checkPresetSupport() {
+        guard !checkingCapabilities,!demo else{return}
+        checkingCapabilities=true;presetCapabilities=nil;refresh()
+        DispatchQueue.global().async {
+            let result=runMenuCommand(self.command,["capabilities"],timeout:5,outputLimit:16_384)
+            DispatchQueue.main.async {
+                self.presetCapabilities=menuCapabilities(result);self.checkingCapabilities=false;self.refresh()
+            }
+        }
+    }
+    var failureAlerts=FailureAlerts(sent:Array((UserDefaults.standard.stringArray(forKey:"failureIncidents") ?? []).prefix(16)))
+    func applicationShouldHandleReopen(_ sender:NSApplication,hasVisibleWindows flag:Bool)->Bool {showPanel();return true}
+    func showPanel() {
+        if panel==nil {
+            let window=DisplayPanel(contentRect:NSRect(x:0,y:0,width:640,height:600),styleMask:[.titled,.closable,.resizable,.miniaturizable],backing:.buffered,defer:false)
+            window.onShortcut={ [weak self] shortcut in self?.handlePanelShortcut(shortcut) }
+            window.title=demo ? "Display Bridge — Demo":"Display Bridge";window.isReleasedWhenClosed=false;window.minSize=NSSize(width:600,height:480);window.center()
+            let scroll=NSScrollView(frame:NSRect(x:20,y:138,width:600,height:440));scroll.hasVerticalScroller=true;scroll.autohidesScrollers=true
+            scroll.autoresizingMask=[.width,.height]
+            let text=NSTextView(frame:scroll.bounds);text.isEditable=false;text.isSelectable=true;text.font=NSFont.systemFont(ofSize:CGFloat([16,20,24][textSizeIndex()]))
+            text.drawsBackground=false;text.isVerticallyResizable=true;text.isHorizontallyResizable=false;text.textContainer?.widthTracksTextView=true
+            text.setAccessibilityLabel("Display status and command results")
+            scroll.documentView=text;panelText=text;panel=window
+            let tabs=NSTabView(frame:NSRect(x:20,y:138,width:600,height:440))
+            tabs.autoresizingMask=[.width,.height];contentTabs=tabs
+            tabs.toolTip="⌘1–5 selects a tab. ⌘R refreshes the current view."
+            tabs.setAccessibilityHelp("Command 1 through 5 selects a tab. Command R refreshes the current view.")
+            let overview=NSTabViewItem(identifier:"overview");overview.label="Overview"
+            let overviewScroll=NSScrollView();overviewScroll.hasVerticalScroller=true;overviewScroll.autohidesScrollers=true
+            let stack=NSStackView();stack.orientation = .vertical;stack.alignment = .leading;stack.spacing=18
+            stack.edgeInsets=NSEdgeInsets(top:16,left:16,bottom:16,right:16)
+            stack.translatesAutoresizingMaskIntoConstraints=false;overviewScroll.documentView=stack
+            NSLayoutConstraint.activate([stack.widthAnchor.constraint(equalTo:overviewScroll.contentView.widthAnchor),stack.topAnchor.constraint(equalTo:overviewScroll.contentView.topAnchor)])
+            for section in statusSections(read("health.json"),read("control.json")) {
+                let heading=NSTextField(labelWithString:section.title)
+                let body=NSTextField(wrappingLabelWithString:section.body);body.isSelectable=true
+                body.setAccessibilityElement(true);body.setAccessibilityRole(.staticText)
+                body.setAccessibilityLabel(section.title+" details");body.setAccessibilityValue(section.body)
+                let group=NSStackView(views:[heading,body]);group.orientation = .vertical;group.alignment = .leading;group.spacing=5
+                group.setAccessibilityElement(true);group.setAccessibilityRole(.group);group.setAccessibilityLabel(section.title)
+                stack.addArrangedSubview(group)
+                group.widthAnchor.constraint(equalTo:stack.widthAnchor,constant:-32).isActive=true
+                body.widthAnchor.constraint(equalTo:group.widthAnchor).isActive=true
+                overviewFields.append((heading,body))
+                if section.title=="Recovery" {
+                    let button=NSButton(title:"Check health",target:self,action:#selector(runRecoveryAction(_:)))
+                    group.addArrangedSubview(button);recoveryButton=button;scalableControls.append(button)
+                }
+            }
+            overview.view=overviewScroll;tabs.addTabViewItem(overview)
+            let details=NSTabViewItem(identifier:"details");details.label="Details"
+            let detailView=NSView();let reportRow=NSStackView();reportRow.spacing=8;reportRow.orientation = .vertical;reportRow.alignment = .leading
+            let selectionRow=NSStackView();selectionRow.spacing=12;reportRow.addArrangedSubview(selectionRow)
+            let reportPicker=NSPopUpButton();reportPicker.addItems(withTitles:detailReports.map{$0.1})
+            reportPicker.target=self;reportPicker.action=#selector(selectReport(_:));reportPicker.setAccessibilityLabel("Detail report")
+            reportSelector=reportPicker;selectionRow.addArrangedSubview(reportPicker);scalableControls.append(reportPicker)
+            let refreshReport=NSButton(title:"Refresh",target:self,action:#selector(refreshReport))
+            selectionRow.addArrangedSubview(refreshReport);scalableControls.append(refreshReport);panelActions.append(refreshReport)
+            let copySummary=NSButton(title:"Copy reviewed summary",target:self,action:#selector(copyReviewedSummary))
+            copySummary.toolTip="Copy only the displayed support-summary body. Review it before sharing."
+            reportRow.addArrangedSubview(copySummary);copySummaryButton=copySummary;scalableControls.append(copySummary)
+            let reportNote=NSTextField(wrappingLabelWithString:"");reportNote.translatesAutoresizingMaskIntoConstraints=false
+            detailView.addSubview(reportNote);reportStatus=reportNote;scalableControls.append(reportNote)
+            reportRow.translatesAutoresizingMaskIntoConstraints=false;scroll.translatesAutoresizingMaskIntoConstraints=false
+            detailView.addSubview(reportRow);detailView.addSubview(scroll)
+            NSLayoutConstraint.activate([reportRow.leadingAnchor.constraint(equalTo:detailView.leadingAnchor,constant:12),reportRow.topAnchor.constraint(equalTo:detailView.topAnchor,constant:12),reportRow.trailingAnchor.constraint(lessThanOrEqualTo:detailView.trailingAnchor,constant:-12),scroll.leadingAnchor.constraint(equalTo:detailView.leadingAnchor,constant:12),scroll.trailingAnchor.constraint(equalTo:detailView.trailingAnchor,constant:-12),reportNote.topAnchor.constraint(equalTo:reportRow.bottomAnchor,constant:8),reportNote.leadingAnchor.constraint(equalTo:detailView.leadingAnchor,constant:12),reportNote.trailingAnchor.constraint(equalTo:detailView.trailingAnchor,constant:-12),scroll.topAnchor.constraint(equalTo:reportNote.bottomAnchor,constant:8),scroll.bottomAnchor.constraint(equalTo:detailView.bottomAnchor,constant:-12)])
+            details.view=detailView;tabs.addTabViewItem(details)
+            let displays=NSTabViewItem(identifier:"displays");displays.label="Displays"
+            let modeView=NSView(frame:NSRect(x:0,y:0,width:580,height:400))
+            let modeScroll=NSScrollView(frame:NSRect(x:12,y:52,width:556,height:336))
+            modeScroll.hasVerticalScroller=true;modeScroll.autoresizingMask=[.width,.height]
+            let modeContent=NSTextView(frame:modeScroll.bounds)
+            modeContent.isEditable=false;modeContent.isSelectable=true;modeContent.drawsBackground=false
+            modeContent.isVerticallyResizable=true;modeContent.isHorizontallyResizable=false;modeContent.textContainer?.widthTracksTextView=true
+            modeContent.string="Refresh to inspect the enrolled displays. This reads current modes without changing settings. Values are a snapshot, not continuous monitoring."
+            modeContent.setAccessibilityLabel("Measured display modes")
+            modeScroll.documentView=modeContent;modeView.addSubview(modeScroll);modeText=modeContent
+            let refreshModes=NSButton(title:"Refresh display details",target:self,action:#selector(panelAction(_:)))
+            refreshModes.identifier=NSUserInterfaceItemIdentifier("display-info");refreshModes.translatesAutoresizingMaskIntoConstraints=false;scalableControls.append(refreshModes)
+            modeView.addSubview(refreshModes);panelActions.append(refreshModes)
+            let snapshotStatus=NSTextField(wrappingLabelWithString:"");snapshotStatus.isSelectable=true
+            snapshotStatus.translatesAutoresizingMaskIntoConstraints=false;modeView.addSubview(snapshotStatus)
+            modeStatus=snapshotStatus;scalableControls.append(snapshotStatus)
+            NSLayoutConstraint.activate([snapshotStatus.leadingAnchor.constraint(equalTo:modeView.leadingAnchor,constant:12),snapshotStatus.trailingAnchor.constraint(equalTo:modeView.trailingAnchor,constant:-12),snapshotStatus.topAnchor.constraint(equalTo:modeView.topAnchor,constant:12)])
+            modeScroll.translatesAutoresizingMaskIntoConstraints=false
+            NSLayoutConstraint.activate([refreshModes.leadingAnchor.constraint(equalTo:modeView.leadingAnchor,constant:12),refreshModes.bottomAnchor.constraint(equalTo:modeView.bottomAnchor,constant:-12),modeScroll.leadingAnchor.constraint(equalTo:modeView.leadingAnchor,constant:12),modeScroll.trailingAnchor.constraint(equalTo:modeView.trailingAnchor,constant:-12),modeScroll.topAnchor.constraint(equalTo:snapshotStatus.bottomAnchor,constant:8),modeScroll.bottomAnchor.constraint(equalTo:refreshModes.topAnchor,constant:-12)])
+            displays.view=modeView;tabs.addTabViewItem(displays)
+            let audioTab=NSTabViewItem(identifier:"audio");audioTab.label="Audio"
+            let audioScroll=NSScrollView();audioScroll.hasVerticalScroller=true
+            let audioStack=NSStackView();audioStack.orientation = .vertical;audioStack.alignment = .leading;audioStack.spacing=16
+            audioStack.edgeInsets=NSEdgeInsets(top:16,left:16,bottom:16,right:16)
+            audioStack.translatesAutoresizingMaskIntoConstraints=false;audioScroll.documentView=audioStack
+            audioStack.widthAnchor.constraint(equalTo:audioScroll.contentView.widthAnchor).isActive=true
+            audioStack.topAnchor.constraint(equalTo:audioScroll.contentView.topAnchor).isActive=true
+            let info=NSTextField(wrappingLabelWithString:"Speaker preferences apply to each monitor profile. External headsets remain under your control.")
+            audioStack.addArrangedSubview(info);info.widthAnchor.constraint(equalTo:audioStack.widthAnchor,constant:-32).isActive=true;audioInfo=info
+            for (profile,label) in [("extended","Both monitors here"),("pg","Only PG here"),("benq","Only BenQ here"),("away","Both monitors away")] {
+                let title=NSTextField(wrappingLabelWithString:label);scalableControls.append(title)
+                let popup=NSPopUpButton();popup.identifier=NSUserInterfaceItemIdentifier(profile)
+                popup.target=self;popup.action=#selector(selectSpeaker(_:));popup.setAccessibilityLabel("Speaker when "+label.lowercased())
+                for (key,name) in speakerChoices(profile) {popup.addItem(withTitle:name);popup.lastItem?.representedObject=key}
+                speakerPopups[profile]=popup;scalableControls.append(popup)
+                let row=NSStackView(views:[title,popup]);row.orientation = .vertical;row.alignment = .leading;row.spacing=6;audioStack.addArrangedSubview(row)
+            }
+            for (title,action) in [("Preserve output for 30 minutes","audio-manual"),("Resume automatic audio","audio-auto"),("Repair audio","repair-audio")] {
+                let button=NSButton(title:title,target:self,action:#selector(panelAction(_:)));button.identifier=NSUserInterfaceItemIdentifier(action)
+                audioStack.addArrangedSubview(button);scalableControls.append(button)
+                if action=="repair-audio" {audioRepair=button} else {panelActions.append(button)}
+            }
+            let reason=NSTextField(wrappingLabelWithString:"");audioStack.addArrangedSubview(reason)
+            reason.widthAnchor.constraint(equalTo:audioStack.widthAnchor,constant:-32).isActive=true;audioReason=reason
+            audioTab.view=audioScroll;tabs.addTabViewItem(audioTab)
+            let controlsTab=NSTabViewItem(identifier:"monitor-controls");controlsTab.label="Controls"
+            let controlsScroll=NSScrollView();controlsScroll.hasVerticalScroller=true
+            let controlsStack=NSStackView();controlsStack.orientation = .vertical;controlsStack.alignment = .leading;controlsStack.spacing=18
+            controlsStack.edgeInsets=NSEdgeInsets(top:16,left:16,bottom:16,right:16)
+            controlsStack.translatesAutoresizingMaskIntoConstraints=false;controlsScroll.documentView=controlsStack
+            controlsStack.widthAnchor.constraint(equalTo:controlsScroll.contentView.widthAnchor).isActive=true
+            controlsStack.topAnchor.constraint(equalTo:controlsScroll.contentView.topAnchor).isActive=true
+            let selector=NSPopUpButton();selector.addItems(withTitles:["PG42UQ","BenQ RD280UG"])
+            selector.target=self;selector.action=#selector(selectMonitor(_:));selector.setAccessibilityLabel("Monitor to adjust")
+            controlsStack.addArrangedSubview(selector);monitorSelector=selector;scalableControls.append(selector)
+            let compatibility=NSTextField(wrappingLabelWithString:"");compatibility.isSelectable=true
+            controlsStack.addArrangedSubview(compatibility);compatibility.widthAnchor.constraint(equalTo:controlsStack.widthAnchor,constant:-32).isActive=true
+            compatibilityLabel=compatibility;scalableControls.append(compatibility)
+            let checkSupport=NSButton(title:"Check preset support",target:self,action:#selector(checkPresetSupport))
+            controlsStack.addArrangedSubview(checkSupport);compatibilityButton=checkSupport;scalableControls.append(checkSupport)
+            let presetsButton=NSButton(title:"Brightness presets…",target:self,action:#selector(openBrightnessPresets))
+            presetsButton.identifier=NSUserInterfaceItemIdentifier("brightness-list");controlsStack.addArrangedSubview(presetsButton);panelActions.append(presetsButton);scalableControls.append(presetsButton)
+            let availability=NSTextField(wrappingLabelWithString:"");controlsStack.addArrangedSubview(availability)
+            availability.widthAnchor.constraint(equalTo:controlsStack.widthAnchor,constant:-32).isActive=true;monitorReason=availability
+            for (title,key) in [("Read brightness and volume","read"),("Brightness −5%","luminance:-5"),("Brightness +5%","luminance:5"),("Speaker volume −5%","volume:-5"),("Speaker volume +5%","volume:5")] {
+                let button=NSButton(title:title,target:self,action:#selector(adjustMonitor(_:)))
+                button.identifier=NSUserInterfaceItemIdentifier(key);controlsStack.addArrangedSubview(button);monitorButtons.append(button);scalableControls.append(button)
+            }
+            let feedback=NSTextField(wrappingLabelWithString:"Read settings to see confirmed hardware values. Equal brightness percentages do not mean equal light output. Speaker volume does not select the Mac audio output.")
+            controlsStack.addArrangedSubview(feedback);feedback.widthAnchor.constraint(equalTo:controlsStack.widthAnchor,constant:-32).isActive=true;monitorFeedback=feedback
+            controlsTab.view=controlsScroll;tabs.addTabViewItem(controlsTab)
+            guard let content=window.contentView else {return}
+            let footer=NSStackView();footer.orientation = .vertical;footer.alignment = .leading;footer.spacing=10
+            footer.translatesAutoresizingMaskIntoConstraints=false;content.addSubview(footer)
+            tabs.translatesAutoresizingMaskIntoConstraints=false;content.addSubview(tabs)
+            NSLayoutConstraint.activate([footer.leadingAnchor.constraint(equalTo:content.leadingAnchor,constant:20),footer.trailingAnchor.constraint(equalTo:content.trailingAnchor,constant:-20),footer.bottomAnchor.constraint(equalTo:content.bottomAnchor,constant:-16),tabs.leadingAnchor.constraint(equalTo:content.leadingAnchor,constant:20),tabs.trailingAnchor.constraint(equalTo:content.trailingAnchor,constant:-20),tabs.topAnchor.constraint(equalTo:content.topAnchor,constant:16),tabs.bottomAnchor.constraint(equalTo:footer.topAnchor,constant:-16)])
+            let sizes=NSSegmentedControl(labels:["Standard","Large","Largest"],trackingMode:.selectOne,target:self,action:#selector(changeTextSize(_:)))
+            sizes.selectedSegment=textSizeIndex();sizes.setAccessibilityLabel("Interface size")
+            let pause=NSButton(title:"Pause",target:self,action:#selector(togglePause(_:)));pauseButton=pause
+            let sizeRow=NSStackView(views:[sizes,pause]);sizeRow.spacing=16;footer.addArrangedSubview(sizeRow)
+            scalableControls.append(contentsOf:[sizes,pause])
+            let previewRow=NSStackView();previewRow.spacing=12;footer.addArrangedSubview(previewRow)
+            for (title,action) in [("Preview size…","preview-options"),("Keep size","preview-keep"),("Revert size","preview-revert")] {
+                let button=NSButton(title:title,target:self,action:#selector(panelAction(_:)))
+                button.identifier=NSUserInterfaceItemIdentifier(action);previewRow.addArrangedSubview(button)
+                previewActions.append(button);scalableControls.append(button)
+            }
+            let more=NSButton(title:"More controls",target:self,action:#selector(openControls(_:)))
+            let actions=NSStackView(views:[more]);actions.spacing=12;footer.addArrangedSubview(actions);scalableControls.append(more)
+            for (title,action) in [("Health","doctor"),("Diagnostics","diagnostics")] {
+                let button=NSButton(title:title,target:self,action:#selector(panelAction(_:)))
+                button.identifier=NSUserInterfaceItemIdentifier(action);actions.addArrangedSubview(button)
+                panelActions.append(button);scalableControls.append(button)
+            }
+            if demo {
+                let scenarios=NSPopUpButton();scenarios.addItems(withTitles:["ready","stale","paused","away","preview","recovery","recovery-wait","presets-error","controls-error","brightness-empty","older-controller","display-refresh-failed"])
+                scenarios.target=self;scenarios.action=#selector(changeDemoScenario(_:));scenarios.setAccessibilityLabel("Synthetic scenario")
+                let compact=NSButton(title:"Minimum window",target:self,action:#selector(compactDemo))
+                let row=NSStackView(views:[scenarios,compact]);row.spacing=12;footer.addArrangedSubview(row)
+                scalableControls.append(contentsOf:[scenarios,compact])
+            }
+            applyTextSize(textSizeIndex())
+        }
+        refresh();panel?.makeKeyAndOrderFront(nil);NSApp.activate(ignoringOtherApps:true)
+    }
+    func handlePanelShortcut(_ shortcut:PanelShortcut) {
+        switch shortcut {
+        case .tab(let identifier):
+            contentTabs?.selectTabViewItem(withIdentifier:identifier)
+            panel?.makeFirstResponder(contentTabs)
+        case .refresh:
+            guard !busy else{return}
+            let tab=contentTabs?.selectedTabViewItem?.identifier as? String ?? "overview"
+            if tab=="monitor-controls",let reason=monitorControlReason(read("health.json"),read("control.json"),monitorRole,busy) {
+                monitorFeedback?.stringValue=reason;return
+            }
+            if let arguments=panelRefreshArguments(tab,detailReport,monitorRole) {execute(arguments)}
+            else {refresh()}
+        }
+    }
+    @objc func changeDemoScenario(_ sender:NSPopUpButton) {
+        guard demo else {return}
+        demoScenario=sender.titleOfSelectedItem ?? "ready";refresh()
+    }
+    @objc func compactDemo() {
+        guard demo,let window=panel else {return}
+        var frame=window.frame;frame.size=window.minSize;window.setFrame(frame,display:true)
+    }
+    @objc func selectReport(_ sender:NSPopUpButton) {
+        let index=sender.indexOfSelectedItem
+        guard index>=0,index<detailReports.count else {return}
+        detailReport=detailReports[index].0
+        reviewedSummary.clear();copySummaryNotice=""
+        panelText?.setAccessibilityLabel(detailReports[index].1+" report")
+        panelText?.string=detailReport=="status" ? "":"Choose Refresh to read this report. Reports are snapshots and do not update in the background."
+        refresh()
+    }
+    @objc func refreshReport() {
+        if detailReport=="status" {refresh()} else {execute([detailReport])}
+    }
+    func showReport(_ action:String,_ text:String) {
+        guard let index=detailReports.firstIndex(where:{$0.0==action}) else {return}
+        detailReport=action;reportSelector?.selectItem(at:index)
+        reviewedSummary.show(action,text);copySummaryNotice=""
+        panelText?.setAccessibilityLabel(detailReports[index].1+" report")
+        reportStatus?.stringValue="Snapshot report; use Refresh to inspect again."
+        panelText?.string="\(detailReports[index].1) · Snapshot at \(Date().formatted(date:.omitted,time:.standard))\nRefresh to inspect again.\n\n"+text
+        contentTabs?.selectTabViewItem(withIdentifier:"details")
+        refresh()
+    }
+    func textSizeIndex()->Int {displayTextIndex ?? min(2,max(0,UserDefaults.standard.integer(forKey:"statusTextSize")))}
+    func applyTextSize(_ index:Int) {
+        let size=CGFloat([16,20,24][index])
+        for control in scalableControls {control.font=NSFont.systemFont(ofSize:size);control.invalidateIntrinsicContentSize()}
+        contentTabs?.font=NSFont.systemFont(ofSize:size)
+        panelText?.font=NSFont.systemFont(ofSize:size)
+        modeText?.font=NSFont.systemFont(ofSize:size)
+        audioInfo?.font=NSFont.systemFont(ofSize:size);audioReason?.font=NSFont.systemFont(ofSize:size)
+        monitorReason?.font=NSFont.systemFont(ofSize:size);monitorFeedback?.font=NSFont.systemFont(ofSize:size)
+        for (heading,body) in overviewFields {heading.font=NSFont.boldSystemFont(ofSize:size);body.font=NSFont.systemFont(ofSize:size)}
+    }
+    func showMonitorResult(_ text:String,_ role:String?) {
+        if let role=role,["pg","benq"].contains(role) {
+            monitorRole=role;monitorSelector?.selectItem(at:role=="pg" ? 0:1)
+        }
+        monitorFeedback?.stringValue=text
+        contentTabs?.selectTabViewItem(withIdentifier:"monitor-controls")
+    }
+    @objc func openBrightnessPresets() {execute(["brightness-list","--monitor",monitorRole])}
+    func chooseBrightness(_ json:String,expectedMonitor:String) {
+        guard let report=brightnessEntries(json,expectedMonitor) else {message("Brightness presets unavailable","The list could not be validated. No preset was changed; refresh after checking health.");return}
+        let role=report.monitor
+        let chooser=BrightnessChooser(monitor:role,entries:report.entries,fontSize:CGFloat([16,20,24][textSizeIndex()]),unavailable:monitorControlReason(read("health.json"),read("control.json"),role,busy),canRemove:controlsAvailable(read("control.json")) && !busy)
+        let action=chooser.run()
+        guard [0,1,2].contains(action) else{return}
+        if action != 2,let reason=monitorControlReason(read("health.json"),read("control.json"),role,busy) {message("Brightness action unavailable",reason);return}
+        if action==1 {
+            let dialog=PresetDialog(fontSize:CGFloat([16,20,24][textSizeIndex()]),brightnessMonitor:role)
+            if let arguments=dialog.run() {execute(arguments)}
+        } else if let entry=chooser.selected {
+            execute([action==0 ? "brightness-apply":"brightness-remove","--monitor",role,"--preset",entry.name,"--fingerprint",entry.revision])
+        }
+    }
+    @objc func selectMonitor(_ sender:NSPopUpButton) {
+        monitorRole=sender.indexOfSelectedItem==0 ? "pg":"benq"
+        monitorFeedback?.stringValue="No readback for this selection yet. Read settings to inspect it."
+        refresh()
+    }
+    @objc func adjustMonitor(_ sender:NSButton) {
+        guard let key=sender.identifier?.rawValue else{return}
+        if key=="read" {execute(["monitor-settings","--monitor",monitorRole]);return}
+        let parts=key.split(separator:":").map(String.init)
+        guard parts.count==2 else{return}
+        execute(["monitor-adjust","--monitor",monitorRole,"--feature",parts[0],"--step",parts[1]])
+    }
+    @objc func selectSpeaker(_ sender:NSPopUpButton) {
+        guard let profile=sender.identifier?.rawValue,let speaker=sender.selectedItem?.representedObject as? String else{return}
+        execute(["speaker","--profile",profile,"--speaker",speaker])
+    }
+    @objc func togglePause(_ sender:NSButton) {execute([automationPaused(read("control.json")) ? "resume":"pause"])}
+    @objc func changeTextSize(_ sender:NSSegmentedControl) {
+        let index=min(2,max(0,sender.selectedSegment))
+        if !demo {UserDefaults.standard.set(index,forKey:"statusTextSize")}
+        displayTextIndex=index;applyTextSize(index)
+    }
+    @objc func openControls(_ sender:NSButton){refresh();item.menu?.popUp(positioning:nil,at:NSPoint(x:0,y:sender.bounds.height),in:sender)}
+    @objc func panelAction(_ sender:NSButton){if let action=sender.identifier?.rawValue {
+        if action=="preview-keep" || action=="preview-revert" {if let token=previewToken {execute([action,"--token",token])}}
+        else {execute([action])}
+    }}
+    @objc func runRecoveryAction(_ sender:NSButton) {
+        guard let args=currentRecoveryArguments(presentedRecoveryAction,read("health.json"),read("control.json"),busy) else {
+            operationResult="Recovery status changed or a command is still running. Review the current action before retrying."
+            refresh();return
+        }
+        execute(args)
+    }
+    func read(_ name:String)->[String:Any] {
+        if demo {return demoState(demoScenario,name,Date().timeIntervalSince1970)}
+        return readMenuState(root.appendingPathComponent(name),allowMissing:name=="control.json") ?? (name=="control.json" ? ["_read_unavailable":true]:[:])
+    }
+    func applicationDidFinishLaunching(_ notification:Notification) {
+        if !demo {
+            ownership=MenuOwnership(path:root.appendingPathComponent("menu.lock").path)
+            guard ownership != nil else {
+                FileHandle.standardError.write(Data("Menu already running or ownership lock unavailable.\n".utf8))
+                if let identifier=Bundle.main.bundleIdentifier {
+                    for app in NSRunningApplication.runningApplications(withBundleIdentifier:identifier) where app.processIdentifier != ProcessInfo.processInfo.processIdentifier {
+                        app.activate(options:[.activateIgnoringOtherApps])
+                    }
+                }
+                NSApp.terminate(nil);return
+            }
+        }
+        NSApp.setActivationPolicy(.accessory)
+        item=NSStatusBar.system.statusItem(withLength:NSStatusItem.variableLength)
+        item.button?.image=NSImage(systemSymbolName:"display.2",accessibilityDescription:"Display Auto")
+        if !demo {
+        UNUserNotificationCenter.current().delegate=self
+        let repair=UNNotificationAction(identifier:"repair",title:"Repair audio",options:[])
+        let inspect=UNNotificationAction(identifier:"inspect",title:"Check health",options:[])
+        UNUserNotificationCenter.current().setNotificationCategories([UNNotificationCategory(identifier:"failure",actions:[repair],intentIdentifiers:[],options:[]),UNNotificationCategory(identifier:"state-failure",actions:[inspect],intentIdentifiers:[],options:[])])
+        }
+        timer=Timer(timeInterval:2,repeats:true){[weak self] _ in self?.refresh()}
+        if let timer=timer {RunLoop.main.add(timer,forMode:.common)}
+        refresh()
+        if demo {showPanel();return}
+        checkPresetSupport()
+        UNUserNotificationCenter.current().getNotificationSettings { settings in
+            if settings.authorizationStatus == .notDetermined {
+                UNUserNotificationCenter.current().requestAuthorization(options:[.alert]){_,error in
+                    if let error=error {FileHandle.standardError.write(Data((error.localizedDescription+"\n").utf8))}
+                }
+            }
+        }
+    }
+    func add(_ menu:NSMenu,_ title:String,_ args:[String]?=nil,checked:Bool=false) {
+        let entry=NSMenuItem(title:title,action:args == nil ? nil : #selector(act(_:)),keyEquivalent:"")
+        entry.target=self;entry.representedObject=args;entry.state=checked ? .on:.off;entry.isEnabled=args != nil && !busy && (controlsUsable || safeWithoutControls(args?.first ?? ""));menu.addItem(entry)
+    }
+    func refresh() {
+        let health=read("health.json"),control=read("control.json")
+        controlsUsable=controlsAvailable(control)
+        modeStatus?.stringValue=displayReading.notice(health,refreshing:displayRefreshing)
+        let fresh=statusFresh(health)
+        let prefix=detailPrefix(health,control)
+        let state=fresh ? health["status"] as? String ?? "Unknown" : "Controller unavailable"
+        item.button?.title=state == "degraded" || state == "state-error" || !fresh || !controlsUsable ? " !" : ""
+        item.button?.toolTip="Display Bridge: \(controlsUsable ? state:"Controls unavailable")"
+        let tracked=commandSummary(health,control)
+        var progress=operationResult
+        if let started=operationStarted {
+            let elapsed=Int(max(0,ProcessInfo.processInfo.systemUptime-started))
+            progress="\(operationName)… \(elapsed)s in this phase. Phase deadline: \(Int(operationDeadline))s."
+        }
+        if !controlsUsable {progress += "\nSaved controls are unreadable. Setting changes are disabled; check health."}
+        let sections=statusSections(health,control)
+        for (index,fields) in overviewFields.enumerated() where index<sections.count {
+            var body=sections[index].body
+            if index==0 {
+                if !tracked.isEmpty {body += "\n\n"+tracked}
+                if !progress.isEmpty {body += "\n\n"+progress}
+            }
+            if fields.1.stringValue != body {fields.1.stringValue=body;fields.1.setAccessibilityValue(body)}
+        }
+        presentedRecoveryAction=recoveryAction(health,control)
+        recoveryButton?.isHidden=presentedRecoveryAction==nil
+        recoveryButton?.title=presentedRecoveryAction?.title ?? "Check health"
+        recoveryButton?.isEnabled = !busy && presentedRecoveryAction != nil
+        pauseButton?.title=automationPaused(control) ? "Resume":"Pause"
+        pauseButton?.isEnabled = !busy && controlsUsable
+        var detail=dashboard(health,control)
+        if !tracked.isEmpty {detail=tracked+"\n\n"+detail}
+        if !progress.isEmpty {detail=progress+"\n\n"+detail}
+        let lastPreview=read("preview-status.json")
+        if !state.hasPrefix("preview-"),let error=lastPreview["error"] as? String {detail += "\n\nLast size preview: \(error)"}
+        reportSelector?.isEnabled = !busy
+        copySummaryButton?.isHidden=detailReport != "support-summary"
+        copySummaryButton?.isEnabled = !busy && reviewedSummary.body(for:detailReport) != nil
+        reportStatus?.stringValue = busy ? progress : (!copySummaryNotice.isEmpty ? copySummaryNotice:(detailReport=="status" ? "Live controller status":"Snapshot report; use Refresh to inspect again."))
+        if detailReport=="status",let text=panelText,text.string != detail {
+            let selection=text.selectedRange()
+            let origin=text.enclosingScrollView?.contentView.bounds.origin
+            text.string=detail
+            let length=(detail as NSString).length
+            if selection.location<=length {text.setSelectedRange(NSRange(location:selection.location,length:min(selection.length,length-selection.location)))}
+            if let origin=origin {text.enclosingScrollView?.contentView.scroll(to:origin)}
+        }
+        compatibilityLabel?.stringValue=presetCompatibilitySummary(visibleCapabilities,checking:checkingCapabilities)
+        compatibilityButton?.isEnabled = !checkingCapabilities && !busy && !demo
+        let monitorUnavailable=monitorControlReason(health,control,monitorRole,busy)
+        monitorReason?.stringValue=monitorUnavailable ?? "Controls apply only to the selected monitor. Each adjustment waits for hardware confirmation."
+        for button in monitorButtons {button.isEnabled=monitorUnavailable==nil}
+        monitorSelector?.isEnabled = !busy
+        for button in panelActions {
+            let action=button.identifier?.rawValue ?? "doctor"
+            button.isEnabled = !busy && (controlsUsable || safeWithoutControls(action)) && (action != "brightness-list" || PresetCommands.brightness.isSubset(of:visibleCapabilities ?? []))
+        }
+        let preferences=control["speaker_preferences"] as? [String:String] ?? [:]
+        for (profile,popup) in speakerPopups {
+            if !controlsUsable {popup.selectItem(at:-1);popup.isEnabled=false;continue}
+            let wanted=preferences[profile] ?? (profile=="away" ? "fallback":profile=="benq" ? "benq":"pg")
+            if let entry=popup.itemArray.first(where:{$0.representedObject as? String==wanted}) {popup.select(entry)}
+            else {popup.selectItem(at:-1)}
+            popup.isEnabled = !busy && controlsUsable
+        }
+        let currentAudio=health["audio"] as? [String:Any] ?? [:]
+        let selectedOutput=currentAudio["selected"] as? [String:Any] ?? [:]
+        var audioDescription=prefix+"Selected output: \(selectedOutput["name"] as? String ?? "Not reported")\nSpeaker preferences apply to each profile. External headsets remain under your control."
+        if let until=control["audio_manual_until"] as? Double,until>Date().timeIntervalSince1970 {
+            audioDescription += "\nManual preservation ends at \(Date(timeIntervalSince1970:until).formatted(date:.omitted,time:.shortened))."
+        }
+        if !controlsUsable {audioDescription="Saved controls are unreadable. Check health before changing audio preferences.\n\n"+audioDescription}
+        audioInfo?.stringValue=audioDescription
+        let reason=audioRepairReason(health,control,busy)
+        audioRepair?.isEnabled=reason==nil
+        audioReason?.stringValue=reason ?? "Repair uses the existing recovery policy. Listen afterward to confirm sound."
+
+        let preview=health["preview"] as? [String:Any] ?? [:]
+        previewToken=preview["token"] as? String
+        for button in previewActions {
+            let action=button.identifier?.rawValue
+            if action=="preview-options" {button.isEnabled = !busy && controlsUsable && fresh && state=="ready" && health["profile"] as? String == "extended" && !automationPaused(control)}
+            else {
+                if action=="preview-keep" {button.title="Keep (\(previewRemaining(health))s)"}
+                button.isHidden = preview["state"] as? String != "preview";button.isEnabled = !busy && (controlsUsable || action=="preview-revert") && fresh && previewToken != nil && preview["state"] as? String == "preview" && previewRemaining(health)>0}
+        }
+        if !demo {
+        notify(health,fresh:fresh)
+        UNUserNotificationCenter.current().getNotificationSettings { settings in
+            let data:[String:Any]=["updated_at":Date().timeIntervalSince1970,"pid":ProcessInfo.processInfo.processIdentifier,"app_version":Bundle.main.object(forInfoDictionaryKey:"CFBundleShortVersionString") as? String ?? "unknown","notification_authorization":settings.authorizationStatus.rawValue,"status":state]
+            if let bytes=try? JSONSerialization.data(withJSONObject:data){try? bytes.write(to:self.root.appendingPathComponent("menu-health.json"),options:.atomic)}
+        }
+        }
+        if menuOpen{return}
+        let compact=NSMenu();compact.delegate=self
+        add(compact,"Display Bridge · Mac \(health["host"] as? String ?? "?")")
+        add(compact,dashboard(health,control).components(separatedBy:"\n").first ?? "Status unavailable")
+        add(compact,statusAge(health))
+        for section in sections where section.title=="PG42UQ" || section.title=="BenQ RD280UG" {
+            add(compact,section.title+": "+(section.body.components(separatedBy:"\n").first ?? "Unknown"))
+        }
+        let audio=health["audio"] as? [String:Any] ?? [:],selected=audio["selected"] as? [String:Any] ?? [:]
+        add(compact,"\(prefix)Speaker: \(selected["name"] as? String ?? "—")")
+        if !progress.isEmpty {add(compact,progress)}
+        compact.addItem(.separator())
+        add(compact,"Open Display Bridge…",["panel"])
+        let paused=automationPaused(control)
+        add(compact,paused ? "Resume automation":"Pause automation",[paused ? "resume":"pause"])
+        if fresh,let token=previewToken,preview["state"] as? String == "needs-repair" {
+            add(compact,"Retry size restoration",["preview-repair","--token",token])
+        }
+        if let token=previewToken,previewRemaining(health)>0 {
+            add(compact,"Keep preview size (\(previewRemaining(health))s)",["preview-keep","--token",token])
+            add(compact,"Revert preview size",["preview-revert","--token",token])
+        }
+        let menu=NSMenu();menu.delegate=self
+        let rotation=health["rotation"] as? [String:Any] ?? [:]
+        add(menu,"Pause for 15 minutes",["pause-for","--minutes","15"])
+        if rotation["enabled"] as? Bool == true {
+            let automatic=control["auto_rotate"] as? Bool ?? true
+            add(menu,"Automatic BenQ rotation",[automatic ? "rotation-manual":"rotation-auto"],checked:controlsUsable && automatic)
+        }
+        if paused,let until=control["pause_until"] as? Double,until>0 {
+            add(menu,"Resumes at \(Date(timeIntervalSince1970:until).formatted(date:.omitted,time:.shortened))")
+        }
+        let manual=(control["audio_manual_until"] as? Double ?? 0)>Date().timeIntervalSince1970
+        add(menu,"Preserve current audio for 30 minutes",["audio-manual","--minutes","30"],checked:manual)
+        add(menu,"Resume automatic audio",["audio-auto"])
+        add(menu,"Repair audio",audioRepairReason(health,control,busy)==nil ? ["repair-audio"]:nil)
+        for (profile,label,defaultSpeaker) in [("extended","Both monitors here","pg"),("pg","Only PG here","pg"),("benq","Only BenQ here","benq"),("away","Both monitors away","fallback")] {
+            let entry=NSMenuItem(title:"Speaker: \(label)",action:nil,keyEquivalent:"");let sub=NSMenu()
+            for (speaker,title) in speakerChoices(profile) {
+                add(sub,title,["speaker","--profile",profile,"--speaker",speaker],checked:controlsUsable && (preferences[profile] ?? defaultSpeaker)==speaker)
+            };entry.submenu=sub;menu.addItem(entry)
+        }
+        menu.addItem(.separator())
+        add(menu,"Preview display size…",fresh && state=="ready" && health["profile"] as? String == "extended" && !paused ? ["preview-options"]:nil)
+        let inputs=health["inputs"] as? [String:Int] ?? [:]
+        let hostB=health["host"] as? String == "B"
+        for (role,label,localInput) in [("pg","PG42UQ",hostB ? 18:17),("benq","BenQ",hostB ? 15:19)] {
+            let entry=NSMenuItem(title:"\(label) brightness and volume",action:nil,keyEquivalent:"")
+            let sub=NSMenu()
+            let enabled=monitorControlReason(health,control,role,busy)==nil
+            add(sub,"Read current settings…",fresh && inputs[role]==localInput ? ["monitor-settings","--monitor",role]:nil)
+            if !enabled {add(sub,"Available when this monitor shows this Mac and is ready")}
+            for (feature,name) in [("luminance","Brightness"),("volume","Speaker volume")] {
+                for step in [-5,5] {
+                    add(sub,"\(name) \(step>0 ? "+5":"−5")%",enabled ? ["monitor-adjust","--monitor",role,"--feature",feature,"--step",String(step)]:nil)
+                }
+            }
+            entry.submenu=sub;menu.addItem(entry)
+        }
+        add(menu,"Preview support summary…",["support-summary"])
+        add(menu,"Save private diagnostic report…",["diagnostics"])
+        add(menu,"Check system health…",["doctor"])
+        add(menu,"Show transition timing summary…",["history"])
+        add(menu,"Show monitor communication history…",["ddc-history"])
+        add(menu,"Enable failure notifications…",["notifications"])
+        let advanced=NSMenuItem(title:"Advanced",action:nil,keyEquivalent:"")
+        advanced.submenu=menu;compact.addItem(advanced)
+        compact.addItem(.separator())
+        add(compact,"Quit menu bar (automation continues)",["quit"])
+        item.menu=compact
+    }
+    func menuWillOpen(_ menu:NSMenu){openMenus.insert(ObjectIdentifier(menu))}
+    func menuDidClose(_ menu:NSMenu){openMenus.remove(ObjectIdentifier(menu))}
+    @objc func act(_ sender:NSMenuItem){if let args=sender.representedObject as? [String]{execute(args)}}
+    func execute(_ args:[String]) {
+        if !controlsAvailable(read("control.json")),!safeWithoutControls(args.first ?? "") {
+            message("Saved controls unavailable","Check health and restore valid control settings before changing preferences or starting a preview. Recovery journals were preserved.");return
+        }
+        if args==["panel"]{showPanel();return}
+        if args==["quit"]{NSApp.terminate(nil);return}
+        if demo,args.first=="brightness-list" {
+            let role=args.last ?? "pg"
+            var report:[String:Any]=["read_only":true,"monitor":role,"presets":[["name":"Reading","monitor":role,"value":30,"maximum":100,"revision":String(repeating:"a",count:64)],["name":"Evening","monitor":role,"value":15,"maximum":100,"revision":String(repeating:"b",count:64)]]]
+            if demoScenario=="brightness-empty" {report["presets"]=[] }
+            if let data=try? JSONSerialization.data(withJSONObject:report),let json=String(data:data,encoding:.utf8) {chooseBrightness(json,expectedMonitor:role)}
+            return
+        }
+        if demo,args==["setup"] {
+            let report:[String:Any]=["read_only":true,"status":"warning","checks":[["name":"Host enrollment","status":"ok","detail":"Mac A; expected local inputs PG=17, BenQ=19. Synthetic enrollment."],["name":"Rotation enrollment","status":"info","detail":"Portrait profile is missing.","action":"Capture the missing orientation on this Mac through the installer; keep existing profiles."]],"limits":"Synthetic fixture. Nothing was read, changed or uploaded."]
+            if let data=try? JSONSerialization.data(withJSONObject:report),let json=String(data:data,encoding:.utf8) {showReport("setup",setupSummary(json,["BetterDisplay.app","Unrelated.app"]))}
+            return
+        }
+        if demo,args.count==1,detailReports.contains(where:{$0.0==args[0]}) {
+            showReport(args[0],"Synthetic report for interface inspection. No hardware or local diagnostic data was read.\n\nExample: two completed transitions; application time 2.0 seconds. These are demo values, not measurements.")
+            return
+        }
+        if args==["preset-save-prompt"] {savePresetPrompt();return}
+        if demo && args==["preview-options"] {
+            let modes:[String:Any] = ["pg":["width":1920,"height":1080,"pixelWidth":3840,"pixelHeight":2160],"benq":["width":1920,"height":1280,"pixelWidth":3840,"pixelHeight":2560]]
+            var report:[String:Any] = ["rotation":0,"options":[["label":"Current size","size":"current","fingerprint":"demo","modes":modes],["label":"Larger interface","size":"larger","fingerprint":"demo-larger","modes":["pg":["width":1536,"height":864,"pixelWidth":3072,"pixelHeight":1728],"benq":["width":1536,"height":1024,"pixelWidth":3072,"pixelHeight":2048]]]],
+                "presets":[["name":"Reading","rotation":0,"revision":"demo","available":true,"fingerprint":"demo","modes":modes],
+                           ["name":"Reading","rotation":90,"revision":"demo","available":false,"reason":"Preset belongs to the other orientation"]]]
+            if demoScenario=="presets-error" {report["presets"]=[];report["preset_error"]="Saved presets are unreadable. The original file was preserved. Ordinary size previews remain available."}
+            if let data=try? JSONSerialization.data(withJSONObject:report),let text=String(data:data,encoding:.utf8) {chooseSize(text)}
+            return
+        }
+        if demo && args==["display-info"] {
+            if demoScenario=="display-refresh-failed" {displayReading.failed=true;refresh();return}
+            acceptDisplayReading(#"{"read_only":true,"inputs":{"pg":17,"benq":15},"logical_layout":{"state":"pg-source","monitors":[{"monitor":"pg","owner":"A","rotation":0},{"monitor":"benq","owner":"B","rotation":90}]},"displays":[{"monitor":"pg","available":true,"current":{"width":1920,"height":1080,"pixelWidth":3840,"pixelHeight":2160},"saved":{"width":1920,"height":1080,"pixelWidth":3840,"pixelHeight":2160},"hz":120,"hidpi":true,"fixed_refresh":true,"hdr_preference":false,"saved_mode_matches":true},{"monitor":"benq","available":false,"reason":"Synthetic example: monitor showing the other Mac"}],"limits":"Demo data only. No monitor was inspected or changed."}"#)
+            return
+        }
+        if demo {message("Hardware-free demo","This preview uses synthetic status. Monitor, audio, diagnostic and notification actions are disabled.");return}
+        if args==["notifications"] {
+            UNUserNotificationCenter.current().requestAuthorization(options:[.alert]){granted,error in
+                DispatchQueue.main.async {self.message(granted ? "Failure notifications enabled":"Notifications are disabled",error?.localizedDescription ?? "You can change this in System Settings → Notifications → Display Auto.")}
+            };return
+        }
+        guard !busy else{return}
+        if args.first=="support-summary" {reviewedSummary.clear();copySummaryNotice=""}
+        displayRefreshing=args.first=="display-info"
+        busy=true;operationStarted=ProcessInfo.processInfo.systemUptime
+        operationName="Preparing command";operationDeadline=45;operationResult=""
+        showPanel()
+        DispatchQueue.global().async {
+            let response=runCompatibleMenuCommand(args==["setup"] ? ["doctor"]:args,onPhase:{name,deadline in
+                let started=ProcessInfo.processInfo.systemUptime
+                DispatchQueue.main.async {
+                    self.operationName=name;self.operationDeadline=deadline;self.operationStarted=started;self.refresh()
+                }
+            }){arguments,timeout,limit in runMenuCommand(self.command,arguments,timeout:timeout,outputLimit:limit)}
+            let result=response.output,code=response.code
+            DispatchQueue.main.async {
+                self.busy=false;self.operationStarted=nil
+                if args.first=="display-info" {self.displayRefreshing=false;if code != 0 {self.displayReading.failed=true}}
+                if code != 0 {self.operationResult=code==124 ? "Command timed out; inspect status before retrying.":"Command failed; see the error for details."}
+                else if let data=result.data(using:.utf8),let response=(try? JSONSerialization.jsonObject(with:data)) as? [String:Any],response["requested"] != nil {
+                    self.operationResult=response["request_id"] == nil ? "Request saved; this controller does not report command completion.":""
+                } else {self.operationResult="Command returned. See the result and current status below."}
+                self.refresh()
+                if code != 0 {self.message("Action could not complete",result)}
+                else if args.first=="diagnostics" {NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath:result.trimmingCharacters(in:.whitespacesAndNewlines))])}
+                else if args.first=="support-summary" {self.showReport("support-summary","Review before sharing. This report is not uploaded automatically.\n\n"+result)}
+                else if args.first=="history" {self.showReport("history",timingSummary(result))}
+                else if args.first=="display-info" {self.acceptDisplayReading(result)}
+                else if args.first=="doctor" {self.showReport("doctor",healthSummary(result))}
+                else if args.first=="setup" {self.showReport("setup",setupSummary(result,NSWorkspace.shared.runningApplications.compactMap{$0.bundleURL?.lastPathComponent}))}
+                else if args.first=="ddc-history" {self.showReport("ddc-history",ddcSummary(result))}
+                else if args.first=="preset-remove",let data=result.data(using:.utf8),let value=(try? JSONSerialization.jsonObject(with:data)) as? [String:Any],value["removed"] as? Bool == true {
+                    self.operationResult="Preset ‘\(value["name"] as? String ?? "")’ removed for \(value["rotation"] as? Int == 90 ? "portrait":"landscape"). Display settings were not changed."
+                }
+                else if args.first=="preset-save",let data=result.data(using:.utf8),let value=(try? JSONSerialization.jsonObject(with:data)) as? [String:Any],value["saved"] as? Bool == true {
+                    self.operationResult="Preset ‘\(value["name"] as? String ?? "")’ saved for \(value["rotation"] as? Int == 90 ? "portrait":"landscape"). Display settings were not changed."
+                }
+                else if args.first=="brightness-list" {self.chooseBrightness(result,expectedMonitor:args.last ?? "")}
+                else if ["brightness-save","brightness-remove"].contains(args.first ?? ""),let data=result.data(using:.utf8),let value=(try? JSONSerialization.jsonObject(with:data)) as? [String:Any],value[args.first=="brightness-save" ? "saved":"removed"] as? Bool == true {
+                    self.showMonitorResult("Brightness preset ‘\(value["name"] as? String ?? "")’ \(args.first=="brightness-save" ? "saved":"removed"). No brightness change was requested.",value["monitor"] as? String)
+                }
+                else if args.first=="preview-options" {self.chooseSize(result)}
+                else if args.first?.hasPrefix("preview-")==true {self.showPanel()}
+                else if ["monitor-adjust","brightness-apply"].contains(args.first ?? ""),let data=result.data(using:.utf8),let value=(try? JSONSerialization.jsonObject(with:data)) as? [String:Any] {
+                    let name=value["feature"] as? String == "luminance" ? "Brightness":"Speaker volume"
+                    let monitor=value["monitor"] as? String == "pg" ? "PG42UQ":"BenQ RD280UG"
+                    if let percent=value["percent"] as? Int,(0...100).contains(percent) {
+                        self.showMonitorResult("\(monitor) · \(name): \(percent)%\nConfirmed at \(Date().formatted(date:.omitted,time:.standard)). Refresh after using the monitor's own controls.",value["monitor"] as? String)
+                    } else {self.monitorFeedback?.stringValue="Adjustment returned an unreadable value. Read settings again; do not assume it succeeded."}
+                }
+                else if args.first=="monitor-settings",let data=result.data(using:.utf8),let value=(try? JSONSerialization.jsonObject(with:data)) as? [String:Any],let settings=value["settings"] as? [String:[String:Int]] {
+                    let monitor=value["monitor"] as? String == "pg" ? "PG42UQ":"BenQ RD280UG"
+                    var lines=["Read-only snapshot · \(monitor)"]
+                    for (key,label) in [("luminance","Brightness"),("volume","Speaker volume")] {
+                        if let setting=settings[key] {lines.append("\(label): \(setting["percent"] ?? 0)% (\(setting["value"] ?? 0) / \(setting["maximum"] ?? 0))")}
+                    }
+                    lines.append("\nThese are monitor hardware settings. Speaker volume does not select the macOS audio output. Nothing was changed.")
+                    self.showMonitorResult(lines.joined(separator:"\n"),value["monitor"] as? String)
+                }
+                self.refresh()
+            }
+        }
+    }
+    func message(_ title:String,_ body:String){
+        NSApp.activate(ignoringOtherApps:true);let alert=NSAlert();alert.messageText=title
+        if body.count>1000 {
+            let scroll=NSScrollView(frame:NSRect(x:0,y:0,width:480,height:340));scroll.hasVerticalScroller=true;scroll.autohidesScrollers=true
+            let text=NSTextView(frame:scroll.bounds);text.isEditable=false;text.isSelectable=true;text.font=NSFont.systemFont(ofSize:13);text.string=body
+            text.isVerticallyResizable=true;text.isHorizontallyResizable=false;text.textContainer?.widthTracksTextView=true
+            scroll.documentView=text;alert.accessoryView=scroll
+        } else {alert.informativeText=body}
+        alert.runModal()
+    }
+    func savePresetPrompt() {
+        let dialog=PresetDialog(fontSize:CGFloat([16,20,24][textSizeIndex()]))
+        if let arguments=dialog.run() {execute(arguments)}
+    }
+    func removePresetPrompt(_ presets:[[String:Any]]) {
+        guard !presets.isEmpty else{return}
+        let dialog=PresetDialog(fontSize:CGFloat([16,20,24][textSizeIndex()]),presets:presets)
+        if let arguments=dialog.run() {execute(arguments)}
+    }
+    func chooseSize(_ json:String){
+        guard let data=json.data(using:.utf8),let report=(try? JSONSerialization.jsonObject(with:data)) as? [String:Any],let relative=report["options"] as? [[String:Any]] else {message("Size preview unavailable","No qualified size choices were returned.");return}
+        let presetError=report["preset_error"] as? String
+        var choices=relative
+        var unavailable:[String]=[]
+        for preset in report["presets"] as? [[String:Any]] ?? [] {
+            let name=preset["name"] as? String ?? "Unnamed"
+            if preset["available"] as? Bool == true {
+                var option=preset;option["label"]="Preset: "+name;option["preset"]=name;choices.append(option)
+            } else {unavailable.append(name+" — "+(preset["rotation"] as? Int == 90 ? "Portrait":"Landscape")+": "+(preset["reason"] as? String ?? "Unavailable"))}
+        }
+        guard !choices.isEmpty else {message("Size preview unavailable","No qualified choices are currently available.");return}
+        NSApp.activate(ignoringOtherApps:true)
+        let presets=report["presets"] as? [[String:Any]] ?? []
+        let current=relative.first(where:{$0["size"] as? String == "current"}) ?? [:]
+        var notes:[String]=[]
+        if let error=presetError {notes.append("Saved presets unavailable\n"+error)}
+        if !unavailable.isEmpty {notes.append("Unavailable presets\n"+unavailable.joined(separator:"\n"))}
+        let canSave=visibleCapabilities?.contains("preset-save")==true
+        let canRemove=visibleCapabilities?.contains("preset-remove")==true
+        if !canSave || !canRemove {notes.append(presetCompatibilitySummary(visibleCapabilities,checking:checkingCapabilities)+" Check support in Controls.")}
+        let chooser=SizeChooser(choices:choices,current:current,notes:notes.joined(separator:"\n\n"),orientation:report["rotation"] as? Int == 90 ? "Portrait":"Landscape",fontSize:CGFloat([16,20,24][textSizeIndex()]),canSave:presetError==nil && canSave,canRemove:presetError==nil && !presets.isEmpty && canRemove)
+        let response=chooser.run()
+        if response==1,presetError==nil {savePresetPrompt();return}
+        if response==2,presetError==nil {removePresetPrompt(presets);return}
+        let index=chooser.selectedIndex
+        guard response==0,index>=0,index<choices.count,let fingerprint=choices[index]["fingerprint"] as? String else {return}
+        if let preset=choices[index]["preset"] as? String {execute(["preview-start","--preset",preset,"--fingerprint",fingerprint])}
+        else if let size=choices[index]["size"] as? String {execute(["preview-start","--size",size,"--fingerprint",fingerprint])}
+    }
+    func notify(_ health:[String:Any],fresh:Bool) {
+        guard fresh else{return}
+        let defaults=UserDefaults.standard
+        let state=health["status"] as? String ?? ""
+        let center=UNUserNotificationCenter.current()
+        if state=="ready" || state=="inactive-setup" {
+            if !failureAlerts.sent.isEmpty || failureAlerts.pending != nil {
+                failureAlerts.clear();defaults.removeObject(forKey:"failureIncidents")
+                center.removePendingNotificationRequests(withIdentifiers:["display-recovery"])
+                center.removeDeliveredNotifications(withIdentifiers:["display-recovery"])
+            }
+            return
+        }
+        guard let incident=failureIncident(health),let attempt=failureAlerts.reserve(incident) else{return}
+        let r=health["recovery"] as? [String:Any] ?? [:]
+        let content=UNMutableNotificationContent();content.title="Display Auto needs attention"
+        content.body=health["error"] as? String ?? r["error"] as? String ?? "Recovery stopped after three attempts. Open the display menu for details."
+        content.categoryIdentifier=state=="state-error" || state=="preview-needs-repair" ? "state-failure":"failure"
+        content.userInfo=["incident":incident]
+        center.getNotificationSettings{settings in
+            DispatchQueue.main.async {
+                guard self.failureAlerts.current(attempt) else{return}
+                let current=self.read("health.json")
+                guard settings.authorizationStatus == .authorized,statusFresh(current),failureIncident(current)==incident else {
+                    self.failureAlerts.finish(attempt,success:false);return
+                }
+                center.add(UNNotificationRequest(identifier:"display-recovery",content:content,trigger:nil)){error in
+                    DispatchQueue.main.async {
+                        self.failureAlerts.finish(attempt,success:error==nil)
+                        defaults.set(self.failureAlerts.sent,forKey:"failureIncidents")
+                    }
+                }
+            }
+        }
+    }
+    func userNotificationCenter(_ center:UNUserNotificationCenter,didReceive response:UNNotificationResponse,withCompletionHandler completionHandler:@escaping ()->Void){
+        if let command=notificationCommand(response.actionIdentifier) {
+            DispatchQueue.main.async {
+                let health=self.read("health.json")
+                let incident=response.notification.request.content.userInfo["incident"] as? String
+                let staleRepair=command=="repair-audio" && (incident==nil || !statusFresh(health) || failureIncident(health) != incident)
+                if self.busy || staleRepair {self.showPanel()}
+                else {self.execute([command])}
+                completionHandler()
+            }
+        } else {completionHandler()}
+    }
+    func userNotificationCenter(_ center:UNUserNotificationCenter,willPresent notification:UNNotification,withCompletionHandler completionHandler:@escaping (UNNotificationPresentationOptions)->Void){completionHandler([.banner,.list])}
+}

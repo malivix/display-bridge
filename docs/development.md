@@ -22,7 +22,10 @@ local processes to verify timeout and output limits; it does not start the app U
 
 - Root Python modules: deployed controller, policy, recovery, and diagnostics; their flat layout
   matches the installed runtime. `display-auto.py` is the CLI; `install.py` is import-safe.
-- `native/`: Swift menu/layout and Objective-C audio/rotation/mode helpers.
+- `native/menu/`: focused Swift sources for app wiring, command execution, presentation,
+  preset windows and self-tests. `main.swift` is the entry point; `MENU_SOURCES` in
+  `release_manifest.py` is shared by installation, preflight and verification.
+- Other `native/` files: Swift layout and Objective-C audio/rotation/mode helpers.
 - `tests/unit/`: isolated Python regressions. `tests/native/`: hardware-free native tests.
 - `tests/hardware/`: explicitly invoked physical tests requiring a controlled setup.
 - `scripts/`: developer verification and publication gates. `.githooks/`: opt-in local hooks.

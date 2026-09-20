@@ -4,7 +4,7 @@
 import os, plistlib, shutil, subprocess, tempfile, time, json, re
 from pathlib import Path
 from deployment import require_service_namespace
-from release_manifest import VERSION, MENU_BUILD
+from release_manifest import VERSION, MENU_BUILD, MENU_SOURCES
 
 
 def activate_menu(staged, app, agent, service, run, health_path, version):
@@ -119,7 +119,7 @@ def install_menu(package):
                 "-target",
                 "arm64-apple-macos13.0",
                 "-O",
-                str(package / "native/display-menu.swift"),
+                *(str(package / source) for source in MENU_SOURCES),
                 "-o",
                 str(binary),
             ],

@@ -1,0 +1,334 @@
+// SPDX-License-Identifier: MIT
+import AppKit
+import UserNotifications
+import Darwin
+
+func runMenuSelfTests() {
+    let stateFolder=FileManager.default.temporaryDirectory.appendingPathComponent("display-state-test-"+UUID().uuidString)
+    try! FileManager.default.createDirectory(at:stateFolder,withIntermediateDirectories:true)
+    let statePath=stateFolder.appendingPathComponent("health.json")
+    try! Data("{\"status\":\"ready\"}".utf8).write(to:statePath)
+    precondition(readMenuState(statePath)?["status"] as? String == "ready")
+    precondition(readMenuState(statePath,limit:4)==nil)
+    let link=stateFolder.appendingPathComponent("link")
+    try! FileManager.default.createSymbolicLink(at:link,withDestinationURL:statePath)
+    precondition(readMenuState(link)==nil)
+    let pipe=stateFolder.appendingPathComponent("pipe")
+    precondition(mkfifo(pipe.path,0o600)==0)
+    precondition(readMenuState(pipe)==nil)
+    for invalid in ["{broken","[]"] {
+        try! Data(invalid.utf8).write(to:statePath)
+        precondition(readMenuState(statePath)==nil)
+    }
+    try! FileManager.default.removeItem(at:stateFolder)
+    precondition(readMenuState(statePath)==nil)
+    precondition(readMenuState(statePath,allowMissing:true)?.isEmpty==true)
+    let missingControl:[String:Any]=["_read_unavailable":true]
+    precondition(!controlsAvailable(missingControl) && controlsAvailable([:]))
+    precondition(safeWithoutControls("doctor") && safeWithoutControls("preview-revert") && !safeWithoutControls("preview-start"))
+    precondition(monitorControlReason([:],missingControl,"pg",false) != nil)
+    precondition(audioRepairReason([:],missingControl,false) != nil)
+    precondition(dashboard(["status":"ready","updated_at":100.0],missingControl,101).hasPrefix("Saved controls unavailable"))
+    print("PASS bounded regular-file menu state reads and unavailable controls")
+    let lockPath=FileManager.default.temporaryDirectory.appendingPathComponent("display-menu-test-"+UUID().uuidString).path
+    var firstOwner=MenuOwnership(path:lockPath)
+    precondition(firstOwner != nil)
+    precondition(MenuOwnership(path:lockPath)==nil,"Only one menu may own heartbeat and notifications")
+    firstOwner=nil
+    let nextOwner=MenuOwnership(path:lockPath)
+    precondition(nextOwner != nil,"Exited owner's lock must be reusable")
+    try? FileManager.default.removeItem(atPath:lockPath)
+    print("PASS exclusive menu ownership and release")
+    let commandStarted=ProcessInfo.processInfo.systemUptime
+    let timed=runMenuCommand(URL(fileURLWithPath:"/bin/sleep"),["2"],timeout:0.1)
+    precondition(timed.code==124,"Menu command must stop at its deadline")
+    precondition(ProcessInfo.processInfo.systemUptime-commandStarted<1.5)
+    let echo=runMenuCommand(URL(fileURLWithPath:"/bin/echo"),["ready"])
+    precondition(echo.code==0 && echo.output=="ready\n")
+    let failed=runMenuCommand(URL(fileURLWithPath:"/usr/bin/false"),[])
+    precondition(failed.code != 0)
+    let noisy=runMenuCommand(URL(fileURLWithPath:"/usr/bin/yes"),[],outputLimit:1024)
+    precondition(noisy.code==125)
+    print("PASS menu command completion, failure, deadline, and output limit")
+
+    precondition(previewRemaining(["updated_at":100.0,"preview":["state":"preview","remaining_seconds":20.0]],105)==15)
+    precondition(previewRemaining(["updated_at":100.0,"preview":["state":"preview","remaining_seconds":20.0]],120)==0)
+    let live:[String:Any]=["updated_at":100.0,"status":"ready","host":"A","inputs":["pg":17,"benq":15],"profile":"pg"]
+    precondition(dashboard(live,[:],101).contains("PG42UQ: Mac A"))
+    precondition(dashboard(live,[:],101).contains("BenQ RD280UG: Mac B"))
+    precondition(!dashboard(live,[:],101).contains("may be out of date"))
+    precondition(dashboard(live,[:],120).contains("may be out of date"))
+    precondition(dashboard(live,[:],120).contains("Last known · PG42UQ"),"Stale monitor ownership must be labeled at the value")
+    precondition(dashboard(live,[:],120).contains("Last known · Selected speaker"))
+    precondition(dashboard(live,[:],99).contains("Controller status unavailable"))
+    var waiting=live;waiting["status"]="waiting-for-ddc"
+    precondition(dashboard(waiting,[:],101).contains("may be out of date"))
+    precondition(statusFresh(live,101))
+    precondition(!statusFresh(live,115) && !statusFresh(live,99))
+    precondition(!statusFresh([:],0))
+    precondition(!statusFresh(["updated_at":Double.infinity],101))
+    precondition(statusAge(["updated_at":Double.nan],101)=="Status age unavailable")
+    precondition(statusAge(live,120)=="Last report: 20 seconds ago")
+    precondition(!detailPrefix(live,["paused":true],101).isEmpty)
+    let monitorHealth:[String:Any]=["host":"A","status":"ready","updated_at":Date().timeIntervalSince1970,"inputs":["pg":17,"benq":15]]
+    precondition(monitorControlReason(monitorHealth,[:],"pg",false)==nil)
+    precondition(monitorControlReason(monitorHealth,[:],"benq",false) != nil)
+    precondition(monitorControlReason(monitorHealth,["paused":true],"pg",false) != nil)
+    precondition(monitorControlReason(monitorHealth,[:],"pg",true) != nil)
+    precondition(monitorControlReason([:],[:],"pg",false) != nil)
+    precondition(speakerChoices("away").map{$0.0}==["fallback","preserve"])
+    precondition(!speakerChoices("benq").contains{$0.0=="pg"})
+    precondition(audioRepairReason([:],[:],false) != nil)
+    let audioHealth:[String:Any]=["updated_at":Date().timeIntervalSince1970,"status":"ready","profile":"extended"]
+    precondition(audioRepairReason(audioHealth,[:],false)==nil)
+    precondition(audioRepairReason(audioHealth,["paused":true],false) != nil)
+    precondition(audioRepairReason(audioHealth,[:],true) != nil)
+    precondition(audioRepairReason(audioHealth,["audio_manual_until":Date().timeIntervalSince1970+60],false) != nil)
+    let sectionHealth:[String:Any]=["status":"ready","updated_at":Date().timeIntervalSince1970,"inputs":["pg":17,"benq":15],"profile":"pg"]
+    let sections=statusSections(sectionHealth,[:])
+    precondition(sections.map{$0.title}==["Overview","PG42UQ","BenQ RD280UG","Audio","Recovery"])
+    precondition(sections[1].body=="Showing Mac A" && sections[2].body.contains("Showing Mac B"))
+    precondition(statusSections([:],[:])[1].body.contains("Last known"))
+    let previewSections=statusSections(["updated_at":Date().timeIntervalSince1970,"status":"preview-active","preview":["state":"preview","remaining_seconds":20.0]],[:])
+    precondition(previewSections[0].body.contains("Keep within"))
+    let retryHealth:[String:Any]=["updated_at":100.0,"status":"recovering","retry_in_seconds":8.0,"recovery":["pending":true,"attempts":2]]
+    precondition(recoverySummary(retryHealth,[:],103).contains("about 5 seconds"))
+    precondition(!recoverySummary(retryHealth,[:],120).contains("eligible"),"Stale data must not promise a retry")
+    precondition(recoverySummary(retryHealth,["paused":true],103).contains("paused"))
+    var exhausted=retryHealth;exhausted["recovery"]=["pending":true,"attempts":3]
+    precondition(recoverySummary(exhausted,[:],103).contains("stopped after 3"))
+    var badRetry=retryHealth;badRetry["retry_in_seconds"]=Double.infinity
+    precondition(recoverySummary(badRetry,[:],103).contains("not been reported"))
+    var held=retryHealth;held["status"]="waiting-for-known-input"
+    precondition(recoverySummary(held,[:],103).contains("changes are held"))
+    var repairHealth:[String:Any]=["updated_at":100.0,"status":"degraded","profile":"extended","recovery":["pending":true,"attempts":3]]
+    let repair=recoveryAction(repairHealth,[:],103)!
+    precondition(repair.arguments==["repair-audio"])
+    precondition(recoveryAction(repairHealth,[:],120)?.arguments==["doctor"])
+    precondition(recoveryAction(repairHealth,["paused":true],103)?.arguments==["doctor"])
+    precondition(recoveryAction(repairHealth,["audio_manual_until":200.0],103)?.arguments==["doctor"])
+    precondition(recoveryAction(repairHealth,missingControl,103)?.arguments==["doctor"])
+    precondition(currentRecoveryArguments(repair,repairHealth,[:],true,103)==nil)
+    precondition(currentRecoveryArguments(repair,repairHealth,[:],false,120)==nil)
+    precondition(currentRecoveryArguments(repair,repairHealth,[:],false,103)==["repair-audio"])
+    for state in ["settling","recovering","waiting-for-ddc","waiting-for-known-input"] {
+        var waiting=repairHealth;waiting["status"]=state
+        precondition(recoveryAction(waiting,[:],103)==nil)
+    }
+    repairHealth["status"]="preview-recovery";repairHealth["preview"]=["state":"needs-repair","token":"example-one"]
+    let restoration=recoveryAction(repairHealth,[:],103)!
+    precondition(restoration.arguments==["preview-repair","--token","example-one"])
+    repairHealth["preview"]=["state":"needs-repair","token":"example-two"]
+    precondition(currentRecoveryArguments(restoration,repairHealth,[:],false,103)==nil)
+    repairHealth["preview"]=["state":"needs-repair"]
+    precondition(recoveryAction(repairHealth,[:],103)?.arguments==["doctor"])
+    repairHealth["preview"]=["state":"restore-deferred"]
+    precondition(recoveryAction(repairHealth,[:],103)==nil)
+    precondition(recoveryAction(["updated_at":100.0,"status":"ready"],[:],103)==nil)
+    print("PASS contextual recovery actions, stale clicks, busy state and changed preview tokens")
+    let comparisonCurrent:[String:Any]=["modes":["pg":["width":1920,"height":1080,"pixelWidth":3840,"pixelHeight":2160]]]
+    let comparisonLarger:[String:Any]=["modes":["pg":["width":1536,"height":864,"pixelWidth":3072,"pixelHeight":1728]]]
+    precondition(sizeComparison(comparisonCurrent,comparisonLarger).contains("25% larger"))
+    precondition(sizeComparison(comparisonLarger,comparisonCurrent).contains("20% smaller"))
+    precondition(sizeComparison(comparisonCurrent,comparisonCurrent).contains("unchanged"))
+    precondition(sizeComparison([:],comparisonLarger).contains("estimate unavailable"))
+    precondition(sizeComparison(comparisonCurrent,["modes":["pg":["width":Double.infinity]]]).contains("estimate unavailable"))
+    precondition(sizeComparison(comparisonCurrent,comparisonLarger).contains("3840 × 2160 → 3072 × 1728"))
+    print("PASS size comparison direction, missing dimensions and framebuffer labels")
+    precondition(presetNameError("Reading")==nil)
+    precondition(presetNameError(String(repeating:"a",count:48))==nil)
+    for invalid in ["",String(repeating:"a",count:49)," Reading","Reading ","a\u{7F}b","a\nb","\u{85}Reading",String(repeating:"e\u{301}",count:25)] {
+        precondition(presetNameError(invalid) != nil)
+    }
+    precondition(presetNameError("Reading 🌙")==nil)
+    print("PASS preset names match code-point limits, whitespace and control-character rules")
+    precondition(recognizedDisplayTools(["BetterDisplay.app","betterdisplay.app","NotBetterDisplay.app","Private editor.app"])==["BetterDisplay"])
+    precondition(recognizedDisplayTools(["Lunar.app","MonitorControl.app"])==["Lunar","MonitorControl"])
+    precondition(displayToolSummary(nil).contains("not inspected"))
+    precondition(displayToolSummary([]).contains("not proof"))
+    precondition(!displayToolSummary(["Private editor.app"]).contains("Private editor"))
+    precondition(displayToolSummary(["BetterDisplay.app"]).contains("Nothing was stopped"))
+    print("PASS advisory display-tool recognition, deduplication and unrelated-app omission")
+    precondition(setupSummary("{}").contains("unavailable"))
+    precondition(setupSummary("{\"read_only\":true,\"checks\":[]}").contains("Not reported: Host enrollment"))
+    precondition(setupSummary("{\"read_only\":true,\"checks\":[]}").contains("older controller"))
+    precondition(safeWithoutControls("setup"))
+    print("PASS setup readiness marks missing enrollment information unknown")
+    precondition(panelShortcut("3",.command,false) == .tab("displays"))
+    precondition(panelShortcut("R",[.command,.capsLock],false) == .refresh)
+    for modifiers:NSEvent.ModifierFlags in [[],.control,[.command,.shift],[.command,.option]] {
+        precondition(panelShortcut("1",modifiers,false)==nil)
+    }
+    precondition(panelShortcut("r",.command,true)==nil)
+    precondition(panelShortcut("6",.command,false)==nil)
+    precondition(panelRefreshArguments("details","setup","pg")==["setup"])
+    precondition(panelRefreshArguments("details","status","pg")==nil)
+    precondition(panelRefreshArguments("details","repair-audio","pg")==nil)
+    precondition(panelRefreshArguments("displays","status","pg")==["display-info"])
+    precondition(panelRefreshArguments("monitor-controls","status","benq")==["monitor-settings","--monitor","benq"])
+    precondition(panelRefreshArguments("monitor-controls","status","unknown")==nil)
+    precondition(panelRefreshArguments("audio","status","pg")==nil)
+    print("PASS window shortcuts, modifier isolation, repeat suppression and read-only refresh targets")
+    precondition(presetCompatibilitySummary(nil,checking:true).contains("Checking"))
+    precondition(presetCompatibilitySummary(nil,checking:false).contains("could not be verified"))
+    precondition(presetCompatibilitySummary([],checking:false).contains("brightness presets unavailable"))
+    precondition(presetCompatibilitySummary(Set(["preset-save","preset-remove"]),checking:false).contains("size preset saving/removal available"))
+    print("PASS unknown, checking, unsupported and partial preset availability labels")
+    let supportedReport="{\"protocol\":1,\"read_only\":true,\"commands\":[\"brightness-save\"]}"
+    for report in [CommandResult(output:supportedReport,code:0),CommandResult(output:supportedReport,code:124),CommandResult(output:"{}",code:0),CommandResult(output:supportedReport.replacingOccurrences(of:"brightness-save",with:"status"),code:0),CommandResult(output:supportedReport.replacingOccurrences(of:"protocol\":1",with:"protocol\":true"),code:0)] {
+        var calls:[[String]]=[];var phases:[String]=[];var deadlines:[Double]=[]
+        let result=runCompatibleMenuCommand(["brightness-save","--monitor","pg"],onPhase:{name,deadline in phases.append(name);deadlines.append(deadline)}){args,timeout,limit in
+            calls.append(args)
+            if args==["capabilities"] {precondition(timeout==5 && limit==16_384);return report}
+            return CommandResult(output:"requested",code:0)
+        }
+        let valid=report.code==0 && report.output==supportedReport
+        precondition(calls.count==(valid ? 2:1) && result.code==(valid ? 0:78))
+        precondition(phases.first=="Checking preset support" && phases.count==(valid ? 2:1))
+        precondition(deadlines==(valid ? [5,45]:[5]))
+        if valid {precondition(phases.last==operationTitle("brightness-save"))}
+    }
+    var recoveryCalls:[[String]]=[];var recoveryDeadlines:[Double]=[]
+    _=runCompatibleMenuCommand(["preview-revert","--token","example"],onPhase:{_,deadline in recoveryDeadlines.append(deadline)}){args,_,_ in recoveryCalls.append(args);return CommandResult(output:"legacy",code:0)}
+    precondition(recoveryCalls==[["preview-revert","--token","example"]] && recoveryDeadlines==[45])
+    print("PASS capability preflight blocks unsupported commands and preserves legacy recovery")
+    var brightnessSample:[String:Any]=["read_only":true,"monitor":"benq","presets":[["name":"Reading","monitor":"benq","value":15,"maximum":50,"revision":String(repeating:"a",count:64)]]]
+    func brightnessJSON(_ report:[String:Any])->String {String(data:try! JSONSerialization.data(withJSONObject:report),encoding:.utf8)!}
+    precondition(brightnessEntries(brightnessJSON(brightnessSample))?.entries.first?.description.contains("30%") == true)
+    precondition(brightnessEntries(brightnessJSON(brightnessSample),"pg")==nil)
+    precondition(brightnessEntries(brightnessJSON(brightnessSample),"benq") != nil)
+    precondition(brightnessEntries("{}")==nil)
+    for patch in [["value":true],["value":51],["maximum":0],["revision":"stale"],["monitor":"pg"]] as [[String:Any]] {
+        var sample=brightnessSample;var entry=(sample["presets"] as! [[String:Any]])[0]
+        entry.merge(patch){_,new in new};sample["presets"]=[entry]
+        precondition(brightnessEntries(brightnessJSON(sample))==nil)
+    }
+    let brightnessRow=(brightnessSample["presets"] as! [[String:Any]])[0]
+    brightnessSample["presets"]=[brightnessRow,brightnessRow]
+    precondition(brightnessEntries(brightnessJSON(brightnessSample))==nil)
+    brightnessSample["presets"]=[]
+    precondition(brightnessEntries(brightnessJSON(brightnessSample))?.entries.isEmpty == true)
+    print("PASS brightness list targets, ranges, revisions, duplicate names and empty states")
+    let trackedRequest:[String:Any]=["id":"example","action":"resume"]
+    precondition(commandSummary([:],["command_request":trackedRequest]).contains("not yet reported"))
+    let trackedHealth:[String:Any]=["updated_at":Date().timeIntervalSince1970,"command_result":["request":trackedRequest,"state":"deferred","detail":"Waiting for input"]]
+    precondition(commandSummary(trackedHealth,["command_request":trackedRequest]).contains("Request deferred"))
+    precondition(commandSummary(trackedHealth,["command_request":["id":"new","action":"pause"]]).contains("not yet reported"))
+    precondition(commandSummary(["command_tracking_error":"Damaged history"],[:])=="Damaged history")
+    precondition(notificationCommand(UNNotificationDefaultActionIdentifier)=="panel")
+    precondition(notificationCommand("inspect")=="doctor")
+    precondition(notificationCommand("repair")=="repair-audio")
+    precondition(notificationCommand(UNNotificationDismissActionIdentifier)==nil)
+    precondition(notificationCommand("unknown")==nil)
+    precondition(operationTitle("preview-options")=="Inspecting size choices")
+    print("PASS status freshness, stale labels, progress labels and notification routing")
+    precondition(automationPaused(["paused":true,"pause_until":200.0],100))
+    precondition(!automationPaused(["paused":true,"pause_until":200.0],200))
+    precondition(automationPaused(["paused":true],200))
+    var reviewed=ReviewedSupportSummary()
+    precondition(reviewed.body(for:"support-summary")==nil)
+    reviewed.show("doctor","private details")
+    precondition(reviewed.body(for:"support-summary")==nil)
+    reviewed.show("support-summary","reviewed report")
+    precondition(reviewed.body(for:"support-summary")=="reviewed report")
+    precondition(reviewed.body(for:"status")==nil)
+    reviewed.clear();precondition(reviewed.body(for:"support-summary")==nil)
+    reviewed.show("support-summary",String(repeating:"x",count:1_048_577))
+    precondition(reviewed.body(for:"support-summary")==nil)
+    print("PASS reviewed-summary copy scope, invalidation and size bound; clipboard untouched")
+    var reading=DisplayReading()
+    let snapshotJSON="{\"read_only\":true,\"inputs\":{\"pg\":17,\"benq\":19},\"displays\":[{\"monitor\":\"pg\"},{\"monitor\":\"benq\"}]}"
+    var snapshotHealth:[String:Any]=["updated_at":100.0,"status":"ready","inputs":["pg":17,"benq":19]]
+    precondition(reading.notice(snapshotHealth,refreshing:false,now:100).contains("No display snapshot"))
+    precondition(reading.accept(snapshotJSON))
+    precondition(reading.notice(snapshotHealth,refreshing:false,now:100).contains("Inputs still match"))
+    precondition(reading.notice(snapshotHealth,refreshing:false,now:120).contains("Controller unavailable"))
+    snapshotHealth["inputs"]=["pg":18,"benq":19]
+    precondition(reading.notice(snapshotHealth,refreshing:false,now:100).contains("Inputs changed"))
+    snapshotHealth["inputs"]=["pg":true,"benq":19]
+    precondition(reading.notice(snapshotHealth,refreshing:false,now:100).contains("comparison unavailable"))
+    precondition(!reading.accept("{}") && reading.report != nil)
+    precondition(reading.notice(snapshotHealth,refreshing:false,now:100).contains("Previous snapshot retained"))
+    precondition(reading.notice(snapshotHealth,refreshing:true,now:100).contains("Refreshing"))
+    precondition(reading.accept(snapshotJSON) && !reading.failed)
+    print("PASS snapshot input comparison, stale health, failed refresh preservation and recovery")
+    let sampleLayout:[String:Any]=["state":"pg-source","monitors":[["monitor":"pg","owner":"A","rotation":0],["monitor":"benq","owner":"B","rotation":90]]]
+    precondition(layoutSummary(sampleLayout).contains("BenQ mirrors PG"))
+    precondition(layoutSummary(sampleLayout).contains("Showing Mac B"))
+    precondition(layoutSummary(nil).contains("unavailable"))
+    var unknownLayout=sampleLayout;unknownLayout["state"]="unexpected"
+    precondition(layoutSummary(unknownLayout).contains("not confirmed"))
+    unknownLayout["monitors"]=[["monitor":"pg"],["monitor":"pg"]]
+    precondition(layoutSummary(unknownLayout).contains("unavailable"))
+    print("PASS logical layout direction, remote ownership and unknown topology labels")
+    precondition(displaySummary("invalid").contains("could not be read"))
+    precondition(displaySummary("{\"read_only\":true,\"displays\":[{\"monitor\":\"pg\",\"available\":false,\"reason\":\"Away\"}]}").contains("Away"))
+    precondition(healthSummary("{\"status\":\"ok\",\"checks\":[]}").contains("Read-only check: ok"))
+    precondition(ddcSummary("invalid").contains("could not be read"))
+    precondition(ddcSummary("{\"episodes\":[],\"ddc_interruptions\":0}").contains("No interruptions recorded"))
+    let ddc=ddcSummary("{\"ddc_interruptions\":1,\"episodes\":[{\"started\":\"now\",\"monitor\":\"benq\",\"seconds\":1.25,\"recovered\":\"later\"}]}")
+    precondition(ddc.contains("Read recovered · 1.25 s") && ddc.contains("benq"))
+    var alerts=FailureAlerts()
+    let broken:[String:Any]=["status":"degraded","profile":"pg","recovery":["reason":"audio"]]
+    let first=failureIncident(broken)!
+    var retry=broken;retry["updated_at"]=123;retry["recovery"]=["reason":"audio","attempts":3]
+    precondition(failureIncident(retry)==first)
+    for state in ["ready","recovering","settling","paused","waiting-for-ddc","inactive-setup"] {
+        precondition(failureIncident(["status":state])==nil)
+    }
+    let attempt=alerts.reserve(first)!
+    precondition(alerts.reserve(first)==nil)
+    alerts.finish(attempt,success:false)
+    let retryAttempt=alerts.reserve(first)!
+    alerts.finish(retryAttempt,success:true)
+    precondition(alerts.reserve(first)==nil)
+    let different=failureIncident(["status":"state-error","error":"control.json: invalid"])!
+    precondition(different != first)
+    let second=alerts.reserve(different)!
+    alerts.clear()
+    let afterRecovery=alerts.reserve(first)!
+    alerts.finish(second,success:true)
+    precondition(alerts.current(afterRecovery) && alerts.sent.isEmpty)
+    alerts.finish(afterRecovery,success:true)
+    var restartedAlerts=FailureAlerts(sent:alerts.sent)
+    precondition(restartedAlerts.reserve(first)==nil)
+    print("PASS distinct incidents, retry deduplication, failed delivery and late callbacks")
+    precondition(timingSummary("{\"profiles\":{}}").contains("No completed transitions"))
+    precondition(timingSummary("{\"history_available\":false,\"profiles\":{}}").contains("no timing conclusion"))
+    precondition(timingSummary("invalid").contains("could not be read"))
+    let timing=timingSummary("{\"profiles\":{\"extended\":{\"count\":4,\"seconds\":{\"total\":{\"median\":2,\"max\":5,\"count\":3}}}}}")
+    precondition(timing.contains("Both monitors here") && timing.contains("2.00 / unavailable / 5.00 s (3 samples)"))
+    let failures=timingSummary("{\"profiles\":{\"benq\":{\"count\":0,\"failed_attempts\":3,\"seconds\":{}}}}")
+    precondition(failures.contains("Failed attempts: 3") && failures.contains("No completed phase timings"))
+    let percentiles=timingSummary("{\"profiles\":{\"pg\":{\"count\":5,\"seconds\":{\"total\":{\"median\":2,\"p95\":4,\"max\":5,\"count\":4}}}}}")
+    precondition(percentiles.contains("2.00 / 4.00 / 5.00 s (4 samples)"))
+    print("PASS notification policy: persistent failure only, deduplication, freshness and re-arm")
+    exit(0)
+}
+// Opt-in API integration test. A unique named pasteboard never touches the general clipboard.
+func runPrivatePasteboardTest() {
+    let board=NSPasteboard(name:NSPasteboard.Name("io.github.display-bridge.test."+UUID().uuidString))
+    guard board.setString("previous private test value",forType:.string) else {fatalError("Private pasteboard unavailable")}
+    precondition(!writeReviewedSummary("",to:board))
+    precondition(board.string(forType:.string)=="previous private test value")
+    let report="Reviewed support summary\nSynthetic Unicode text: café · 2 transitions"
+    precondition(writeReviewedSummary(report,to:board))
+    precondition(board.string(forType:.string)==report)
+    precondition(!writeReviewedSummary(String(repeating:"x",count:1_048_577),to:board))
+    precondition(board.string(forType:.string)==report)
+    board.releaseGlobally()
+    print("PASS private pasteboard exact copy and invalid-input preservation; general clipboard untouched")
+    exit(0)
+}
+func runNotificationTest() {
+    let center=UNUserNotificationCenter.current()
+    center.getNotificationSettings { settings in
+        guard settings.authorizationStatus == .authorized else {print("Notifications not authorized");exit(1)}
+        let content=UNMutableNotificationContent();content.title="Display Auto test";content.body="Failure alerts are enabled. This is a test, not a display failure.";content.categoryIdentifier="failure"
+        center.add(UNNotificationRequest(identifier:"display-test",content:content,trigger:nil)){error in
+            if let error=error {print(error.localizedDescription);exit(1)}
+            print("PASS test notification accepted by macOS");exit(0)
+        }
+    }
+    dispatchMain()
+}

@@ -6,6 +6,14 @@ from setup_menu import activate_menu
 
 
 class MenuDeployment(unittest.TestCase):
+    def test_menu_source_inventory_is_complete_and_unique(self):
+        from release_manifest import MENU_SOURCES
+        package=Path(__file__).resolve().parents[2]
+        actual={str(p.relative_to(package)) for p in (package/'native/menu').glob('*.swift')}
+        self.assertEqual(set(MENU_SOURCES),actual)
+        self.assertEqual(len(MENU_SOURCES),len(actual))
+        self.assertEqual(sum(Path(p).name=='main.swift' for p in MENU_SOURCES),1)
+
     def exercise(self,existing=True,fail=False,wrong_pid=False,orphan=False):
         with tempfile.TemporaryDirectory() as folder:
             root=Path(folder);staged=root/'stage';staged.mkdir();(staged/'marker').write_text('new')

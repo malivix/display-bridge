@@ -18,6 +18,7 @@ from contextlib import ExitStack
 from deployment import atomic_link, snapshot, restore, require_service_namespace, require_idle_preview
 from release_manifest import (
     RUNTIME_MODULES,
+    MENU_SOURCES,
     INSTALLED_FILES,
     HELPER_HASH_FIELDS,
     VERSION,
@@ -46,7 +47,7 @@ def preflight(package, home):
     add('Python',sys.version_info>=(3,10),'Python 3.10 or newer is required.')
     sources=(*RUNTIME_MODULES,'setup_menu.py','scripts/test','native/display-layout.swift',
              'native/display-audio.m','native/display-rotate.m','native/display-mode-info.m',
-             'native/display-menu.swift','vendor/m1ddc/Makefile','tests/native/test_ddc.m')
+             *MENU_SOURCES,'vendor/m1ddc/Makefile','tests/native/test_ddc.m')
     missing=[name for name in sources if not (package/name).is_file()]
     add('Source files',not missing,'Required source entry points are present.' if not missing else 'Incomplete checkout; missing: '+', '.join(missing))
     toolchain=False

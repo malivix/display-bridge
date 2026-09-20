@@ -8,8 +8,11 @@ import platform
 import shutil
 import subprocess
 import tempfile
+import sys
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+from release_manifest import MENU_SOURCES
 
 
 def run(*args, **kwargs):
@@ -41,7 +44,7 @@ def main():
                 "-target",
                 "arm64-apple-macos13.0",
                 "-O",
-                str(ROOT / "native" / (name + ".swift")),
+                *(str(ROOT / source) for source in (MENU_SOURCES if name == "display-menu" else ("native/display-layout.swift",))),
                 "-o",
                 str(build / name),
             )

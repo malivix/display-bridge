@@ -10,7 +10,11 @@ lock. `audio_policy.py` selects a route; `recovery_state.py` bounds retries.
 observability, not an execution queue. Damaged result history is preserved and reported,
 without resetting recovery or replaying actions.
 
-`native/display-menu.swift` is a per-user menu app. It submits controller commands and reads health;
+`native/menu/` contains the per-user menu app. `MenuApp.swift` owns AppKit orchestration,
+`Commands.swift` bounds process execution and defines preset capability groups,
+`Presentation.swift` formats controller observations, and `PresetWindows.swift` owns dialogs.
+`SelfTests.swift` holds isolated checks; `main.swift` selects test entry points or starts the app.
+The app submits controller commands and reads health;
 it does not maintain an independent hardware state machine. CLI execution has bounded time
 and output, so a stalled child does not permanently disable menu actions. `observability.py`,
 `health_check.py`, and `ddc_log_report.py` report state and timing locally.

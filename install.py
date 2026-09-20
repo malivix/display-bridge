@@ -25,6 +25,7 @@ from release_manifest import (
 
 def run(args, **kwargs):
     kwargs.setdefault("timeout", 120)
+    kwargs.setdefault("env", dict(os.environ, MACOSX_DEPLOYMENT_TARGET="13.0"))
     return subprocess.run(args, **kwargs)
 
 
@@ -70,7 +71,7 @@ def main(argv=None):
         text=True,
         check=True,
     ).stdout.strip()
-    build_env = dict(os.environ, SDKROOT=sdk)
+    build_env = dict(os.environ, SDKROOT=sdk, MACOSX_DEPLOYMENT_TARGET="13.0")
     m1ddc = bin_dir / "display-ddc"
     run([python, str(package / "scripts/test")], check=True)
     with tempfile.TemporaryDirectory(prefix="display-auto-build-") as temp:

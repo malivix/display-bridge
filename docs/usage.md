@@ -144,3 +144,9 @@ disables setting changes instead of showing default speaker choices. Health, dia
 and preview reversion remain available. A missing optional controls file still uses the
 normal defaults. Restore valid settings through the documented recovery process; the menu
 never resets the file itself.
+
+The Overview recovery section offers the relevant action beside its explanation:
+Check health for unavailable state, Retry size restoration for a repairable preview,
+or Repair audio after exhausted recovery when policy permits. Normal switching does
+not offer repeated repair. Actions recheck current status when clicked; if it changed,
+review the refreshed action before retrying. Manual audio preservation is not overridden.

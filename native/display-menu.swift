@@ -151,12 +151,12 @@ func monitorControlReason(_ health:[String:Any],_ control:[String:Any],_ role:St
     let expected=role=="pg" ? (host=="A" ? 17:18):(host=="A" ? 19:15)
     return inputs[role]==expected ? nil:"This monitor is not showing this Mac. No setting changes are available."
 }
-func audioRepairReason(_ health:[String:Any],_ control:[String:Any],_ busy:Bool)->String? {
+func audioRepairReason(_ health:[String:Any],_ control:[String:Any],_ busy:Bool,_ now:Double=Date().timeIntervalSince1970)->String? {
     if !controlsAvailable(control) {return "Saved controls are unreadable. Check health; setting changes are disabled."}
     if busy {return "Wait for the current command to finish."}
-    if !statusFresh(health) {return "Controller status is unavailable; check health first."}
-    if automationPaused(control) {return "Resume automation before repairing audio."}
-    if (control["audio_manual_until"] as? Double ?? 0)>Date().timeIntervalSince1970 {return "Resume automatic audio before repairing audio."}
+    if !statusFresh(health,now) {return "Controller status is unavailable; check health first."}
+    if automationPaused(control,now) {return "Resume automation before repairing audio."}
+    if (control["audio_manual_until"] as? Double ?? 0)>now {return "Resume automatic audio before repairing audio."}
     if !["ready","degraded"].contains(health["status"] as? String ?? "") {return "Wait for switching or preview recovery to finish; check health if it remains blocked."}
     if !["extended","pg","benq","away"].contains(health["profile"] as? String ?? "") {return "Monitor ownership is not confirmed."}
     return nil
@@ -174,6 +174,34 @@ func previewRemaining(_ health:[String:Any],_ now:Double=Date().timeIntervalSinc
     guard age>=0 && age<15,let preview=health["preview"] as? [String:Any],preview["state"] as? String == "preview",let remaining=preview["remaining_seconds"] as? Double,remaining.isFinite else{return 0}
     return Int(max(0,min(20,ceil(remaining-age))))
 }
+struct RecoveryAction: Equatable {
+    let title:String
+    let arguments:[String]
+}
+func recoveryAction(_ health:[String:Any],_ control:[String:Any],_ now:Double=Date().timeIntervalSince1970)->RecoveryAction? {
+    let inspect=RecoveryAction(title:"Check health",arguments:["doctor"])
+    guard statusFresh(health,now),controlsAvailable(control) else {return inspect}
+    let state=health["status"] as? String ?? "unknown"
+    if state=="state-error" {return inspect}
+    if state.hasPrefix("preview-") {
+        let preview=health["preview"] as? [String:Any] ?? [:]
+        guard preview["state"] as? String == "needs-repair" else {return nil}
+        guard let token=preview["token"] as? String,!token.isEmpty else {return inspect}
+        return RecoveryAction(title:"Retry size restoration",arguments:["preview-repair","--token",token])
+    }
+    let recovery=health["recovery"] as? [String:Any] ?? [:]
+    let pending=recovery["pending"] as? Bool == true || health["audio_journal_pending"] as? Bool == true
+    guard pending,(recovery["attempts"] as? Int ?? 0)>=3 else {return nil}
+    guard ["ready","degraded"].contains(state) else {return nil}
+    guard audioRepairReason(health,control,false,now)==nil else {return inspect}
+    return RecoveryAction(title:"Repair audio",arguments:["repair-audio"])
+}
+// Revalidate the presented action, including its preview token, without substituting a
+// different mutation when the state changes between rendering and clicking.
+func currentRecoveryArguments(_ presented:RecoveryAction?,_ health:[String:Any],_ control:[String:Any],_ busy:Bool,_ now:Double=Date().timeIntervalSince1970)->[String]? {
+    guard !busy,let presented=presented,presented==recoveryAction(health,control,now) else {return nil}
+    return presented.arguments
+}
 func recoverySummary(_ health:[String:Any],_ control:[String:Any],_ now:Double=Date().timeIntervalSince1970)->String {
     let recovery=health["recovery"] as? [String:Any] ?? [:]
     let state=health["status"] as? String ?? "unknown"
@@ -186,7 +214,7 @@ func recoverySummary(_ health:[String:Any],_ control:[String:Any],_ now:Double=D
     else if state.hasPrefix("preview-") {
         let preview=health["preview"] as? [String:Any] ?? [:]
         switch preview["state"] as? String ?? "" {
-        case "needs-repair":lines.append("Size restoration needs attention. Use Retry size restoration in the menu after checking health.")
+        case "needs-repair":lines.append("Size restoration needs attention. Use Retry size restoration after checking health.")
         case "restore-deferred":lines.append("Size restoration is waiting for both monitors on this Mac and the original orientation. Keep the monitors connected.")
         case "preview":lines.append("Temporary size preview is active. Use Keep or Revert; automatic rollback is owned by the controller.")
         default:lines.append("Size preview recovery is in progress. Inspect Details for its current phase.")
@@ -512,6 +540,31 @@ if CommandLine.arguments.contains("--self-test") {
     precondition(recoverySummary(badRetry,[:],103).contains("not been reported"))
     var held=retryHealth;held["status"]="waiting-for-known-input"
     precondition(recoverySummary(held,[:],103).contains("changes are held"))
+    var repairHealth:[String:Any]=["updated_at":100.0,"status":"degraded","profile":"extended","recovery":["pending":true,"attempts":3]]
+    let repair=recoveryAction(repairHealth,[:],103)!
+    precondition(repair.arguments==["repair-audio"])
+    precondition(recoveryAction(repairHealth,[:],120)?.arguments==["doctor"])
+    precondition(recoveryAction(repairHealth,["paused":true],103)?.arguments==["doctor"])
+    precondition(recoveryAction(repairHealth,["audio_manual_until":200.0],103)?.arguments==["doctor"])
+    precondition(recoveryAction(repairHealth,missingControl,103)?.arguments==["doctor"])
+    precondition(currentRecoveryArguments(repair,repairHealth,[:],true,103)==nil)
+    precondition(currentRecoveryArguments(repair,repairHealth,[:],false,120)==nil)
+    precondition(currentRecoveryArguments(repair,repairHealth,[:],false,103)==["repair-audio"])
+    for state in ["settling","recovering","waiting-for-ddc","waiting-for-known-input"] {
+        var waiting=repairHealth;waiting["status"]=state
+        precondition(recoveryAction(waiting,[:],103)==nil)
+    }
+    repairHealth["status"]="preview-recovery";repairHealth["preview"]=["state":"needs-repair","token":"example-one"]
+    let restoration=recoveryAction(repairHealth,[:],103)!
+    precondition(restoration.arguments==["preview-repair","--token","example-one"])
+    repairHealth["preview"]=["state":"needs-repair","token":"example-two"]
+    precondition(currentRecoveryArguments(restoration,repairHealth,[:],false,103)==nil)
+    repairHealth["preview"]=["state":"needs-repair"]
+    precondition(recoveryAction(repairHealth,[:],103)?.arguments==["doctor"])
+    repairHealth["preview"]=["state":"restore-deferred"]
+    precondition(recoveryAction(repairHealth,[:],103)==nil)
+    precondition(recoveryAction(["updated_at":100.0,"status":"ready"],[:],103)==nil)
+    print("PASS contextual recovery actions, stale clicks, busy state and changed preview tokens")
     let trackedRequest:[String:Any]=["id":"example","action":"resume"]
     precondition(commandSummary([:],["command_request":trackedRequest]).contains("not yet reported"))
     let trackedHealth:[String:Any]=["updated_at":Date().timeIntervalSince1970,"command_result":["request":trackedRequest,"state":"deferred","detail":"Waiting for input"]]
@@ -611,6 +664,8 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
     var audioRepair:NSButton?
     var audioReason:NSTextField?
     var overviewFields:[(NSTextField,NSTextField)]=[]
+    var recoveryButton:NSButton?
+    var presentedRecoveryAction:RecoveryAction?
     var pauseButton:NSButton?
     var displayTextIndex:Int?
     var panelActions:[NSButton]=[]
@@ -654,6 +709,10 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
                 group.widthAnchor.constraint(equalTo:stack.widthAnchor,constant:-32).isActive=true
                 body.widthAnchor.constraint(equalTo:group.widthAnchor).isActive=true
                 overviewFields.append((heading,body))
+                if section.title=="Recovery" {
+                    let button=NSButton(title:"Check health",target:self,action:#selector(runRecoveryAction(_:)))
+                    group.addArrangedSubview(button);recoveryButton=button;scalableControls.append(button)
+                }
             }
             overview.view=overviewScroll;tabs.addTabViewItem(overview)
             let details=NSTabViewItem(identifier:"details");details.label="Details"
@@ -835,6 +894,13 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
         if action=="preview-keep" || action=="preview-revert" {if let token=previewToken {execute([action,"--token",token])}}
         else {execute([action])}
     }}
+    @objc func runRecoveryAction(_ sender:NSButton) {
+        guard let args=currentRecoveryArguments(presentedRecoveryAction,read("health.json"),read("control.json"),busy) else {
+            operationResult="Recovery status changed or a command is still running. Review the current action before retrying."
+            refresh();return
+        }
+        execute(args)
+    }
     func read(_ name:String)->[String:Any] {
         if demo {return demoState(demoScenario,name,Date().timeIntervalSince1970)}
         return readMenuState(root.appendingPathComponent(name),allowMissing:name=="control.json") ?? (name=="control.json" ? ["_read_unavailable":true]:[:])
@@ -901,6 +967,10 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
             }
             if fields.1.stringValue != body {fields.1.stringValue=body;fields.1.setAccessibilityValue(body)}
         }
+        presentedRecoveryAction=recoveryAction(health,control)
+        recoveryButton?.isHidden=presentedRecoveryAction==nil
+        recoveryButton?.title=presentedRecoveryAction?.title ?? "Check health"
+        recoveryButton?.isEnabled = !busy && presentedRecoveryAction != nil
         pauseButton?.title=automationPaused(control) ? "Resume":"Pause"
         pauseButton?.isEnabled = !busy && controlsUsable
         var detail=dashboard(health,control)

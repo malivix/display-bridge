@@ -48,7 +48,10 @@ whole-file rewrite competing with user-visible improvements.
 
 ## Delivery order
 
-### 1. Recovery action beside the explanation — next active slice
+### 1. Recovery action beside the explanation — source implemented
+
+Source implementation and current validation: [recovery action log](../log/contextual-recovery-action.md).
+Physical and full accessibility qualification remain pending.
 
 Outcome: a user can reach the appropriate inspection or recovery request without
 searching another tab. Select one action from fresh health/control state:

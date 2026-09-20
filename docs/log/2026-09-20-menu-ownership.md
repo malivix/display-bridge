@@ -19,3 +19,10 @@ controller and display/audio journals are untouched by these changes.
 
 Validation passed: 188 Python tests, native builds, DDC/menu ownership self-tests, and staged
 privacy checks. Previous published revision CI also completed successfully.
+
+The menu-only update was installed on Mac A after a validated private app/agent snapshot.
+Live checks confirmed exactly one menu process and an exclusively held menu lock. Both
+heartbeats were fresh at 2.10.2. During this check PG reported an unconfigured input, so the
+controller reported waiting-for-known-input and held layout changes; no input mapping was
+guessed or altered. Physical ownership clarification is pending. Controller code/settings
+were not changed by this menu update. Added plain-language wording for this held state.

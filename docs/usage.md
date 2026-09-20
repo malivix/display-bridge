@@ -172,3 +172,9 @@ map and whether matching landscape/portrait profiles and a sensor mapping are st
 The remaining checks cover controller health, installed files and monitor responses.
 Missing facts from an older controller are explicitly unreported, not assumed ready.
 This is an inspection checklist; enrollment and orientation capture still use the installer.
+
+Setup readiness also lists recognized running display apps when refreshed in the menu
+window. It recognizes standard BetterDisplay, MonitorControl, Lunar and Display Pilot
+bundle names. Presence alone does not establish a conflict. Review overlapping settings
+manually if needed; the app never stops another tool. Renamed bundles, background services
+and command-line tools are outside this check, so an empty list does not prove exclusivity.

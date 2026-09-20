@@ -347,13 +347,26 @@ func healthSummary(_ json:String)->String {
     return lines.joined(separator:"\n")
 }
 
-func setupSummary(_ json:String)->String {
+func recognizedDisplayTools(_ bundleNames:[String])->[String] {
+    // Advisory name matching only: never use this list to authorize or terminate apps.
+    let known=["betterdisplay.app":"BetterDisplay","monitorcontrol.app":"MonitorControl","lunar.app":"Lunar","display pilot.app":"BenQ Display Pilot","display pilot 2.app":"BenQ Display Pilot 2"]
+    return Set(bundleNames.compactMap{known[$0.lowercased()]}).sorted()
+}
+func displayToolSummary(_ bundleNames:[String]?)->String {
+    guard let names=bundleNames else{return "Other display tools: not inspected."}
+    let found=recognizedDisplayTools(names)
+    if found.isEmpty {return "Other display tools\nNo recognized app bundles in this snapshot. Renamed apps, background services and command-line tools are not detected; this is not proof that no other controller is running."}
+    return "Other display tools\nRunning: "+found.joined(separator:", ")+".\nRunning does not prove competing control. If settings change unexpectedly, review overlapping brightness, layout or rotation automation in these apps. Keep any app needed for custom display modes. Nothing was stopped.\nDetection covers recognized bundle names only, not renamed apps, background services or command-line tools."
+}
+
+func setupSummary(_ json:String,_ runningBundles:[String]?=nil)->String {
     guard let data=json.data(using:.utf8),let report=(try? JSONSerialization.jsonObject(with:data)) as? [String:Any],report["read_only"] as? Bool == true,let checks=report["checks"] as? [[String:Any]] else {return "Setup readiness is unavailable. Refresh the health report; no enrollment or settings were changed."}
     var lines=["Setup readiness · inspection only"]
     for required in ["Host enrollment","Rotation enrollment"] where !checks.contains(where:{$0["name"] as? String==required}) {
         lines.append("Not reported: "+required+". Inspect configuration errors below; an older controller may need a coordinated update.")
     }
     lines.append(healthSummary(json))
+    lines.append(displayToolSummary(runningBundles))
     lines.append("Next steps\n1. Resolve the findings above. Missing information is unknown, not a pass.\n2. Enroll another Mac independently; never copy runtime identities or recovery journals.\n3. Confirm switching, rotation and audible sound physically after setup. This report cannot certify those results.")
     return lines.joined(separator:"\n\n")
 }
@@ -592,6 +605,13 @@ if CommandLine.arguments.contains("--self-test") {
     }
     precondition(presetNameError("Reading 🌙")==nil)
     print("PASS preset names match code-point limits, whitespace and control-character rules")
+    precondition(recognizedDisplayTools(["BetterDisplay.app","betterdisplay.app","NotBetterDisplay.app","Private editor.app"])==["BetterDisplay"])
+    precondition(recognizedDisplayTools(["Lunar.app","MonitorControl.app"])==["Lunar","MonitorControl"])
+    precondition(displayToolSummary(nil).contains("not inspected"))
+    precondition(displayToolSummary([]).contains("not proof"))
+    precondition(!displayToolSummary(["Private editor.app"]).contains("Private editor"))
+    precondition(displayToolSummary(["BetterDisplay.app"]).contains("Nothing was stopped"))
+    print("PASS advisory display-tool recognition, deduplication and unrelated-app omission")
     precondition(setupSummary("{}").contains("unavailable"))
     precondition(setupSummary("{\"read_only\":true,\"checks\":[]}").contains("Not reported: Host enrollment"))
     precondition(setupSummary("{\"read_only\":true,\"checks\":[]}").contains("older controller"))
@@ -1309,7 +1329,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
         if args==["quit"]{NSApp.terminate(nil);return}
         if demo,args==["setup"] {
             let report:[String:Any]=["read_only":true,"status":"warning","checks":[["name":"Host enrollment","status":"ok","detail":"Mac A; expected local inputs PG=17, BenQ=19. Synthetic enrollment."],["name":"Rotation enrollment","status":"info","detail":"Portrait profile is missing.","action":"Capture the missing orientation on this Mac through the installer; keep existing profiles."]],"limits":"Synthetic fixture. Nothing was read, changed or uploaded."]
-            if let data=try? JSONSerialization.data(withJSONObject:report),let json=String(data:data,encoding:.utf8) {showReport("setup",setupSummary(json))}
+            if let data=try? JSONSerialization.data(withJSONObject:report),let json=String(data:data,encoding:.utf8) {showReport("setup",setupSummary(json,["BetterDisplay.app","Unrelated.app"]))}
             return
         }
         if demo,args.count==1,detailReports.contains(where:{$0.0==args[0]}) {
@@ -1356,7 +1376,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
                 else if args.first=="history" {self.showReport("history",timingSummary(result))}
                 else if args.first=="display-info" {self.modeText?.string=displaySummary(result)}
                 else if args.first=="doctor" {self.showReport("doctor",healthSummary(result))}
-                else if args.first=="setup" {self.showReport("setup",setupSummary(result))}
+                else if args.first=="setup" {self.showReport("setup",setupSummary(result,NSWorkspace.shared.runningApplications.compactMap{$0.bundleURL?.lastPathComponent}))}
                 else if args.first=="ddc-history" {self.showReport("ddc-history",ddcSummary(result))}
                 else if args.first=="preset-remove",let data=result.data(using:.utf8),let value=(try? JSONSerialization.jsonObject(with:data)) as? [String:Any],value["removed"] as? Bool == true {
                     self.operationResult="Preset ‘\(value["name"] as? String ?? "")’ removed for \(value["rotation"] as? Int == 90 ? "portrait":"landscape"). Display settings were not changed."

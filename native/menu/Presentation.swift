@@ -309,14 +309,7 @@ func displaySummary(_ json:String)->String {
     return lines.joined(separator:"\n")
 }
 func healthSummary(_ json:String)->String {
-    guard let data=json.data(using:.utf8),let report=(try? JSONSerialization.jsonObject(with:data)) as? [String:Any],let checks=report["checks"] as? [[String:Any]] else{return "Health report could not be read. Save a diagnostic report for details."}
-    var lines=["Read-only check: \(report["status"] as? String ?? "unknown")"]
-    for check in checks {
-        lines.append("\n\((check["status"] as? String ?? "?").uppercased()) · \(check["name"] as? String ?? "Check")\n\(check["detail"] as? String ?? "")")
-        if let action=check["action"] as? String{lines.append(action)}
-    }
-    lines.append("\n\(report["limits"] as? String ?? "")")
-    return lines.joined(separator:"\n")
+    return HealthReport(json)?.summary ?? "Health report could not be validated. Refresh or save a diagnostic report for details; do not assume setup is ready."
 }
 
 func recognizedDisplayTools(_ bundleNames:[String])->[String] {
@@ -332,12 +325,12 @@ func displayToolSummary(_ bundleNames:[String]?)->String {
 }
 
 func setupSummary(_ json:String,_ runningBundles:[String]?=nil)->String {
-    guard let data=json.data(using:.utf8),let report=(try? JSONSerialization.jsonObject(with:data)) as? [String:Any],report["read_only"] as? Bool == true,let checks=report["checks"] as? [[String:Any]] else {return "Setup readiness is unavailable. Refresh the health report; no enrollment or settings were changed."}
-    var lines=["Setup readiness · inspection only"]
-    for required in ["Host enrollment","Rotation enrollment"] where !checks.contains(where:{$0["name"] as? String==required}) {
+    guard let report=HealthReport(json) else {return "Setup readiness is unavailable. The report is incomplete or inconsistent. Refresh the health report; no enrollment or settings were changed."}
+    var lines=["Setup readiness · inspection only",report.nextStep]
+    for required in ["Host enrollment","Rotation enrollment"] where !report.findings.contains(where:{$0.name==required}) {
         lines.append("Not reported: "+required+". Inspect configuration errors below; an older controller may need a coordinated update.")
     }
-    lines.append(healthSummary(json))
+    lines.append(report.summary)
     lines.append(displayToolSummary(runningBundles))
     lines.append("Next steps\n1. Resolve the findings above. Missing information is unknown, not a pass.\n2. Enroll another Mac independently; never copy runtime identities or recovery journals.\n3. Confirm switching, rotation and audible sound physically after setup. This report cannot certify those results.")
     return lines.joined(separator:"\n\n")

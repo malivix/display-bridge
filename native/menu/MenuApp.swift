@@ -591,7 +591,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
             return
         }
         if demo,args==["setup"] {
-            let report:[String:Any]=["read_only":true,"status":"warning","checks":[["name":"Host enrollment","status":"ok","detail":"Mac A; expected local inputs PG=17, BenQ=19. Synthetic enrollment."],["name":"Rotation enrollment","status":"info","detail":"Portrait profile is missing.","action":"Capture the missing orientation on this Mac through the installer; keep existing profiles."]],"limits":"Synthetic fixture. Nothing was read, changed or uploaded."]
+            let report:[String:Any]=["read_only":true,"status":"warning","checks":[["name":"Host enrollment","status":"ok","detail":"Mac A; expected local inputs PG=17, BenQ=19. Synthetic enrollment."],["name":"Rotation enrollment","status":"warning","detail":"Portrait profile is missing.","action":"Capture the missing orientation on this Mac through the installer; keep existing profiles."]],"limits":"Synthetic fixture. Nothing was read, changed or uploaded."]
             if let data=try? JSONSerialization.data(withJSONObject:report),let json=String(data:data,encoding:.utf8) {showReport("setup",setupSummary(json,["BetterDisplay.app","Unrelated.app"]))}
             return
         }

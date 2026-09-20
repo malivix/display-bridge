@@ -141,6 +141,12 @@ repair notification opens status instead of issuing repair.
 
 ## Setup checks, reports and privacy
 
+Setup readiness puts the first error (otherwise first warning) and its suggested next action
+above the full checklist. Counts summarize reported errors and warnings. Incomplete or
+inconsistent reports show unavailable rather than a readiness pass. Informational checks
+and physical qualification still need review; suggested actions are never executed automatically.
+
+
 **Details → Setup readiness → Refresh** inspects this Mac's configured inputs, stored
 landscape/portrait profiles, sensor mapping, controller health, installed files and monitor
 responses. Missing facts from older controllers are unreported rather than assumed ready.

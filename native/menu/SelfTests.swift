@@ -4,6 +4,28 @@ import UserNotifications
 import Darwin
 
 func runMenuSelfTests() {
+    let warning:[String:Any]=["name":"Rotation enrollment","status":"warning","detail":"Portrait is missing.","action":"Capture the missing orientation on this Mac."]
+    let failure:[String:Any]=["name":"Configuration","status":"error","detail":"Configuration is invalid.","action":"Restore a known-good backup."]
+    func healthJSON(_ fields:[String:Any])->String {String(decoding:try! JSONSerialization.data(withJSONObject:fields),as:UTF8.self)}
+    let healthFields:[String:Any]=["read_only":true,"status":"error","checks":[warning,failure]]
+    let parsedHealth=HealthReport(healthJSON(healthFields))!
+    precondition(parsedHealth.nextStep.contains("Start with: Configuration"))
+    precondition(parsedHealth.nextStep.contains("Errors: 1 · Warnings: 1"))
+    precondition(parsedHealth.nextStep.contains("Restore a known-good backup."))
+    precondition(setupSummary(healthJSON(healthFields)).contains("Not reported: Host enrollment"))
+    for (key,value) in [("read_only",1 as Any),("status","ok"),("checks",[])] {
+        var fields=healthFields;fields[key]=value;precondition(HealthReport(healthJSON(fields))==nil)
+    }
+    for key in ["name","status","detail"] {
+        var row=failure;row.removeValue(forKey:key)
+        precondition(HealthReport(healthJSON(["read_only":true,"status":"error","checks":[row]]))==nil)
+    }
+    let info:[String:Any]=["name":"Rotation enrollment","status":"info","detail":"Rotation disabled."]
+    let informational=HealthReport(healthJSON(["read_only":true,"status":"ok","checks":[info]]))!
+    precondition(informational.nextStep.contains("not physical setup qualification"))
+    var noAction=failure;noAction.removeValue(forKey:"action")
+    precondition(HealthReport(healthJSON(["read_only":true,"status":"error","checks":[noAction]]))!.nextStep.contains("Preserve current settings"))
+
     precondition(previewDurations([:])==[20])
     precondition(previewDurations(["preview_seconds":[40,20]])==[20,40])
     for invalid:Any in [[true,40],[20,60],[40],[20,20],"40"] {
@@ -187,8 +209,8 @@ func runMenuSelfTests() {
     precondition(displayToolSummary(["BetterDisplay.app"]).contains("Nothing was stopped"))
     print("PASS advisory display-tool recognition, deduplication and unrelated-app omission")
     precondition(setupSummary("{}").contains("unavailable"))
-    precondition(setupSummary("{\"read_only\":true,\"checks\":[]}").contains("Not reported: Host enrollment"))
-    precondition(setupSummary("{\"read_only\":true,\"checks\":[]}").contains("older controller"))
+    precondition(setupSummary("{\"read_only\":true,\"checks\":[]}").contains("unavailable"))
+    precondition(HealthReport("{\"status\":\"ok\",\"read_only\":true,\"checks\":[]}")==nil)
     precondition(safeWithoutControls("setup"))
     print("PASS setup readiness marks missing enrollment information unknown")
     precondition(panelShortcut("3",.command,false) == .tab("displays"))
@@ -300,7 +322,7 @@ func runMenuSelfTests() {
     print("PASS logical layout direction, remote ownership and unknown topology labels")
     precondition(displaySummary("invalid").contains("could not be read"))
     precondition(displaySummary("{\"read_only\":true,\"displays\":[{\"monitor\":\"pg\",\"available\":false,\"reason\":\"Away\"}]}").contains("Away"))
-    precondition(healthSummary("{\"status\":\"ok\",\"checks\":[]}").contains("Read-only check: ok"))
+    precondition(healthSummary("{\"status\":\"ok\",\"checks\":[]}").contains("could not be validated"))
     precondition(ddcSummary("invalid").contains("could not be read"))
     precondition(ddcSummary("{\"episodes\":[],\"ddc_interruptions\":0}").contains("No interruptions recorded"))
     let ddc=ddcSummary("{\"ddc_interruptions\":1,\"episodes\":[{\"started\":\"now\",\"monitor\":\"benq\",\"seconds\":1.25,\"recovered\":\"later\"}]}")

@@ -46,3 +46,10 @@ they are not hidden behind passing unit tests. Native compilation is not physica
 Public-source readiness is assessed separately from deployment readiness. Publication checks
 are heuristic: reviewers must still inspect the exact staged filenames, content, permissions,
 and commit metadata. No raw diagnostic bundle or private development history is included.
+
+## CI-discovered boundary correction
+
+The first remote run exposed a floating-point cancellation error in journal lifetime validation.
+A deterministic service-level regression reproduced it, and the comparison now uses absolute
+deadlines rather than a subtraction that can exceed 120 through rounding. This preserves the
+hard deadline and does not relax the safety limit. Remote execution remains part of completion.

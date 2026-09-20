@@ -23,8 +23,12 @@ class ServiceTests(unittest.TestCase):
         self.service=Service(self.c)
     def start(self):
         enqueue(self.c,'start','current')
-        self.assertEqual(self.service.step(),'preview')
+        self.assertEqual(self.service.step(),'preview', self.health)
         return self.service.journal.read()['token']
+    def test_preview_lifetime_accepts_fractional_clock_across_float_boundary(self):
+        with patch('preview_service.time.monotonic', return_value=200.1):
+            self.start()
+
     def test_queue_to_apply_keep_and_audio_recheck(self):
         token=self.start();self.assertTrue(unresolved(self.root))
         enqueue(self.c,'keep',token=token)

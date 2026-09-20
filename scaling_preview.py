@@ -62,7 +62,7 @@ def validate(record):
         if not isinstance(record.get(key),str) or not record[key]:raise ValueError('Missing preview identity')
     for key in ('started','hard_deadline'):
         if not finite(record.get(key)):raise ValueError('Invalid preview deadline')
-    if not 0<record['hard_deadline']-record['started']<=120:raise ValueError('Invalid preview lifetime')
+    if not record['started']<record['hard_deadline']<=record['started']+120:raise ValueError('Invalid preview lifetime')
     if record.get('keep_until') is not None and (not finite(record['keep_until']) or not record['started']<=record['keep_until']<=record['hard_deadline']):
         raise ValueError('Invalid confirmation deadline')
     if 'verified_at' in record and (not finite(record['verified_at']) or not record['started']<=record['verified_at']<=record['hard_deadline']):

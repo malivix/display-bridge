@@ -89,6 +89,24 @@ func runMenuCommand(_ executable:URL,_ arguments:[String],timeout:Double=45,outp
     return CommandResult(output:String(decoding:output,as:UTF8.self),code:process.terminationStatus)
 }
 
+// Probe only newer commands; preserve legacy inspection and recovery access.
+func runCompatibleMenuCommand(_ arguments:[String],runner:([String],Double,Int)->CommandResult)->CommandResult {
+    let guarded=["brightness-list","brightness-save","brightness-apply","brightness-remove","preset-save","preset-remove"]
+    if let action=arguments.first,guarded.contains(action) {
+        let probe=runner(["capabilities"],5,16_384)
+        var supported=false
+        if probe.code==0,let data=probe.output.data(using:.utf8),
+           let report=(try? JSONSerialization.jsonObject(with:data)) as? [String:Any],
+           let protocolNumber=report["protocol"] as? NSNumber,CFGetTypeID(protocolNumber) != CFBooleanGetTypeID(),protocolNumber.doubleValue==1,
+           let readOnly=report["read_only"] as? NSNumber,CFGetTypeID(readOnly)==CFBooleanGetTypeID(),readOnly.boolValue,
+           let commands=report["commands"] as? [String],commands.count<=128,Set(commands).count==commands.count {
+            supported=commands.contains(action)
+        }
+        guard supported else {return CommandResult(output:"This command requires a compatible controller. Update the menu and controller together from the same trusted source. The requested action was not sent; status and recovery remain available.",code:78)}
+    }
+    return runner(arguments,45,1_048_576)
+}
+
 func controlsAvailable(_ control:[String:Any])->Bool {control["_read_unavailable"] as? Bool != true}
 func safeWithoutControls(_ action:String)->Bool {
     ["panel","quit","status","doctor","setup","brightness-list","diagnostics","support-summary","history","ddc-history","display-info","monitor-settings","notifications","preview-revert","preview-repair"].contains(action)
@@ -633,6 +651,21 @@ if CommandLine.arguments.contains("--self-test") {
     precondition(panelRefreshArguments("monitor-controls","status","unknown")==nil)
     precondition(panelRefreshArguments("audio","status","pg")==nil)
     print("PASS window shortcuts, modifier isolation, repeat suppression and read-only refresh targets")
+    let supportedReport="{\"protocol\":1,\"read_only\":true,\"commands\":[\"brightness-save\"]}"
+    for report in [CommandResult(output:supportedReport,code:0),CommandResult(output:supportedReport,code:124),CommandResult(output:"{}",code:0),CommandResult(output:supportedReport.replacingOccurrences(of:"brightness-save",with:"status"),code:0),CommandResult(output:supportedReport.replacingOccurrences(of:"protocol\":1",with:"protocol\":true"),code:0)] {
+        var calls:[[String]]=[]
+        let result=runCompatibleMenuCommand(["brightness-save","--monitor","pg"]){args,timeout,limit in
+            calls.append(args)
+            if args==["capabilities"] {precondition(timeout==5 && limit==16_384);return report}
+            return CommandResult(output:"requested",code:0)
+        }
+        let valid=report.code==0 && report.output==supportedReport
+        precondition(calls.count==(valid ? 2:1) && result.code==(valid ? 0:78))
+    }
+    var recoveryCalls:[[String]]=[]
+    _=runCompatibleMenuCommand(["preview-revert","--token","example"]){args,_,_ in recoveryCalls.append(args);return CommandResult(output:"legacy",code:0)}
+    precondition(recoveryCalls==[["preview-revert","--token","example"]])
+    print("PASS capability preflight blocks unsupported commands and preserves legacy recovery")
     var brightnessSample:[String:Any]=["read_only":true,"monitor":"benq","presets":[["name":"Reading","monitor":"benq","value":15,"maximum":50,"revision":String(repeating:"a",count:64)]]]
     func brightnessJSON(_ report:[String:Any])->String {String(data:try! JSONSerialization.data(withJSONObject:report),encoding:.utf8)!}
     precondition(brightnessEntries(brightnessJSON(brightnessSample))?.entries.first?.description.contains("30%") == true)
@@ -1530,7 +1563,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
         operationName=operationTitle(args.first ?? "");operationResult=""
         showPanel()
         DispatchQueue.global().async {
-            let response=runMenuCommand(self.command,args==["setup"] ? ["doctor"]:args)
+            let response=runCompatibleMenuCommand(args==["setup"] ? ["doctor"]:args){arguments,timeout,limit in runMenuCommand(self.command,arguments,timeout:timeout,outputLimit:limit)}
             let result=response.output,code=response.code
             DispatchQueue.main.async {
                 self.busy=false;self.operationStarted=nil

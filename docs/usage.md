@@ -210,3 +210,8 @@ with `--monitor` and `--preset`. List/removal do not access monitor hardware. Ap
 ownership and the saved hardware range, writes at most once, and verifies readback. It
 never schedules brightness changes or changes speaker volume. Presets are per monitor
 and enrollment, not portable across Macs; equal percentages need not look equally bright.
+
+Before newer size-preset and brightness commands, the menu checks the installed CLI for
+support. An unavailable or incompatible reply stops the requested command and recommends
+a coordinated update. Status and existing recovery commands remain accessible. This probe
+can take up to five seconds; it does not prove daemon or helper build integrity.

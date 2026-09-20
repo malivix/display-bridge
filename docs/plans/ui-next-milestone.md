@@ -135,8 +135,9 @@ Any later editing must reuse reversible transactions rather than direct CoreGrap
 
 ## Reliability work paired with delivery
 
-- Add explicit installed-command capability/version negotiation before exposing commands
-  absent from an older runtime. Same version labels can conceal different source builds;
+- Preset commands now probe installed CLI capabilities before dispatch; see
+  [compatibility scope](menu-command-compatibility.md). Broader daemon/build negotiation
+  and proactive availability labels remain open. Same version labels can conceal different source builds;
   inspect existing helper-hash checks before introducing another identity mechanism.
 - Exercise parseable-but-invalid control fields and old/mixed health schemas, not only
   unreadable JSON. Backend validation remains authoritative; UI defaults must not suggest

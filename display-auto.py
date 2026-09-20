@@ -642,7 +642,7 @@ def main():
 
 def run_main(resources):
     parser = argparse.ArgumentParser()
-    parser.add_argument('action', choices=['capture', 'check', 'run', 'once', 'test-layouts', 'restore','status','pause','pause-for','resume','repair-audio','audio-manual','audio-auto','speaker','diagnostics','support-summary','history','hidpi','doctor','display-info','ddc-history','monitor-adjust','monitor-settings','brightness-list','brightness-save','brightness-apply','brightness-remove','preset-save','preset-remove','preview-options','preview-start','preview-keep','preview-revert','preview-repair','rotation-auto','rotation-manual'])
+    action_argument = parser.add_argument('action', choices=['capabilities', 'capture', 'check', 'run', 'once', 'test-layouts', 'restore','status','pause','pause-for','resume','repair-audio','audio-manual','audio-auto','speaker','diagnostics','support-summary','history','hidpi','doctor','display-info','ddc-history','monitor-adjust','monitor-settings','brightness-list','brightness-save','brightness-apply','brightness-remove','preset-save','preset-remove','preview-options','preview-start','preview-keep','preview-revert','preview-repair','rotation-auto','rotation-manual'])
     parser.add_argument('--host', choices=['A', 'B'])
     parser.add_argument('--m1ddc', default=str(Path.home() / '.local/bin/display-ddc'))
     parser.add_argument('--minutes',type=int,default=30)
@@ -658,6 +658,8 @@ def run_main(resources):
     parser.add_argument('--orientation',type=int,choices=[0,90])
     parser.add_argument('--replace',action='store_true')
     args = parser.parse_args()
+    if args.action=='capabilities':
+        print(json.dumps({'protocol':1,'read_only':True,'commands':list(action_argument.choices)}));return
     if args.action=='preset-remove':
         from types import SimpleNamespace
         from preview_service import remove_preset

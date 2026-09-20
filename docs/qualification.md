@@ -24,7 +24,8 @@ physical outcomes, and unresolved cases without publishing serials, UUIDs, local
   has isolated tests; physical rollback qualification is still pending.
 - Installer backups recover caught failures, but installation is not a power-loss-atomic
   transaction across configuration, LaunchAgents, and the menu bundle.
-- Menu commands have a 45-second deadline and a 1 MiB output cap. Terminating the CLI does
+- Menu commands have a 45-second deadline and a 1 MiB output cap. New preset commands
+  first use a separate capability probe capped at five seconds and 16 KiB. Terminating the CLI does
   not cancel work already queued in the daemon; inspect status before retrying.
 - Read/validate/write ownership checks narrow hardware races but cannot atomically lock a
   physical input switch made on another computer.

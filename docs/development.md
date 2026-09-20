@@ -68,3 +68,12 @@ for countdown/rollback behavior; the demo cannot prove hardware or persistence o
 
 Menu state reads accept regular JSON files only, with a 1 MiB limit and no symlink following.
 Native self-tests cover malformed/oversized state and FIFO rejection without hardware access.
+
+## Optional pasteboard integration check
+
+A compiled menu executable accepts `--test-private-pasteboard`. It exercises the actual
+AppKit string-copy API using a uniquely named pasteboard, verifies Unicode round-trip
+and invalid-input preservation, then releases the board. It never reads or writes the
+general user clipboard and does not start the menu UI or controller. Run it in a macOS
+user session with the pasteboard service available; it is separate from default headless
+self-tests. It does not qualify permissions or behavior of every user's general clipboard.

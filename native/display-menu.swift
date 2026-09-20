@@ -337,6 +337,12 @@ func statusSections(_ health:[String:Any],_ control:[String:Any])->[StatusSectio
         StatusSection(title:"Recovery",body:recoverySummary(health,control))
     ]
 }
+func writeReviewedSummary(_ body:String,to pasteboard:NSPasteboard)->Bool {
+    guard !body.isEmpty,body.utf8.count<=1_048_576 else{return false}
+    pasteboard.clearContents()
+    return pasteboard.setString(body,forType:.string)
+}
+
 struct ReviewedSupportSummary {
     private var text:String?
     mutating func show(_ report:String,_ body:String) {
@@ -855,6 +861,21 @@ if CommandLine.arguments.contains("--self-test") {
     print("PASS notification policy: persistent failure only, deduplication, freshness and re-arm")
     exit(0)
 }
+// Opt-in API integration test. A unique named pasteboard never touches the general clipboard.
+if CommandLine.arguments.contains("--test-private-pasteboard") {
+    let board=NSPasteboard(name:NSPasteboard.Name("io.github.display-bridge.test."+UUID().uuidString))
+    guard board.setString("previous private test value",forType:.string) else {fatalError("Private pasteboard unavailable")}
+    precondition(!writeReviewedSummary("",to:board))
+    precondition(board.string(forType:.string)=="previous private test value")
+    let report="Reviewed support summary\nSynthetic Unicode text: café · 2 transitions"
+    precondition(writeReviewedSummary(report,to:board))
+    precondition(board.string(forType:.string)==report)
+    precondition(!writeReviewedSummary(String(repeating:"x",count:1_048_577),to:board))
+    precondition(board.string(forType:.string)==report)
+    board.releaseGlobally()
+    print("PASS private pasteboard exact copy and invalid-input preservation; general clipboard untouched")
+    exit(0)
+}
 if CommandLine.arguments.contains("--test-notification") {
     let center=UNUserNotificationCenter.current()
     center.getNotificationSettings { settings in
@@ -1147,9 +1168,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
     @objc func copyReviewedSummary() {
         guard !busy,let body=reviewedSummary.body(for:detailReport) else{return}
         if demo {message("Hardware-free demo","Clipboard copying is disabled in this demo. No clipboard content was changed.");return}
-        let clipboard=NSPasteboard.general
-        clipboard.clearContents()
-        copySummaryNotice=clipboard.setString(body,forType:.string) ? "Reviewed summary copied. Nothing was uploaded.":"Could not copy the summary. Select the report text to copy manually."
+        copySummaryNotice=writeReviewedSummary(body,to:.general) ? "Reviewed summary copied. Nothing was uploaded.":"Could not copy the summary. Select the report text to copy manually."
         refresh()
     }
     var panelText:NSTextView?

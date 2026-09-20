@@ -36,6 +36,26 @@ class ServiceTests(unittest.TestCase):
         self.assertEqual(Service(self.c).step(),'reverted')
         self.assertTrue((self.root/'size-presets.json').exists())
 
+    def test_damaged_presets_do_not_block_relative_preview(self):
+        from preview_service import options
+        path=self.root/'size-presets.json'
+        for content in (b'{broken',b'\xff\xfe',b'{}'):
+            path.write_bytes(content)
+            report=options(self.c)
+            self.assertTrue(report['options'])
+            self.assertEqual(report['presets'],[])
+            self.assertIn('preserved',report['preset_error'])
+            self.assertEqual(path.read_bytes(),content)
+        enqueue(self.c,'start','current')
+        self.assertEqual(self.service.step(),'preview')
+
+    def test_unreadable_store_does_not_hide_hardware_inspection_failure(self):
+        from preview_service import options
+        with patch('size_presets.read',side_effect=PermissionError('denied')):
+            self.assertIn('preset_error',options(self.c))
+        self.fixture.inputs={'pg':18,'benq':19}
+        with self.assertRaisesRegex(RuntimeError,'both monitors'):options(self.c)
+
     def test_preset_writer_lock_prevents_concurrent_save(self):
         from preview_service import save_preset
         with (self.root/'size-presets.lock').open('a') as lock:

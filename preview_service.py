@@ -63,8 +63,12 @@ def options(c):
         files=build(config,report,pair)
         result.append({'size':next(k for k,v in LABELS.items() if v==pair['label']),
                        'label':pair['label'],'modes':pair['modes'],'fingerprint':hashlib.sha256(files['config.json']).hexdigest()})
-    presets=[]
-    for entry in size_presets.read(c.ROOT/'size-presets.json',config)['presets']:
+    presets=[];preset_error=None
+    try:entries=size_presets.read(c.ROOT/'size-presets.json',config)['presets']
+    except (ValueError,OSError):
+        entries=[]
+        preset_error='Saved presets are unreadable, damaged, or belong to another enrollment. The original file was preserved. Ordinary size previews remain available; restore a valid preset file before saving or recalling named presets.'
+    for entry in entries:
         item={'name':entry['name'],'rotation':entry['rotation'],'available':False}
         try:
             pair=size_presets.resolve(entry,context['rotation'],report);files=build(config,report,pair)
@@ -72,7 +76,9 @@ def options(c):
         except ValueError as error:item['reason']=str(error)
         presets.append(item)
     if hardware.context()!=context:raise RuntimeError('Inputs or orientation changed during inspection')
-    return {'read_only':True,'rotation':context['rotation'],'options':result,'presets':presets}
+    response={'read_only':True,'rotation':context['rotation'],'options':result,'presets':presets}
+    if preset_error:response['preset_error']=preset_error
+    return response
 
 
 def save_preset(c,label,replace=False):

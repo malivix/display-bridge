@@ -107,5 +107,7 @@ this orientation. The chooser report includes preset availability, reasons, and 
 pass its `--fingerprint` to `preview-start` when recalling a previously inspected choice.
 The normal timed Keep/Revert flow applies. Presets are limited to 20 name/orientation pairs,
 stay local to this enrollment, and never silently substitute another mode. Changed enrollment
-or damaged preset data is reported and preserved. The native chooser uses the same
+or damaged preset data is reported and preserved. Ordinary relative-size previews remain
+available if only the preset store is unreadable; saving/recalling named presets stays blocked
+until valid data for this enrollment is restored. The native chooser uses the same
 preview transaction and fresh fingerprint checks as the CLI.

@@ -635,7 +635,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
                 panelActions.append(button);scalableControls.append(button)
             }
             if demo {
-                let scenarios=NSPopUpButton();scenarios.addItems(withTitles:["ready","stale","paused","away","preview","recovery"])
+                let scenarios=NSPopUpButton();scenarios.addItems(withTitles:["ready","stale","paused","away","preview","recovery","presets-error"])
                 scenarios.target=self;scenarios.action=#selector(changeDemoScenario(_:));scenarios.setAccessibilityLabel("Synthetic scenario")
                 let compact=NSButton(title:"Minimum window",target:self,action:#selector(compactDemo))
                 let row=NSStackView(views:[scenarios,compact]);row.spacing=12;footer.addArrangedSubview(row)
@@ -896,9 +896,10 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
         if args==["preset-save-prompt"] {savePresetPrompt();return}
         if demo && args==["preview-options"] {
             let modes:[String:Any] = ["pg":["width":1920,"height":1080],"benq":["width":1920,"height":1280]]
-            let report:[String:Any] = ["rotation":0,"options":[["label":"Current size","size":"current","fingerprint":"demo","modes":modes]],
+            var report:[String:Any] = ["rotation":0,"options":[["label":"Current size","size":"current","fingerprint":"demo","modes":modes]],
                 "presets":[["name":"Reading","rotation":0,"available":true,"fingerprint":"demo","modes":modes],
                            ["name":"Reading","rotation":90,"available":false,"reason":"Preset belongs to the other orientation"]]]
+            if demoScenario=="presets-error" {report["presets"]=[];report["preset_error"]="Saved presets are unreadable. The original file was preserved. Ordinary size previews remain available."}
             if let data=try? JSONSerialization.data(withJSONObject:report),let text=String(data:data,encoding:.utf8) {chooseSize(text)}
             return
         }
@@ -987,6 +988,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
     }
     func chooseSize(_ json:String){
         guard let data=json.data(using:.utf8),let report=(try? JSONSerialization.jsonObject(with:data)) as? [String:Any],let relative=report["options"] as? [[String:Any]] else {message("Size preview unavailable","No qualified size choices were returned.");return}
+        let presetError=report["preset_error"] as? String
         var choices=relative
         var unavailable:[String]=[]
         for preset in report["presets"] as? [[String:Any]] ?? [] {
@@ -1009,15 +1011,16 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
                 lines.append("\(label)\nPG \(pg["width"] ?? "?") × \(pg["height"] ?? "?") · BenQ \(benq["width"] ?? "?") × \(benq["height"] ?? "?")")
             }
         }
+        if let error=presetError {lines.insert("Saved presets unavailable\n"+error,at:0)}
         if !unavailable.isEmpty {lines.append("Unavailable presets\n"+unavailable.joined(separator:"\n"))}
         let scroll=NSScrollView(frame:NSRect(x:0,y:0,width:520,height:248));scroll.hasVerticalScroller=true
         let text=NSTextView(frame:scroll.bounds);text.isEditable=false;text.isSelectable=true;text.font=selector.font
         text.isVerticallyResizable=true;text.isHorizontallyResizable=false;text.textContainer?.widthTracksTextView=true
         text.string=lines.joined(separator:"\n\n");text.setAccessibilityLabel("Size comparison and preset availability");scroll.documentView=text
         let content=NSView(frame:NSRect(x:0,y:0,width:520,height:300));content.addSubview(selector);content.addSubview(scroll);alert.accessoryView=content
-        alert.addButton(withTitle:"Preview selected size");alert.addButton(withTitle:"Save current as preset…");alert.addButton(withTitle:"Cancel").keyEquivalent="\u{1b}"
+        alert.addButton(withTitle:"Preview selected size");alert.addButton(withTitle:"Save current as preset…").isEnabled = presetError == nil;alert.addButton(withTitle:"Cancel").keyEquivalent="\u{1b}"
         let response=alert.runModal()
-        if response == .alertSecondButtonReturn {savePresetPrompt();return}
+        if response == .alertSecondButtonReturn,presetError == nil {savePresetPrompt();return}
         let index=selector.indexOfSelectedItem
         guard response == .alertFirstButtonReturn,index>=0,index<choices.count,let fingerprint=choices[index]["fingerprint"] as? String else {return}
         if let preset=choices[index]["preset"] as? String {execute(["preview-start","--preset",preset,"--fingerprint",fingerprint])}

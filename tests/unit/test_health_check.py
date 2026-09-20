@@ -63,6 +63,31 @@ class HealthChecks(unittest.TestCase):
             inputs=next(x for x in result['checks'] if x['name']=='Monitor inputs')
             self.assertEqual(inputs['status'],'warning')
             self.assertIn('not guessed',inputs['action'])
+    def test_menu_health_distinguishes_current_stale_and_mismatched(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root=Path(temp)
+            (root/'config.json').write_text('{}')
+            for update,status in [({},'ok'),({'updated_at':1},'warning'),({'app_version':'old'},'warning'),({'pid':0},'warning')]:
+                menu={'pid':os.getpid(),'updated_at':c.time.time(),'app_version':c.VERSION};menu.update(update)
+                (root/'menu-health.json').write_text(json.dumps(menu))
+                result=report(root,root,c.VERSION,lambda cfg:None,lambda cfg:{'pg':17,'benq':19})
+                check=next(x for x in result['checks'] if x['name']=='Menu app')
+                self.assertEqual(check['status'],status)
+            (root/'menu-health.json').unlink()
+            result=report(root,root,c.VERSION,lambda cfg:None,lambda cfg:{'pg':17,'benq':19})
+            self.assertEqual(next(x for x in result['checks'] if x['name']=='Menu app')['status'],'info')
+
+    def test_preset_and_oversized_state_checks_preserve_files(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root=Path(temp);(root/'config.json').write_text('{}')
+            preset=root/'size-presets.json';preset.write_text('{broken')
+            menu=root/'menu-health.json';menu.write_bytes(b'x'*(1024*1024+1))
+            before={p.name:p.read_bytes() for p in root.iterdir()}
+            result=report(root,root,c.VERSION,lambda cfg:None,lambda cfg:{'pg':17,'benq':19})
+            self.assertEqual(next(x for x in result['checks'] if x['name']=='Size presets')['status'],'warning')
+            self.assertIn('read limit',next(x for x in result['checks'] if x['name']=='menu-health.json')['detail'])
+            self.assertEqual(before,{p.name:p.read_bytes() for p in root.iterdir()})
+
     def test_check_cli_never_selects_or_writes_rotation_baseline(self):
         with tempfile.TemporaryDirectory() as temp:
             root=Path(temp);config=root/'config.json';config.write_text(json.dumps({'rotation':{'enabled':True},'host':'A'}))

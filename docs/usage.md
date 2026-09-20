@@ -133,3 +133,8 @@ Transition timing shows median, nearest-rank p95, slowest value, and each phase'
 count. Profiles with only failed attempts remain visible. Failed attempts may include retries;
 they are not a count of failed physical switches. Small samples and application-only timing
 cannot establish overall physical switching performance. Missing older fields stay unavailable.
+
+Health checks also inspect the menu heartbeat/version and any saved preset store. A closed
+menu is informational because the controller can continue without it. Stale/mismatched menu
+state and unusable preset data include corrective guidance; no file is reset. A valid preset
+store does not establish current mode availability—that is checked by the size chooser.

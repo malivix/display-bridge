@@ -7,6 +7,7 @@ import time
 from release_manifest import RUNTIME_MODULES, HELPER_HASH_FIELDS
 from persisted_state import validate_control,validate_recovery
 from display_snapshot import saved_layout
+import size_presets
 
 
 def mode_checks(config,inputs,metadata):
@@ -48,7 +49,9 @@ def report(root, bin_dir, version, validate_config, read_inputs, inspect_modes=N
         path=root/name
         if optional and not path.exists():return None
         try:
-            value=json.loads(path.read_text())
+            with path.open('rb') as stream:raw=stream.read(1024*1024+1)
+            if len(raw)>1024*1024:raise ValueError('State file exceeds the health-check read limit; original preserved')
+            value=json.loads(raw)
             if not isinstance(value,dict):raise ValueError('Expected a JSON object')
             return value
         except (OSError,ValueError) as error:
@@ -120,8 +123,27 @@ def report(root, bin_dir, version, validate_config, read_inputs, inspect_modes=N
                 except Exception as error:add('Display modes','warning',str(error),'Retry after displays settle. Private mode metadata may need requalification after a macOS update.')
         except Exception as error:
             add('Monitor setup','info' if type(error).__name__=='SetupUnavailable' else 'warning',str(error),'On another desk, leave automation inactive. On the saved setup, check cables, input selections and DDC/CI availability.')
+    if valid and (root/'size-presets.json').exists():
+        try:
+            presets=size_presets.read(root/'size-presets.json',config)['presets']
+            add('Size presets','ok',f'{len(presets)} saved name/orientation pairs belong to this enrollment. Mode availability is checked only when opening the size chooser.')
+        except (OSError,ValueError,KeyError,TypeError) as error:
+            add('Size presets','warning',str(error),'Preserve the preset file and restore valid data for this enrollment. Ordinary relative-size previews remain available; this check does not reset presets.')
     menu=read('menu-health.json',optional=True)
+    if menu:
+        try:
+            pid=menu.get('pid');age=time.time()-float(menu.get('updated_at',0))
+            if type(pid) is not int or pid<=0:raise ValueError('Missing menu process')
+            os.kill(pid,0)
+            if not 0<=age<15:raise ValueError('Menu heartbeat is stale')
+            if menu.get('app_version')!=version:raise ValueError('Menu and command versions differ')
+            add('Menu app','ok',f'Menu heartbeat age {age:.1f}s; version matches the command. This does not verify its visual behavior.')
+        except (OSError,TypeError,ValueError) as error:
+            add('Menu app','warning',str(error),'Open the installed Display Bridge menu app or reinstall the matching app/controller pair. Do not start extra controller processes.')
+    elif not (root/'menu-health.json').exists():
+        add('Menu app','info','No menu heartbeat is available. The controller can run while the menu is closed.','Open the installed menu app if window controls are wanted.')
     if menu and menu.get('notification_authorization')==1:
+
         add('Failure notifications','info','macOS notifications are disabled for Display Auto.','Enable them in System Settings → Notifications if wanted; the menu still shows failures.')
     status='error' if any(c['status']=='error' for c in checks) else 'warning' if any(c['status']=='warning' for c in checks) else 'ok'
     return {'version':version,'read_only':True,'status':status,'checks':checks,'limits':'Readback does not prove audible sound, visual sharpness, HDR state, or absence of panel flicker. Nothing was changed or uploaded.'}

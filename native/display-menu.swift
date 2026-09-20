@@ -89,19 +89,28 @@ func runMenuCommand(_ executable:URL,_ arguments:[String],timeout:Double=45,outp
     return CommandResult(output:String(decoding:output,as:UTF8.self),code:process.terminationStatus)
 }
 
+func menuCapabilities(_ probe:CommandResult)->Set<String>? {
+    guard probe.code==0,let data=probe.output.data(using:.utf8),
+          let report=(try? JSONSerialization.jsonObject(with:data)) as? [String:Any],
+          let protocolNumber=report["protocol"] as? NSNumber,CFGetTypeID(protocolNumber) != CFBooleanGetTypeID(),protocolNumber.doubleValue==1,
+          let readOnly=report["read_only"] as? NSNumber,CFGetTypeID(readOnly)==CFBooleanGetTypeID(),readOnly.boolValue,
+          let commands=report["commands"] as? [String],commands.count<=128,Set(commands).count==commands.count else{return nil}
+    return Set(commands)
+}
+func presetCompatibilitySummary(_ commands:Set<String>?,checking:Bool)->String {
+    if checking {return "Checking preset command support…"}
+    guard let commands=commands else {return "Preset support could not be verified. Update the menu and controller together, then choose Check preset support. Status and recovery remain available."}
+    let brightness=["brightness-list","brightness-save","brightness-apply","brightness-remove"].allSatisfy{commands.contains($0)}
+    let size=["preset-save","preset-remove"].allSatisfy{commands.contains($0)}
+    return "Last support check: brightness presets \(brightness ? "available":"unavailable"); size preset saving/removal \(size ? "available":"unavailable")." + (brightness && size ? " Commands are checked again before use.":" Update the menu and controller together, then check again.")
+}
+
 // Probe only newer commands; preserve legacy inspection and recovery access.
 func runCompatibleMenuCommand(_ arguments:[String],runner:([String],Double,Int)->CommandResult)->CommandResult {
     let guarded=["brightness-list","brightness-save","brightness-apply","brightness-remove","preset-save","preset-remove"]
     if let action=arguments.first,guarded.contains(action) {
         let probe=runner(["capabilities"],5,16_384)
-        var supported=false
-        if probe.code==0,let data=probe.output.data(using:.utf8),
-           let report=(try? JSONSerialization.jsonObject(with:data)) as? [String:Any],
-           let protocolNumber=report["protocol"] as? NSNumber,CFGetTypeID(protocolNumber) != CFBooleanGetTypeID(),protocolNumber.doubleValue==1,
-           let readOnly=report["read_only"] as? NSNumber,CFGetTypeID(readOnly)==CFBooleanGetTypeID(),readOnly.boolValue,
-           let commands=report["commands"] as? [String],commands.count<=128,Set(commands).count==commands.count {
-            supported=commands.contains(action)
-        }
+        let supported=menuCapabilities(probe)?.contains(action)==true
         guard supported else {return CommandResult(output:"This command requires a compatible controller. Update the menu and controller together from the same trusted source. The requested action was not sent; status and recovery remain available.",code:78)}
     }
     return runner(arguments,45,1_048_576)
@@ -651,6 +660,11 @@ if CommandLine.arguments.contains("--self-test") {
     precondition(panelRefreshArguments("monitor-controls","status","unknown")==nil)
     precondition(panelRefreshArguments("audio","status","pg")==nil)
     print("PASS window shortcuts, modifier isolation, repeat suppression and read-only refresh targets")
+    precondition(presetCompatibilitySummary(nil,checking:true).contains("Checking"))
+    precondition(presetCompatibilitySummary(nil,checking:false).contains("could not be verified"))
+    precondition(presetCompatibilitySummary([],checking:false).contains("brightness presets unavailable"))
+    precondition(presetCompatibilitySummary(Set(["preset-save","preset-remove"]),checking:false).contains("size preset saving/removal available"))
+    print("PASS unknown, checking, unsupported and partial preset availability labels")
     let supportedReport="{\"protocol\":1,\"read_only\":true,\"commands\":[\"brightness-save\"]}"
     for report in [CommandResult(output:supportedReport,code:0),CommandResult(output:supportedReport,code:124),CommandResult(output:"{}",code:0),CommandResult(output:supportedReport.replacingOccurrences(of:"brightness-save",with:"status"),code:0),CommandResult(output:supportedReport.replacingOccurrences(of:"protocol\":1",with:"protocol\":true"),code:0)] {
         var calls:[[String]]=[]
@@ -1056,6 +1070,21 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
     var openMenus=Set<ObjectIdentifier>()
     var menuOpen:Bool {!openMenus.isEmpty}
     var controlsUsable=true
+    var presetCapabilities:Set<String>?
+    var checkingCapabilities=false
+    var compatibilityLabel:NSTextField?
+    var compatibilityButton:NSButton?
+    var visibleCapabilities:Set<String>? {demo ? (demoScenario=="older-controller" ? []:Set(["brightness-list","brightness-save","brightness-apply","brightness-remove","preset-save","preset-remove"])):presetCapabilities}
+    @objc func checkPresetSupport() {
+        guard !checkingCapabilities,!demo else{return}
+        checkingCapabilities=true;presetCapabilities=nil;refresh()
+        DispatchQueue.global().async {
+            let result=runMenuCommand(self.command,["capabilities"],timeout:5,outputLimit:16_384)
+            DispatchQueue.main.async {
+                self.presetCapabilities=menuCapabilities(result);self.checkingCapabilities=false;self.refresh()
+            }
+        }
+    }
     var failureAlerts=FailureAlerts(sent:Array((UserDefaults.standard.stringArray(forKey:"failureIncidents") ?? []).prefix(16)))
     func applicationShouldHandleReopen(_ sender:NSApplication,hasVisibleWindows flag:Bool)->Bool {showPanel();return true}
     func showPanel() {
@@ -1160,6 +1189,11 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
             let selector=NSPopUpButton();selector.addItems(withTitles:["PG42UQ","BenQ RD280UG"])
             selector.target=self;selector.action=#selector(selectMonitor(_:));selector.setAccessibilityLabel("Monitor to adjust")
             controlsStack.addArrangedSubview(selector);monitorSelector=selector;scalableControls.append(selector)
+            let compatibility=NSTextField(wrappingLabelWithString:"");compatibility.isSelectable=true
+            controlsStack.addArrangedSubview(compatibility);compatibility.widthAnchor.constraint(equalTo:controlsStack.widthAnchor,constant:-32).isActive=true
+            compatibilityLabel=compatibility;scalableControls.append(compatibility)
+            let checkSupport=NSButton(title:"Check preset support",target:self,action:#selector(checkPresetSupport))
+            controlsStack.addArrangedSubview(checkSupport);compatibilityButton=checkSupport;scalableControls.append(checkSupport)
             let presetsButton=NSButton(title:"Brightness presets…",target:self,action:#selector(openBrightnessPresets))
             presetsButton.identifier=NSUserInterfaceItemIdentifier("brightness-list");controlsStack.addArrangedSubview(presetsButton);panelActions.append(presetsButton);scalableControls.append(presetsButton)
             let availability=NSTextField(wrappingLabelWithString:"");controlsStack.addArrangedSubview(availability)
@@ -1195,7 +1229,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
                 panelActions.append(button);scalableControls.append(button)
             }
             if demo {
-                let scenarios=NSPopUpButton();scenarios.addItems(withTitles:["ready","stale","paused","away","preview","recovery","recovery-wait","presets-error","controls-error","brightness-empty"])
+                let scenarios=NSPopUpButton();scenarios.addItems(withTitles:["ready","stale","paused","away","preview","recovery","recovery-wait","presets-error","controls-error","brightness-empty","older-controller"])
                 scenarios.target=self;scenarios.action=#selector(changeDemoScenario(_:));scenarios.setAccessibilityLabel("Synthetic scenario")
                 let compact=NSButton(title:"Minimum window",target:self,action:#selector(compactDemo))
                 let row=NSStackView(views:[scenarios,compact]);row.spacing=12;footer.addArrangedSubview(row)
@@ -1344,6 +1378,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
         if let timer=timer {RunLoop.main.add(timer,forMode:.common)}
         refresh()
         if demo {showPanel();return}
+        checkPresetSupport()
         UNUserNotificationCenter.current().getNotificationSettings { settings in
             if settings.authorizationStatus == .notDetermined {
                 UNUserNotificationCenter.current().requestAuthorization(options:[.alert]){_,error in
@@ -1401,11 +1436,16 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
             if selection.location<=length {text.setSelectedRange(NSRange(location:selection.location,length:min(selection.length,length-selection.location)))}
             if let origin=origin {text.enclosingScrollView?.contentView.scroll(to:origin)}
         }
+        compatibilityLabel?.stringValue=presetCompatibilitySummary(visibleCapabilities,checking:checkingCapabilities)
+        compatibilityButton?.isEnabled = !checkingCapabilities && !busy && !demo
         let monitorUnavailable=monitorControlReason(health,control,monitorRole,busy)
         monitorReason?.stringValue=monitorUnavailable ?? "Controls apply only to the selected monitor. Each adjustment waits for hardware confirmation."
         for button in monitorButtons {button.isEnabled=monitorUnavailable==nil}
         monitorSelector?.isEnabled = !busy
-        for button in panelActions {button.isEnabled = !busy && (controlsUsable || safeWithoutControls(button.identifier?.rawValue ?? "doctor"))}
+        for button in panelActions {
+            let action=button.identifier?.rawValue ?? "doctor"
+            button.isEnabled = !busy && (controlsUsable || safeWithoutControls(action)) && (action != "brightness-list" || ["brightness-list","brightness-save","brightness-apply","brightness-remove"].allSatisfy{visibleCapabilities?.contains($0)==true})
+        }
         let preferences=control["speaker_preferences"] as? [String:String] ?? [:]
         for (profile,popup) in speakerPopups {
             if !controlsUsable {popup.selectItem(at:-1);popup.isEnabled=false;continue}
@@ -1649,7 +1689,10 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
         var notes:[String]=[]
         if let error=presetError {notes.append("Saved presets unavailable\n"+error)}
         if !unavailable.isEmpty {notes.append("Unavailable presets\n"+unavailable.joined(separator:"\n"))}
-        let chooser=SizeChooser(choices:choices,current:current,notes:notes.joined(separator:"\n\n"),orientation:report["rotation"] as? Int == 90 ? "Portrait":"Landscape",fontSize:CGFloat([16,20,24][textSizeIndex()]),canSave:presetError==nil,canRemove:presetError==nil && !presets.isEmpty)
+        let canSave=visibleCapabilities?.contains("preset-save")==true
+        let canRemove=visibleCapabilities?.contains("preset-remove")==true
+        if !canSave || !canRemove {notes.append(presetCompatibilitySummary(visibleCapabilities,checking:checkingCapabilities)+" Check support in Controls.")}
+        let chooser=SizeChooser(choices:choices,current:current,notes:notes.joined(separator:"\n\n"),orientation:report["rotation"] as? Int == 90 ? "Portrait":"Landscape",fontSize:CGFloat([16,20,24][textSizeIndex()]),canSave:presetError==nil && canSave,canRemove:presetError==nil && !presets.isEmpty && canRemove)
         let response=chooser.run()
         if response==1,presetError==nil {savePresetPrompt();return}
         if response==2,presetError==nil {removePresetPrompt(presets);return}

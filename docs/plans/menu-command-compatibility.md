@@ -13,3 +13,10 @@ remain necessary. No persistent state is added. Rollback restores the previous s
 Verify that rejected probes never dispatch the requested action and that legacy recovery
 is not prevented by a missing report. Native tests use an injected runner; CLI tests use
 an empty disposable home and prohibit hardware/configuration access.
+
+UI follow-up: probe once at launch on a worker queue and expose an explicit recheck in
+Controls. Show a last-check summary and disable unsupported preset entries. Do not poll
+hardware or infer fresh support from this UI snapshot; retain per-command probing.
+Size preview/recovery remain usable independently of named preset save/removal. No
+state is persisted; restart or recheck discards old availability. Test unknown, checking,
+partial and unsupported states, including a synthetic older-controller demo.

@@ -215,3 +215,9 @@ Before newer size-preset and brightness commands, the menu checks the installed 
 support. An unavailable or incompatible reply stops the requested command and recommends
 a coordinated update. Status and existing recovery commands remain accessible. This probe
 can take up to five seconds; it does not prove daemon or helper build integrity.
+
+Controls shows the last preset-support check and a **Check preset support** button. The
+menu checks once at launch without accessing monitor hardware. After a coordinated
+update, recheck to enable newly supported controls. Unsupported brightness presets and
+named size-preset save/removal are disabled; ordinary size preview and recovery remain
+independent. This display is a snapshot, so command-time checks still run before use.

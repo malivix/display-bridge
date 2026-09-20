@@ -618,7 +618,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
             return
         }
         if demo,args==["history"] {
-            let report:[String:Any]=["history_available":true,"profiles":["pg":["count":1,"failed_attempts":0,"seconds":["total":["count":1,"median":2.5,"max":2.5,"p95":2.5]]],"benq":["count":0,"failed_attempts":1,"seconds":[:]]],"recent_events":[["profile":"benq","result":"failed","seconds":[:]], ["profile":"pg","result":"ready","seconds":["total":2.5,"audio":1.2,"layout_apply":0.8]]]]
+            let report:[String:Any]=["history_available":true,"profiles":["pg":["count":1,"failed_attempts":0,"seconds":["total":["count":1,"median":2.5,"max":2.5,"p95":2.5]]],"benq":["count":0,"failed_attempts":1,"seconds":[:]]],"recent_events":[["profile":"benq","result":"failed","seconds":["total":2.4,"layout_apply":0.4],"failed_phase":"audio","failed_phase_seconds":2.0], ["profile":"pg","result":"ready","seconds":["total":2.5,"audio":1.2,"layout_apply":0.8]]]]
             if let data=try? JSONSerialization.data(withJSONObject:report),let json=String(data:data,encoding:.utf8) {showReport("history","Synthetic examples; not measurements.\n\n"+timingSummary(json))}
             return
         }

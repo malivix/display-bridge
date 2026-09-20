@@ -99,7 +99,8 @@ scale its tabs/toolbars. Judge readability and optical results with the user aft
 
 Existing history includes settling, rotation check, layout, input confirmation and audio phases.
 `total` starts after state confirmation; it does not include the unseen time before the first
-valid input/sensor observation. Failed attempts currently omit successful-phase durations.
+valid input/sensor observation. [Failed attempts now retain completed phase durations](../log/failed-transition-timing.md)
+and identify the interrupted phase.
 Add explicit first-observed-to-ready timing and bounded partial failure phases, keeping unknown
 pre-observation delay labeled unmeasured. Expose sensor state, requested orientation and measured
 orientation distinctly, then optimize the measured bottleneck.

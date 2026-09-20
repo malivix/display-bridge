@@ -255,3 +255,8 @@ For brightness:
 Use `--replace` explicitly to replace an existing name for that monitor. Pass the list entry's
 `revision` to `brightness-apply` or `brightness-remove` with `--fingerprint VALUE`, together
 with `--monitor benq --preset Reading`. List and removal access no monitor hardware.
+
+Failed attempts in Transition timing retain completed phase durations and identify the
+interrupted phase with its elapsed time. Unrecorded later phases are not zero. These attempts
+are excluded from successful-transition aggregates; application total still excludes time
+before state confirmation.

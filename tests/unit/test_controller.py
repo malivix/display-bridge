@@ -97,6 +97,18 @@ class ReliabilityTests(unittest.TestCase):
                 c.watch({'host':'A','poll_interval':0}, once=True)
             apply.assert_not_called()
 
+    def test_failed_transitions_keep_only_completed_phase_timings(self):
+        for failing,expected,completed in [('apply_rotation','rotation_check',set()),('apply','layout_apply',{'rotation_check'}),('sync_audio','audio',{'rotation_check','layout','layout_apply','input_confirmation'})]:
+            with self.subTest(phase=expected), patch.object(c,'write_health'), patch.object(c,'read_inputs',return_value={'pg':17,'benq':19}), patch.object(c,'apply_rotation',return_value=False), patch.object(c,'apply',return_value=True), patch.object(c,'sync_audio',return_value='ready'), patch.object(c,'record') as record:
+                with patch.object(c,failing,side_effect=RuntimeError('Synthetic phase failure')):
+                    with self.assertRaises(RuntimeError):c.watch({'host':'A','poll_interval':0},once=True)
+                event=record.call_args.args[1]
+                self.assertEqual(event['result'],'failed')
+                self.assertEqual(event['failed_phase'],expected)
+                self.assertEqual(set(event['seconds']),completed|{'total'})
+                self.assertGreaterEqual(event['failed_phase_seconds'],0)
+                self.assertGreaterEqual(event['seconds']['total'],event['failed_phase_seconds'])
+
     def test_audio_is_not_rerouted_after_failed_layout(self):
         with patch.object(c,'write_health'), patch.object(c,'read_inputs',return_value={'pg':18,'benq':19}), patch.object(c,'apply',side_effect=RuntimeError('layout failed')), patch.object(c,'sync_audio') as audio:
             with self.assertRaises(RuntimeError): c.watch({'host':'A','poll_interval':0},once=True)

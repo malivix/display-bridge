@@ -50,6 +50,8 @@ def recent_events(rows):
                 value=timings.get(phase)
                 if valid_duration(value):seconds[phase]=value
         event={'profile':row['profile'],'result':row['result'],'seconds':seconds}
+        if row['result']=='failed' and row.get('failed_phase') in ('rotation_check','layout_apply','input_confirmation','audio') and valid_duration(row.get('failed_phase_seconds')):
+            event.update(failed_phase=row['failed_phase'],failed_phase_seconds=row['failed_phase_seconds'])
         attempt=row.get('attempt')
         if type(attempt) is int and 1<=attempt<=3:event['attempt']=attempt
         events.append(event)

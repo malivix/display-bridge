@@ -155,6 +155,15 @@ class Features(unittest.TestCase):
             self.assertNotIn('inputs',json.dumps(recent))
             self.assertEqual(o.summary(root)['recent_events'],recent)
 
+    def test_interrupted_phase_projection_is_bounded_and_allowlisted(self):
+        row={'profile':'pg','result':'failed','seconds':{'layout_apply':.2},'failed_phase':'audio','failed_phase_seconds':2.0}
+        self.assertEqual(o.recent_events([row])[0]['failed_phase'],'audio')
+        for field,value in [('failed_phase','private error'),('failed_phase_seconds',True),('failed_phase_seconds',10**400),('result','ready')]:
+            changed=dict(row,**{field:value})
+            result=o.recent_events([changed])[0]
+            self.assertNotIn('failed_phase',result)
+            self.assertEqual(result['seconds'],{'layout_apply':.2})
+
     def test_bad_duration_does_not_hide_other_events_or_valid_phases(self):
         with tempfile.TemporaryDirectory() as temp:
             root=Path(temp);path=root/'transitions.json'

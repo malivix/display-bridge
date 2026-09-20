@@ -50,6 +50,9 @@ func runMenuSelfTests() {
     precondition(recentText.contains("Application total: not recorded"))
     precondition(recentText.contains("2. Only PG here · Completed"))
     precondition(recentText.contains("Application total: 2.50 s"))
+    let interrupted=recentTimingSummary([["profile":"pg","result":"failed","seconds":["layout_apply":0.2],"failed_phase":"audio","failed_phase_seconds":2.0]])
+    precondition(interrupted.contains("Interrupted during Audio after 2.00 s") && interrupted.contains("phase did not complete"))
+    precondition(!recentTimingSummary([["profile":"pg","result":"failed","seconds":[:],"failed_phase":"private error","failed_phase_seconds":2.0]]).contains("private error"))
     precondition(recentTimingSummary(nil).contains("unavailable"))
     precondition(recentTimingSummary([]).contains("No recent"))
 

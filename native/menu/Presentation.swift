@@ -383,6 +383,11 @@ func recentTimingSummary(_ value:Any?)->String {
               let result=event["result"] as? String,["ready","failed"].contains(result),
               let phases=event["seconds"] as? [String:Any] else {lines.append("\(index+1). Event details unavailable.");continue}
         lines.append("\(index+1). \(label) · \(result=="ready" ? "Completed":"Failed attempt")")
+        let failedLabels=["rotation_check":"Rotation","layout_apply":"Layout application","input_confirmation":"Input recheck","audio":"Audio"]
+        if result=="failed",let phase=event["failed_phase"] as? String,let title=failedLabels[phase],
+           let elapsed=event["failed_phase_seconds"] as? NSNumber,CFGetTypeID(elapsed) != CFBooleanGetTypeID(),elapsed.doubleValue.isFinite,elapsed.doubleValue>=0 {
+            lines.append(String(format:"  Interrupted during %@ after %.2f s; phase did not complete.",title,elapsed.doubleValue))
+        }
         var missing:[String]=[]
         for (key,title) in [("total","Application total"),("rotation_check","Rotation"),("layout_apply","Layout application"),("input_confirmation","Input recheck"),("audio","Audio"),("settling","Stable-read interval")] {
             if let number=phases[key] as? NSNumber,CFGetTypeID(number) != CFBooleanGetTypeID(),number.doubleValue.isFinite,number.doubleValue>=0 {

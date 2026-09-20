@@ -3,6 +3,7 @@
 
 import json, os, shutil, plistlib, hashlib
 from pathlib import Path
+from xml.parsers.expat import ExpatError
 
 
 def atomic_link(target, path):
@@ -129,7 +130,7 @@ def require_service_namespace(home, label):
     for path in (home / "Library/LaunchAgents").glob("*.plist"):
         try:
             data = plistlib.loads(path.read_bytes())
-        except (ValueError, plistlib.InvalidFileException):
+        except (ValueError, plistlib.InvalidFileException, ExpatError):
             continue
         if not isinstance(data, dict):
             continue

@@ -127,3 +127,15 @@ class DeploymentTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+class MalformedUnrelatedAgent(unittest.TestCase):
+    def test_malformed_xml_does_not_block_namespace_scan(self):
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            agents = home / "Library/LaunchAgents"
+            agents.mkdir(parents=True)
+            path = agents / "unrelated.plist"
+            content = b'<?xml version="1.0"?><plist><dict><string>bad & value</string></dict></plist>'
+            path.write_bytes(content)
+            require_service_namespace(home, "io.github.display-bridge")
+            self.assertEqual(path.read_bytes(), content)

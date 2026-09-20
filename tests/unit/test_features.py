@@ -211,6 +211,18 @@ else:raise AssertionError('Unexpected overwrite')
             subprocess.run([sys.executable,'-c',code,str(root)],check=True,timeout=5)
             self.assertTrue(path.is_symlink());self.assertEqual(target.read_text(),'[]')
 
+    def test_initial_capture_rejects_variable_refresh_before_writing(self):
+        screens=[{'key':key,'hz':120,'width':1280,'height':720,'pixelWidth':2560,'pixelHeight':1440,'rotation':0,'modeID':1}
+                 for key in ('1715:17120:example-pg','2513:32963:example-benq')]
+        metadata={'displays':[dict(row,variableRefresh=True,proMotion=False,hdrPreferenceEnabled=False) for row in screens]}
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder);config=root/'config.json';baseline=root/'baseline.json'
+            config.write_bytes(b'original config');baseline.write_bytes(b'original baseline')
+            with patch.object(c,'layout',return_value=screens),patch.object(c,'command',return_value=json.dumps(metadata)),patch.object(c,'CONFIG',config),patch.object(c,'BASELINE',baseline),patch.object(c,'capture_audio') as audio:
+                with self.assertRaisesRegex(ValueError,'fixed 120-Hz'):c.capture('A','example-ddc')
+                audio.assert_not_called()
+            self.assertEqual(config.read_bytes(),b'original config');self.assertEqual(baseline.read_bytes(),b'original baseline')
+
     def test_diagnostics_are_local_private_and_tolerate_missing_files(self):
         with tempfile.TemporaryDirectory() as temp:
             root=Path(temp);path=o.diagnostics(root,root)

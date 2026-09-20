@@ -69,7 +69,11 @@ expired Keep rejected; ownership or orientation changes defer safely; rollback r
 bounded. Test enlarged text and keyboard-only use. Optical/readability evaluation is a
 separate opt-in physical check. Never depend on accessibility text size enlarging Chrome.
 
-### 3. Guided enrollment and upgrade
+### 3. Guided enrollment and upgrade — next substantial workflow
+
+The read-only checklist now [prioritizes setup actions](../log/setup-next-action.md).
+[Capture policy validation](../log/capture-mode-policy.md) is implemented as a prerequisite;
+mutable guided enrollment and upgrade UI remain unimplemented.
 
 Build on the existing read-only setup/preflight and coordinated installer. Show prerequisite,
 identity, input-map, orientation and version agreement before enabling activation. Review
@@ -86,7 +90,7 @@ activation restores the coordinated release. Mac B physical tests remain a later
 | --- | --- |
 | Optional Shortcuts integration | Invoke existing bounded commands with explicit monitor target and useful results. No HTTP server or new hardware policy. Start with read-only status and manual preset apply. |
 | Coalesced brightness control | A slider may improve repeated steps, but submit the final intent through the existing lock, recheck ownership and read back. Measure write/lock timing before choosing a debounce interval. |
-| History timeline | Show phase duration, failures and waiting separately; label sample count and distinguish detection latency from application time. Existing text history remains available. |
+| Recent transition history — source implemented | [Recent attempts](../log/recent-transition-history.md) precede aggregates with missing-phase labels. A graphical timeline and selectable event detail remain optional future work. |
 | Calibrated physical-size matching | Compare logical points against trustworthy panel dimensions and orientation; user calibration overrides an estimate. Preview through existing rollback, never replay stale mode IDs. |
 
 ## Deliberately deferred

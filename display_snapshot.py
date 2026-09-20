@@ -20,6 +20,25 @@ def rows_by_identity(metadata, keys):
     return result
 
 
+def validate_capture_modes(screens,metadata,keys):
+    """Require explicit fixed-refresh/SDR HiDPI evidence before saving a baseline."""
+    rows=rows_by_identity(metadata,keys)
+    if not isinstance(screens,list) or len(screens)!=2 or any(not isinstance(s,dict) for s in screens) or {s.get('key') for s in screens}!=set(keys.values()):
+        raise ValueError('Capture requires the same two display identities')
+    for saved in screens:
+        row=rows[saved['key']]
+        if any(row.get(k)!=saved.get(k) for k in ('modeID','width','height','pixelWidth','pixelHeight','rotation')):
+            raise ValueError('Display mode changed during capture; retry after it settles')
+        size=dimensions(row)
+        hz=row.get('hz')
+        if (not size or size['pixelWidth']!=2*size['width'] or size['pixelHeight']!=2*size['height']
+                or type(hz) not in (int,float) or not abs(hz-120)<.2
+                or type(row.get('modeID')) is not int or type(row.get('rotation')) is not int
+                or row.get('variableRefresh') is not False or row.get('proMotion') is not False
+                or row.get('hdrPreferenceEnabled') is not False or row.get('metadataError') or row.get('error')):
+            raise ValueError('Capture requires confirmed fixed 120-Hz HiDPI with HDR off; check Displays settings and retry')
+
+
 def dimensions(row):
     if not row or any(type(row.get(k)) is not int or not 0 < row[k] <= 65536
                       for k in ('width', 'height', 'pixelWidth', 'pixelHeight')):

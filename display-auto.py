@@ -311,6 +311,8 @@ def capture(host, m1ddc):
         if len(found) != 1:
             raise RuntimeError(f'Cannot uniquely identify {name}; no configuration written')
         keys[name] = found[0]
+    from display_snapshot import validate_capture_modes
+    validate_capture_modes(screens,json.loads(command([MODE_INFO,'status'])),keys)
     config = {'version': VERSION, 'host': host, 'm1ddc': str(Path(m1ddc).resolve()),
               'keys': keys, 'ddc_identifiers':capture_identifiers(m1ddc), 'audio': capture_audio(), 'poll_interval': .25, 'baseline': {'screens': screens}}
     for _ in range(2):

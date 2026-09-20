@@ -45,6 +45,16 @@ class HealthChecks(unittest.TestCase):
         metadata['displays'].append(dict(metadata['displays'][1]))
         self.assertEqual(mode_checks(config,{'pg':17,'benq':19},metadata)[0]['status'],'warning')
 
+    def test_capture_policy_rejects_vrr_hdr_and_missing_metadata(self):
+        from display_snapshot import validate_capture_modes
+        config,metadata=self.modes()
+        validate_capture_modes(config['baseline']['screens'],metadata,config['keys'])
+        for change in ({'variableRefresh':True},{'proMotion':True},{'hdrPreferenceEnabled':True},
+                       {'variableRefresh':None},{'hdrPreferenceEnabled':0},{'metadataError':'unavailable'},
+                       {'width':123},{'hz':float('nan')}):
+            config,metadata=self.modes();metadata['displays'][0].update(change)
+            with self.assertRaises(ValueError):validate_capture_modes(config['baseline']['screens'],metadata,config['keys'])
+
     def test_setup_readiness_describes_local_role_without_identifiers(self):
         from health_check import setup_checks
         config,_=self.modes()

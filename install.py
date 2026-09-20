@@ -344,6 +344,9 @@ def run_install(argv, resources):
                         raise RuntimeError(
                             "Select fixed 120 Hz on both local extended displays before capture"
                         )
+                    from display_snapshot import validate_capture_modes
+                    metadata=json.loads(run([str(bin_dir / "display-mode-info"),"status"],capture_output=True,text=True,check=True,timeout=10).stdout)
+                    validate_capture_modes(screens,metadata,previous["keys"])
                     previous["baseline"] = {
                         "screens": [dict(x, strictMode=True) for x in screens]
                     }

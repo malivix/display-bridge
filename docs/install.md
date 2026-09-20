@@ -8,6 +8,8 @@
 - Exactly the two external displays in extended mode, both showing the Mac being configured.
 - Select fixed 120 Hz and HDR off in macOS Displays settings, then choose readable sizes.
   Existing custom HiDPI modes must already be available; this project does not create them.
+  Capture checks current mode metadata for 2× HiDPI, VRR/ProMotion off and HDR off. A numeric
+  120 Hz reading alone is insufficient; unavailable metadata blocks capture without guessing.
 
 Check `python3 --version` and `xcrun --sdk macosx --show-sdk-path` before installation.
 Connection and firmware compatibility must be qualified on your setup.

@@ -17,7 +17,8 @@ An Audio tab now exposes profile preferences and manual/repair controls with ava
 The separate allowlisted support-summary preview is implemented and tested in source.
 Direct monitor controls now show readbacks inline and explain availability; continuous
 slider/coalescing and physical pacing qualification remain deferred.
-Larger controls, further advanced-menu simplification, and complete
+Window controls and tabs now scale with status text, using adaptive footer and stacked
+audio rows. Alert sizing, further advanced-menu simplification, and complete
 accessibility qualification remain. Live deployment
 and UI qualification remain separate.
 

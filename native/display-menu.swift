@@ -470,6 +470,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
     var item:NSStatusItem!
     var timer:Timer?
     var panel:NSWindow?
+    var scalableControls:[NSControl]=[]
     var panelText:NSTextView?
     var contentTabs:NSTabView?
     var modeText:NSTextView?
@@ -538,8 +539,10 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
             modeContent.setAccessibilityLabel("Measured display modes")
             modeScroll.documentView=modeContent;modeView.addSubview(modeScroll);modeText=modeContent
             let refreshModes=NSButton(title:"Refresh display details",target:self,action:#selector(panelAction(_:)))
-            refreshModes.identifier=NSUserInterfaceItemIdentifier("display-info");refreshModes.frame=NSRect(x:12,y:12,width:220,height:32)
+            refreshModes.identifier=NSUserInterfaceItemIdentifier("display-info");refreshModes.translatesAutoresizingMaskIntoConstraints=false;scalableControls.append(refreshModes)
             modeView.addSubview(refreshModes);panelActions.append(refreshModes)
+            modeScroll.translatesAutoresizingMaskIntoConstraints=false
+            NSLayoutConstraint.activate([refreshModes.leadingAnchor.constraint(equalTo:modeView.leadingAnchor,constant:12),refreshModes.bottomAnchor.constraint(equalTo:modeView.bottomAnchor,constant:-12),modeScroll.leadingAnchor.constraint(equalTo:modeView.leadingAnchor,constant:12),modeScroll.trailingAnchor.constraint(equalTo:modeView.trailingAnchor,constant:-12),modeScroll.topAnchor.constraint(equalTo:modeView.topAnchor,constant:12),modeScroll.bottomAnchor.constraint(equalTo:refreshModes.topAnchor,constant:-12)])
             displays.view=modeView;tabs.addTabViewItem(displays)
             let audioTab=NSTabViewItem(identifier:"audio");audioTab.label="Audio"
             let audioScroll=NSScrollView();audioScroll.hasVerticalScroller=true
@@ -551,16 +554,16 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
             let info=NSTextField(wrappingLabelWithString:"Speaker preferences apply to each monitor profile. External headsets remain under your control.")
             audioStack.addArrangedSubview(info);info.widthAnchor.constraint(equalTo:audioStack.widthAnchor,constant:-32).isActive=true;audioInfo=info
             for (profile,label) in [("extended","Both monitors here"),("pg","Only PG here"),("benq","Only BenQ here"),("away","Both monitors away")] {
-                let title=NSTextField(wrappingLabelWithString:label);title.widthAnchor.constraint(equalToConstant:190).isActive=true
+                let title=NSTextField(wrappingLabelWithString:label);scalableControls.append(title)
                 let popup=NSPopUpButton();popup.identifier=NSUserInterfaceItemIdentifier(profile)
                 popup.target=self;popup.action=#selector(selectSpeaker(_:));popup.setAccessibilityLabel("Speaker when "+label.lowercased())
                 for (key,name) in speakerChoices(profile) {popup.addItem(withTitle:name);popup.lastItem?.representedObject=key}
-                popup.widthAnchor.constraint(equalToConstant:250).isActive=true;speakerPopups[profile]=popup
-                let row=NSStackView(views:[title,popup]);row.orientation = .horizontal;row.spacing=12;audioStack.addArrangedSubview(row)
+                speakerPopups[profile]=popup;scalableControls.append(popup)
+                let row=NSStackView(views:[title,popup]);row.orientation = .vertical;row.alignment = .leading;row.spacing=6;audioStack.addArrangedSubview(row)
             }
             for (title,action) in [("Preserve output for 30 minutes","audio-manual"),("Resume automatic audio","audio-auto"),("Repair audio","repair-audio")] {
                 let button=NSButton(title:title,target:self,action:#selector(panelAction(_:)));button.identifier=NSUserInterfaceItemIdentifier(action)
-                audioStack.addArrangedSubview(button)
+                audioStack.addArrangedSubview(button);scalableControls.append(button)
                 if action=="repair-audio" {audioRepair=button} else {panelActions.append(button)}
             }
             let reason=NSTextField(wrappingLabelWithString:"");audioStack.addArrangedSubview(reason)
@@ -575,43 +578,48 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
             controlsStack.topAnchor.constraint(equalTo:controlsScroll.contentView.topAnchor).isActive=true
             let selector=NSPopUpButton();selector.addItems(withTitles:["PG42UQ","BenQ RD280UG"])
             selector.target=self;selector.action=#selector(selectMonitor(_:));selector.setAccessibilityLabel("Monitor to adjust")
-            controlsStack.addArrangedSubview(selector);monitorSelector=selector
+            controlsStack.addArrangedSubview(selector);monitorSelector=selector;scalableControls.append(selector)
             let availability=NSTextField(wrappingLabelWithString:"");controlsStack.addArrangedSubview(availability)
             availability.widthAnchor.constraint(equalTo:controlsStack.widthAnchor,constant:-32).isActive=true;monitorReason=availability
             for (title,key) in [("Read brightness and volume","read"),("Brightness −5%","luminance:-5"),("Brightness +5%","luminance:5"),("Speaker volume −5%","volume:-5"),("Speaker volume +5%","volume:5")] {
                 let button=NSButton(title:title,target:self,action:#selector(adjustMonitor(_:)))
-                button.identifier=NSUserInterfaceItemIdentifier(key);controlsStack.addArrangedSubview(button);monitorButtons.append(button)
+                button.identifier=NSUserInterfaceItemIdentifier(key);controlsStack.addArrangedSubview(button);monitorButtons.append(button);scalableControls.append(button)
             }
             let feedback=NSTextField(wrappingLabelWithString:"Read settings to see confirmed hardware values. Equal brightness percentages do not mean equal light output. Speaker volume does not select the Mac audio output.")
             controlsStack.addArrangedSubview(feedback);feedback.widthAnchor.constraint(equalTo:controlsStack.widthAnchor,constant:-32).isActive=true;monitorFeedback=feedback
             controlsTab.view=controlsScroll;tabs.addTabViewItem(controlsTab)
-            window.contentView?.addSubview(tabs)
-            applyTextSize(textSizeIndex())
-            let label=NSTextField(labelWithString:"Text size")
-            label.frame=NSRect(x:20,y:103,width:130,height:24);window.contentView?.addSubview(label)
+            guard let content=window.contentView else {return}
+            let footer=NSStackView();footer.orientation = .vertical;footer.alignment = .leading;footer.spacing=10
+            footer.translatesAutoresizingMaskIntoConstraints=false;content.addSubview(footer)
+            tabs.translatesAutoresizingMaskIntoConstraints=false;content.addSubview(tabs)
+            NSLayoutConstraint.activate([footer.leadingAnchor.constraint(equalTo:content.leadingAnchor,constant:20),footer.trailingAnchor.constraint(equalTo:content.trailingAnchor,constant:-20),footer.bottomAnchor.constraint(equalTo:content.bottomAnchor,constant:-16),tabs.leadingAnchor.constraint(equalTo:content.leadingAnchor,constant:20),tabs.trailingAnchor.constraint(equalTo:content.trailingAnchor,constant:-20),tabs.topAnchor.constraint(equalTo:content.topAnchor,constant:16),tabs.bottomAnchor.constraint(equalTo:footer.topAnchor,constant:-16)])
             let sizes=NSSegmentedControl(labels:["Standard","Large","Largest"],trackingMode:.selectOne,target:self,action:#selector(changeTextSize(_:)))
-            sizes.frame=NSRect(x:170,y:98,width:310,height:32);sizes.selectedSegment=textSizeIndex()
-            sizes.setAccessibilityLabel("Status text size");window.contentView?.addSubview(sizes)
-            let button=NSButton(title:"More controls",target:self,action:#selector(openControls(_:)))
-            button.frame=NSRect(x:20,y:16,width:140,height:28);window.contentView?.addSubview(button)
-            for (index,title,action) in [(0,"Check health","doctor"),(1,"Save diagnostics","diagnostics")] {
-                let actionButton=NSButton(title:title,target:self,action:#selector(panelAction(_:)))
-                actionButton.identifier=NSUserInterfaceItemIdentifier(action);actionButton.frame=NSRect(x:170+index*180,y:16,width:170,height:28)
-                window.contentView?.addSubview(actionButton);panelActions.append(actionButton)
+            sizes.selectedSegment=textSizeIndex();sizes.setAccessibilityLabel("Interface size")
+            let pause=NSButton(title:"Pause",target:self,action:#selector(togglePause(_:)));pauseButton=pause
+            let sizeRow=NSStackView(views:[sizes,pause]);sizeRow.spacing=16;footer.addArrangedSubview(sizeRow)
+            scalableControls.append(contentsOf:[sizes,pause])
+            let previewRow=NSStackView();previewRow.spacing=12;footer.addArrangedSubview(previewRow)
+            for (title,action) in [("Preview size…","preview-options"),("Keep size","preview-keep"),("Revert size","preview-revert")] {
+                let button=NSButton(title:title,target:self,action:#selector(panelAction(_:)))
+                button.identifier=NSUserInterfaceItemIdentifier(action);previewRow.addArrangedSubview(button)
+                previewActions.append(button);scalableControls.append(button)
             }
-            let pause=NSButton(title:"Pause",target:self,action:#selector(togglePause(_:)))
-            pause.frame=NSRect(x:540,y:98,width:80,height:32);pause.autoresizingMask=[.minXMargin];window.contentView?.addSubview(pause);pauseButton=pause
-            for (index,title,action) in [(0,"Preview size…","preview-options"),(1,"Keep this size","preview-keep"),(2,"Revert size","preview-revert")] {
-                let actionButton=NSButton(title:title,target:self,action:#selector(panelAction(_:)))
-                actionButton.identifier=NSUserInterfaceItemIdentifier(action);actionButton.frame=NSRect(x:20+index*180,y:54,width:170,height:28)
-                window.contentView?.addSubview(actionButton);previewActions.append(actionButton)
+            let more=NSButton(title:"More controls",target:self,action:#selector(openControls(_:)))
+            let actions=NSStackView(views:[more]);actions.spacing=12;footer.addArrangedSubview(actions);scalableControls.append(more)
+            for (title,action) in [("Health","doctor"),("Diagnostics","diagnostics")] {
+                let button=NSButton(title:title,target:self,action:#selector(panelAction(_:)))
+                button.identifier=NSUserInterfaceItemIdentifier(action);actions.addArrangedSubview(button)
+                panelActions.append(button);scalableControls.append(button)
             }
+            applyTextSize(textSizeIndex())
         }
         refresh();panel?.makeKeyAndOrderFront(nil);NSApp.activate(ignoringOtherApps:true)
     }
     func textSizeIndex()->Int {displayTextIndex ?? min(2,max(0,UserDefaults.standard.integer(forKey:"statusTextSize")))}
     func applyTextSize(_ index:Int) {
         let size=CGFloat([16,20,24][index])
+        for control in scalableControls {control.font=NSFont.systemFont(ofSize:size);control.invalidateIntrinsicContentSize()}
+        contentTabs?.font=NSFont.systemFont(ofSize:size)
         panelText?.font=NSFont.systemFont(ofSize:size)
         modeText?.font=NSFont.systemFont(ofSize:size)
         audioInfo?.font=NSFont.systemFont(ofSize:size);audioReason?.font=NSFont.systemFont(ofSize:size)

@@ -12,9 +12,10 @@ output preservation, resume, and repair, with an explanation when repair is unav
 Pause/Resume is available directly in the window; More controls opens the advanced menu.
 Keep/Revert buttons appear only during a size preview.
 
-The status window is resizable. Choose Standard, Large, or Largest status text; this
-changes only this app, not monitor resolution or other applications. Long status content
-remains scrollable.
+The status window is resizable. Choose Standard, Large, or Largest interface size. Window tabs,
+buttons, speaker selectors and status text enlarge together; this changes only this app,
+not monitor resolution or other applications. Long content remains scrollable. Separate
+alerts and the menu still use their native system sizing.
 
 ## Controls
 

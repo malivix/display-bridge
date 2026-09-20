@@ -44,6 +44,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
     var monitorFeedback:NSTextField?
     var speakerPopups:[String:NSPopUpButton]=[:]
     var audioInfo:NSTextField?
+    var listeningResponse=""
     var audioRepair:NSButton?
     var audioReason:NSTextField?
     var overviewFields:[(NSTextField,NSTextField)]=[]
@@ -168,7 +169,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
             audioStack.topAnchor.constraint(equalTo:audioScroll.contentView.topAnchor).isActive=true
             let info=NSTextField(wrappingLabelWithString:"Speaker preferences apply to each monitor profile. External headsets remain under your control.")
             audioStack.addArrangedSubview(info);info.widthAnchor.constraint(equalTo:audioStack.widthAnchor,constant:-32).isActive=true;audioInfo=info
-            for (title,action) in [("Repair audio","repair-audio"),("Preserve output for 30 minutes","audio-manual"),("Resume automatic audio","audio-auto")] {
+            for (title,action) in [("Repair audio","repair-audio"),("Test selected output…","audio-test-prompt"),("Preserve output for 30 minutes","audio-manual"),("Resume automatic audio","audio-auto")] {
                 let button=NSButton(title:title,target:self,action:#selector(panelAction(_:)));button.identifier=NSUserInterfaceItemIdentifier(action)
                 audioStack.addArrangedSubview(button);scalableControls.append(button)
                 if action=="repair-audio" {audioRepair=button} else {panelActions.append(button)}
@@ -488,7 +489,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
         audioInfo?.stringValue=audioDescription
         let reason=audioRepairReason(health,control,busy)
         audioRepair?.isEnabled=reason==nil
-        audioReason?.stringValue=reason ?? "Repair uses the existing recovery policy. Listen afterward to confirm sound."
+        audioReason?.stringValue=(reason ?? "Repair uses the existing recovery policy. Listen afterward to confirm sound.")+(listeningResponse.isEmpty ? "":"\n\n"+listeningResponse)
 
         let preview=health["preview"] as? [String:Any] ?? [:]
         previewToken=preview["token"] as? String
@@ -585,6 +586,15 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
         if !controlsAvailable(read("control.json")),!safeWithoutControls(args.first ?? "") {
             message("Saved controls unavailable","Check health and restore valid control settings before changing preferences or starting a preview. Recovery journals were preserved.");return
         }
+        if args==["audio-test-prompt"] {
+            guard !busy else{return}
+            if demo {message("Hardware-free demo","Listening tests are disabled here. No sample was played.");return}
+            let alert=NSAlert();alert.messageText="Play a quiet test sound?"
+            alert.informativeText="A short sample plays through the currently selected output. Its volume and selection will not be changed. You will be asked whether you heard it."
+            alert.addButton(withTitle:"Play sample");alert.addButton(withTitle:"Cancel")
+            if alert.runModal() == .alertFirstButtonReturn {listeningResponse="";execute(["audio-test"])}
+            return
+        }
         if args==["panel"]{showPanel();return}
         if args==["quit"]{NSApp.terminate(nil);return}
         if args==["enrollment-review"] {
@@ -680,6 +690,16 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
                     if code != 0 {self.message("Action could not complete",result)}
                 }
                 else if code != 0 {self.message("Action could not complete",result)}
+                else if args.first=="audio-test" {
+                    guard let output=listeningOutput(result) else {self.message("Listening check unavailable","The result could not be validated. No audible result was recorded.");return}
+                    let alert=NSAlert();alert.messageText="Did you hear the sample?"
+                    alert.informativeText="Output: \(output). Playback completed, but only your response can confirm whether it was audible."
+                    for title in ["Not sure","Heard it","No sound"] {alert.addButton(withTitle:title)}
+                    let answer=alert.runModal()
+                    let label=answer == .alertSecondButtonReturn ? "heard":answer == .alertThirdButtonReturn ? "not heard":"uncertain"
+                    self.listeningResponse="Last listening check: \(output) · \(label) (your response). This is a past observation, not a current audio check."
+                    self.refresh()
+                }
                 else if args.first=="capture-review" {self.showReport("enrollment-review",enrollmentReviewSummary(result,args.last ?? ""))}
                 else if args.first=="diagnostics" {NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath:result.trimmingCharacters(in:.whitespacesAndNewlines))])}
                 else if args.first=="support-summary" {self.showReport("support-summary","Review before sharing. This report is not uploaded automatically.\n\n"+result)}

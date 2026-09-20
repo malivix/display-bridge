@@ -504,3 +504,12 @@ func demoDisplayReport(_ scenario:String)->[String:Any] {
     return ["read_only":true,"inputs":inputs,"logical_layout":["state":layout,"monitors":monitors],
             "displays":displays,"limits":"Demo data only. No monitor was inspected or changed."]
 }
+
+
+func listeningOutput(_ json:String)->String? {
+    guard json.utf8.count<=1_048_576,let data=json.data(using:.utf8),
+          let report=(try? JSONSerialization.jsonObject(with:data)) as? [String:Any],
+          let played=report["playback_completed"] as? NSNumber,CFGetTypeID(played)==CFBooleanGetTypeID(),played.boolValue,
+          report["audibility"] as? String=="unconfirmed",let output=report["output"] as? String else{return nil}
+    return ["pg":"PG42UQ","benq":"BenQ RD280UG","fallback":"Built-in speakers","external":"Selected external output"][output]
+}

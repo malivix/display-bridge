@@ -4,6 +4,9 @@ import UserNotifications
 import Darwin
 
 func runMenuSelfTests() {
+    precondition(listeningOutput(#"{"playback_completed":true,"audibility":"unconfirmed","output":"pg"}"#)=="PG42UQ")
+    for json in [#"{"playback_completed":1,"audibility":"unconfirmed","output":"pg"}"#,#"{"playback_completed":true,"audibility":"confirmed","output":"pg"}"#,#"{"playback_completed":true,"audibility":"unconfirmed","output":"unknown"}"#] {precondition(listeningOutput(json)==nil)}
+
     for (scenario,available,layout) in [("ready",2,"extended"),("pg-only",1,"pg-source"),("benq-only",1,"benq-source"),("away",0,"unknown"),("unknown-input",0,"unknown")] {
         let report=demoDisplayReport(scenario)
         precondition((report["inputs"] as? [String:Int]) == (demoState(scenario,"health.json",100)["inputs"] as? [String:Int]))

@@ -15,6 +15,37 @@ class ControllerTests(unittest.TestCase):
             patcher = patch.object(c, name, value)
             patcher.start()
             self.addCleanup(patcher.stop)
+    def test_listening_check_preserves_output_and_requires_human_confirmation(self):
+        config={'host':'A','audio':{'enabled':True,'pg':'p','benq':'b','fallback':'i'}}
+        for uid,category in [('p','pg'),('b','benq'),('i','fallback'),('headset','external')]:
+            with patch.object(c,'audio_inventory',return_value=[{'uid':uid,'alive':True,'default':True}]),patch.object(c,'read_inputs',return_value={'pg':17,'benq':19}),patch.object(c,'command',return_value='') as run:
+                result=c.listening_check(config)
+                self.assertEqual(result['output'],category)
+                self.assertEqual(result['audibility'],'unconfirmed')
+                self.assertNotIn('uid',result)
+                run.assert_called_once_with(['/usr/bin/afplay','-v','0.1','/System/Library/Sounds/Glass.aiff'],timeout=3)
+
+    def test_listening_check_rejects_remote_or_changed_route_and_never_retries(self):
+        config={'host':'A','audio':{'enabled':True,'pg':'p'}}
+        selected={'uid':'p','alive':True,'default':True}
+        with patch.object(c,'audio_inventory',return_value=[selected]),patch.object(c,'read_inputs',return_value={'pg':18,'benq':19}),patch.object(c,'command') as run:
+            with self.assertRaisesRegex(RuntimeError,'other Mac'):c.listening_check(config)
+            run.assert_not_called()
+        with patch.object(c,'audio_inventory',side_effect=[[selected],[dict(selected,uid='other')]]),patch.object(c,'read_inputs',return_value={'pg':17,'benq':19}),patch.object(c,'command',return_value='') as run:
+            with self.assertRaisesRegex(RuntimeError,'inconclusive'):c.listening_check(config)
+            self.assertEqual(run.call_count,1)
+        with patch.object(c,'audio_inventory',return_value=[selected]),patch.object(c,'read_inputs',return_value={'pg':17,'benq':19}),patch.object(c,'command',side_effect=c.subprocess.TimeoutExpired('afplay',3)) as run:
+            with self.assertRaises(c.subprocess.TimeoutExpired):c.listening_check(config)
+            self.assertEqual(run.call_count,1)
+
+    def test_listening_check_requires_live_unambiguous_output(self):
+        config={'host':'A','audio':{'enabled':True,'pg':'p'}}
+        selected={'uid':'p','alive':True,'default':True}
+        for devices in ([],[selected,selected],[dict(selected,alive=False)],[dict(selected,default=1)],{}):
+            with patch.object(c,'audio_inventory',return_value=devices),patch.object(c,'read_inputs',return_value={'pg':17,'benq':19}),patch.object(c,'command') as run:
+                with self.assertRaises(RuntimeError):c.listening_check(config)
+                run.assert_not_called()
+
     def test_roles_are_opposites(self):
         cases = [(17,19,'extended','away'), (17,15,'pg','benq'),
                  (18,19,'benq','pg'), (18,15,'away','extended')]

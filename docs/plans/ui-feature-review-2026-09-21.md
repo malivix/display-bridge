@@ -110,10 +110,10 @@ summed, failed attempts retain useful completed phases. Compare bounded local sa
 and after. Do not reduce ownership checks or flood DDC to make a benchmark smaller. No promise
 that a faster native rotation call fixes physical sensor reporting or panel handshake delays.
 
-### 5. Explicit speaker listening check
+### 5. Explicit speaker listening check — implemented in source
 
-Add a user-started quiet, bounded sample for the current selected output and a Heard it / No
-sound response. Show this separately from software route verification. Do not select another
+[The listening action](../log/audio-listening-check.md) now provides a user-started quiet,
+bounded sample and an explicit Heard it / No sound / Not sure response. Show this separately from software route verification. Do not select another
 output or override a headset merely to perform the check. The response is a local observation
 for this session, not a permanent certification of that device.
 

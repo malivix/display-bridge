@@ -55,6 +55,33 @@ def audio_inventory(config):
     return json.loads(command([AUDIO, 'status']))
 
 
+def listening_check(config):
+    """Explicit playback, never routing or recovery; audibility needs a human response."""
+    verify_setup(config)
+    inputs=read_inputs(config)
+    if desired(config['host'],inputs)=='unknown':raise RuntimeError('Wait for recognized inputs before a listening check')
+    def selected():
+        devices=audio_inventory(config)
+        if not isinstance(devices,list):raise RuntimeError('Audio inventory is unavailable')
+        defaults=[row for row in devices if isinstance(row,dict) and row.get('default') is True]
+        if len(defaults)!=1:raise RuntimeError('Selected audio output is ambiguous or unavailable')
+        device=defaults[0]
+        if device.get('alive') is not True or not isinstance(device.get('uid'),str) or not device['uid']:
+            raise RuntimeError('Selected audio output is not available')
+        return device
+    before=selected()
+    audio=config.get('audio',{})
+    category=next((role for role in ('pg','benq','fallback') if audio.get(role)==before['uid']),'external')
+    if category in ('pg','benq') and inputs[category]!=INPUTS[config['host']][category]:
+        raise RuntimeError('Selected monitor is showing the other Mac; choose an audible output before testing')
+    command(['/usr/bin/afplay','-v','0.1','/System/Library/Sounds/Glass.aiff'],timeout=3)
+    after=selected()
+    if read_inputs(config)!=inputs or after['uid']!=before['uid']:
+        raise RuntimeError('Output or monitor inputs changed during playback; listening check is inconclusive')
+    return {'playback_completed':True,'audibility':'unconfirmed','output':category,
+            'limits':'Playback completion does not prove sound. Confirm by listening. Transient route changes between checks cannot be excluded.'}
+
+
 def remaining(deadline, maximum):
     if deadline is None:
         return maximum
@@ -674,7 +701,7 @@ def main():
 
 def run_main(resources):
     parser = argparse.ArgumentParser()
-    action_argument = parser.add_argument('action', choices=['capabilities', 'capture-review', 'capture', 'check', 'run', 'once', 'test-layouts', 'restore','status','pause','pause-for','resume','repair-audio','audio-manual','audio-auto','speaker','diagnostics','support-summary','history','hidpi','doctor','display-info','ddc-history','monitor-adjust','monitor-settings','brightness-list','brightness-save','brightness-apply','brightness-remove','preset-save','preset-remove','preview-options','preview-start','preview-keep','preview-revert','preview-repair','rotation-auto','rotation-manual'])
+    action_argument = parser.add_argument('action', choices=['capabilities', 'audio-test', 'capture-review', 'capture', 'check', 'run', 'once', 'test-layouts', 'restore','status','pause','pause-for','resume','repair-audio','audio-manual','audio-auto','speaker','diagnostics','support-summary','history','hidpi','doctor','display-info','ddc-history','monitor-adjust','monitor-settings','brightness-list','brightness-save','brightness-apply','brightness-remove','preset-save','preset-remove','preview-options','preview-start','preview-keep','preview-revert','preview-repair','rotation-auto','rotation-manual'])
     parser.add_argument('--host', choices=['A', 'B'])
     parser.add_argument('--m1ddc', default=str(Path.home() / '.local/bin/display-ddc'))
     parser.add_argument('--minutes',type=int,default=30)
@@ -822,6 +849,8 @@ def run_main(resources):
     if args.action != 'check' and os.environ.get('DISPLAY_AUTO_INSTALLER_PID') != str(os.getppid()):
         try:fcntl.flock(maintenance,fcntl.LOCK_SH | fcntl.LOCK_NB)
         except BlockingIOError:raise RuntimeError('Installation in progress; try again when it finishes')
+    if args.action=='audio-test':
+        print(json.dumps(listening_check(startup_config())));return
     if args.action=='capture-review':
         print(json.dumps(capture_review(args.host,args.m1ddc),indent=2));return
     if args.action in ('capture','restore','test-layouts','once'):

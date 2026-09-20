@@ -260,3 +260,20 @@ Failed attempts in Transition timing retain completed phase durations and identi
 interrupted phase with its elapsed time. Unrecorded later phases are not zero. These attempts
 are excluded from successful-transition aggregates; application total still excludes time
 before state confirmation.
+
+## Explicit speaker listening check
+
+In Audio, choose **Test selected output…**, then **Play sample**. A quiet, short system sound
+plays through the current output. The check never selects an output, unmutes it, changes its
+volume or resets its format. A selected enrolled monitor must show this Mac, and enrollment
+and input reads must be valid. Other selected outputs, such as headsets, remain selected.
+
+After successful playback, choose **Heard it**, **No sound** or **Not sure**. Not sure is the
+default. Your response is shown only as a past observation in the current app session; it is
+not saved to diagnostics or uploaded. A timeout or detected input/output change produces an
+inconclusive failure, with no automatic replay. Transient changes between checks cannot be
+excluded. Playback completion alone never establishes audible sound.
+
+The terminal equivalent is `~/.local/bin/display-auto.sh audio-test`; it plays a sound and
+reports playback completion with audibility unconfirmed. The menu checks controller support
+before dispatch. Ordinary verification and the isolated demo never play the sample.

@@ -13,7 +13,9 @@ Pause/Resume is available directly in the window. More controls opens the compac
 status, monitor ownership, speaker, Open Display Bridge, Pause/Resume, and Quit.
 Advanced contains rotation, timed pause, audio preferences, monitor controls and reports.
 Active preview Keep/Revert and restoration retry remain at the top level.
-Keep/Revert buttons appear only during a size preview.
+Keep/Revert buttons appear only during a size preview. The Recovery group explains pending,
+paused, ownership-held and exhausted work, including the trigger, last error and reported
+retry eligibility. Stale status never presents a current retry countdown.
 
 The status window is resizable. Choose Standard, Large, or Largest interface size. Window tabs,
 buttons, speaker selectors and status text enlarge together; this changes only this app,

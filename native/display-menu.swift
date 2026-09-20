@@ -153,6 +153,41 @@ func previewRemaining(_ health:[String:Any],_ now:Double=Date().timeIntervalSinc
     guard age>=0 && age<15,let preview=health["preview"] as? [String:Any],preview["state"] as? String == "preview",let remaining=preview["remaining_seconds"] as? Double,remaining.isFinite else{return 0}
     return Int(max(0,min(20,ceil(remaining-age))))
 }
+func recoverySummary(_ health:[String:Any],_ control:[String:Any],_ now:Double=Date().timeIntervalSince1970)->String {
+    let recovery=health["recovery"] as? [String:Any] ?? [:]
+    let state=health["status"] as? String ?? "unknown"
+    let pending=recovery["pending"] as? Bool == true || health["audio_journal_pending"] as? Bool == true
+    let attempts=max(0,min(3,recovery["attempts"] as? Int ?? 0))
+    var lines:[String]=[]
+    if !statusFresh(health,now) {lines.append("Recovery status is out of date. Check health before retrying; no current retry time is known.")}
+    else if state=="state-error" {lines.append("Saved state needs attention. Check health and preserve the recovery files before restoring a known-good copy.")}
+    else if state.hasPrefix("preview-") {
+        let preview=health["preview"] as? [String:Any] ?? [:]
+        switch preview["state"] as? String ?? "" {
+        case "needs-repair":lines.append("Size restoration needs attention. Use Retry size restoration in the menu after checking health.")
+        case "restore-deferred":lines.append("Size restoration is waiting for both monitors on this Mac and the original orientation. Keep the monitors connected.")
+        case "preview":lines.append("Temporary size preview is active. Use Keep or Revert; automatic rollback is owned by the controller.")
+        default:lines.append("Size preview recovery is in progress. Inspect Details for its current phase.")
+        }
+        if let error=preview["error"] as? String {lines.append("Last size error: "+String(error.prefix(1000)))}
+    }
+    else if automationPaused(control,now) {lines.append(pending ? "Recovery is pending while automation is paused. Resume automation when ready.":"Automation is paused; no pending recovery was reported.")}
+    else if ["waiting-for-known-input","waiting-for-ddc","inactive-setup","settling"].contains(state) {
+        lines.append("Waiting for stable, recognized monitor ownership. Layout changes are held; do not repeatedly request repair.")
+    }
+    else if pending && attempts>=3 {lines.append("Automatic recovery stopped after 3 attempts. Check health, then use Repair audio when available to retry reconciliation. Confirm sound by listening afterward.")}
+    else if pending {
+        lines.append("Recovery pending · \(attempts)/3 failed attempts.")
+        if let delay=health["retry_in_seconds"] as? Double,delay.isFinite,delay>=0,delay<=30,
+           let updated=health["updated_at"] as? Double {
+            let remaining=Int(ceil(max(0,delay-(now-updated))))
+            lines.append(remaining>0 ? "Retry eligible in about \(remaining) seconds, once ownership is stable.":"Retry is eligible when monitor ownership is stable.")
+        } else {lines.append("Next retry time has not been reported.")}
+    } else {lines.append("No pending recovery reported.")}
+    if let reason=recovery["reason"] as? String,!reason.isEmpty {lines.append("Trigger: "+String(reason.prefix(300)))}
+    if let error=health["error"] as? String ?? recovery["error"] as? String,!error.isEmpty {lines.append("Last error: "+String(error.prefix(1000)))}
+    return lines.joined(separator:"\n")
+}
 func dashboard(_ health:[String:Any],_ control:[String:Any],_ now:Double=Date().timeIntervalSince1970)->String {
     let fresh=statusFresh(health,now)
     let state=fresh ? health["status"] as? String ?? "unknown":"unavailable"
@@ -186,10 +221,7 @@ func dashboard(_ health:[String:Any],_ control:[String:Any],_ now:Double=Date().
     lines.append("\(prefix)BenQ rotation: \(automatic ? "automatic":"manual") · sensor \(angle)")
     let audio=health["audio"] as? [String:Any] ?? [:],selected=audio["selected"] as? [String:Any] ?? [:]
     lines.append("\(prefix)Selected speaker: \(selected["name"] as? String ?? "Not reported")")
-    let recovery=health["recovery"] as? [String:Any] ?? [:]
-    let pending=recovery["pending"] as? Bool == true || health["audio_journal_pending"] as? Bool == true
-    lines.append("\(prefix)Recovery: \(pending ? "pending (\(recovery["attempts"] as? Int ?? 0)/3 attempts)":"no pending recovery reported")")
-    if let error=health["error"] as? String ?? recovery["error"] as? String {lines.append("\n\(error)")}
+    lines.append("\n"+recoverySummary(health,control,now))
     if automationPaused(control,now) {
         if let until=control["pause_until"] as? Double,until>now {lines.append("\nAutomation resumes at \(Date(timeIntervalSince1970:until).formatted(date:.omitted,time:.shortened)).")}
         else {lines.append("\nAutomation is paused until you resume it from Controls.")}
@@ -207,7 +239,6 @@ func statusSections(_ health:[String:Any],_ control:[String:Any])->[StatusSectio
     let rotation=health["rotation"] as? [String:Any] ?? [:]
     let audio=health["audio"] as? [String:Any] ?? [:]
     let selected=audio["selected"] as? [String:Any] ?? [:]
-    let recovery=health["recovery"] as? [String:Any] ?? [:]
     let headline=dashboard(health,control).components(separatedBy:"\n").first ?? "Status unavailable"
     func owner(_ role:String,_ a:Int,_ b:Int)->String {
         guard let input=inputs[role] else{return "Ownership not reported"}
@@ -220,15 +251,12 @@ func statusSections(_ health:[String:Any],_ control:[String:Any])->[StatusSectio
     let audioOverride=(control["audio_manual_until"] as? Double ?? 0)>Date().timeIntervalSince1970
     let rotationMode=rotation["enabled"] as? Bool != true ? "not calibrated":control["auto_rotate"] as? Bool == false ? "manual":"automatic"
     let routing=automationPaused(control) ? "Automation is paused":audioOverride ? "Manual output preservation is active":"Automatic routing follows profile preferences"
-    let pending=recovery["pending"] as? Bool == true || health["audio_journal_pending"] as? Bool == true
-    let error=health["error"] as? String ?? recovery["error"] as? String
-    let recoveryText=error ?? (pending ? "Recovery pending; inspect Details for attempts and next steps":"No pending recovery reported")
     return [
         StatusSection(title:"Overview",body:(health["status"] as? String ?? "").hasPrefix("preview-") ? dashboard(health,control):headline+"\n"+statusAge(health)+"\n"+prefix+(layouts[profile] ?? "Desktop not confirmed")),
         StatusSection(title:"PG42UQ",body:prefix+owner("pg",17,18)),
         StatusSection(title:"BenQ RD280UG",body:prefix+owner("benq",19,15)+"\n\(prefix)Rotation: \(rotationMode) · sensor \(sensor)"),
         StatusSection(title:"Audio",body:prefix+(selected["name"] as? String ?? "Output not reported")+"\n"+routing+"\nSpeaker selection does not prove audible sound."),
-        StatusSection(title:"Recovery",body:prefix+recoveryText)
+        StatusSection(title:"Recovery",body:recoverySummary(health,control))
     ]
 }
 func displaySummary(_ json:String)->String {
@@ -347,6 +375,9 @@ func demoState(_ scenario:String,_ name:String,_ now:Double)->[String:Any] {
     case "preview":
         health["status"]="preview-preview"
         health["preview"]=["state":"preview","token":"synthetic-preview","remaining_seconds":20.0]
+    case "recovery-wait":
+        health["status"]="recovering";health["retry_in_seconds"]=8.0
+        health["recovery"]=["pending":true,"attempts":2,"reason":"input transition","error":"Synthetic monitor response timed out"]
     case "recovery":
         health["status"]="degraded"
         health["recovery"]=["pending":true,"attempts":3,"error":"Audio recovery exhausted after three attempts. Inspect health before retrying."]
@@ -416,6 +447,16 @@ if CommandLine.arguments.contains("--self-test") {
     precondition(statusSections([:],[:])[1].body.contains("Last known"))
     let previewSections=statusSections(["updated_at":Date().timeIntervalSince1970,"status":"preview-active","preview":["state":"preview","remaining_seconds":20.0]],[:])
     precondition(previewSections[0].body.contains("Keep within"))
+    let retryHealth:[String:Any]=["updated_at":100.0,"status":"recovering","retry_in_seconds":8.0,"recovery":["pending":true,"attempts":2]]
+    precondition(recoverySummary(retryHealth,[:],103).contains("about 5 seconds"))
+    precondition(!recoverySummary(retryHealth,[:],120).contains("eligible"),"Stale data must not promise a retry")
+    precondition(recoverySummary(retryHealth,["paused":true],103).contains("paused"))
+    var exhausted=retryHealth;exhausted["recovery"]=["pending":true,"attempts":3]
+    precondition(recoverySummary(exhausted,[:],103).contains("stopped after 3"))
+    var badRetry=retryHealth;badRetry["retry_in_seconds"]=Double.infinity
+    precondition(recoverySummary(badRetry,[:],103).contains("not been reported"))
+    var held=retryHealth;held["status"]="waiting-for-known-input"
+    precondition(recoverySummary(held,[:],103).contains("changes are held"))
     let trackedRequest:[String:Any]=["id":"example","action":"resume"]
     precondition(commandSummary([:],["command_request":trackedRequest]).contains("not yet reported"))
     let trackedHealth:[String:Any]=["updated_at":Date().timeIntervalSince1970,"command_result":["request":trackedRequest,"state":"deferred","detail":"Waiting for input"]]
@@ -635,7 +676,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
                 panelActions.append(button);scalableControls.append(button)
             }
             if demo {
-                let scenarios=NSPopUpButton();scenarios.addItems(withTitles:["ready","stale","paused","away","preview","recovery","presets-error"])
+                let scenarios=NSPopUpButton();scenarios.addItems(withTitles:["ready","stale","paused","away","preview","recovery","recovery-wait","presets-error"])
                 scenarios.target=self;scenarios.action=#selector(changeDemoScenario(_:));scenarios.setAccessibilityLabel("Synthetic scenario")
                 let compact=NSButton(title:"Minimum window",target:self,action:#selector(compactDemo))
                 let row=NSStackView(views:[scenarios,compact]);row.spacing=12;footer.addArrangedSubview(row)

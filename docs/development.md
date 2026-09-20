@@ -61,7 +61,7 @@ with the same macOS 13 deployment target used by `scripts/verify`; the compiler 
 may target a newer OS than the development machine. Local preview bundles stay ignored.
 
 Demo windows include a synthetic scenario selector (ready, stale, paused, away, preview,
-exhausted audio recovery, unreadable presets) and a Minimum window action. These controls exist only in demo
-mode. Preview time is a static 20-second fixture for layout inspection, not a simulation of
-controller deadlines. Commands stay blocked, including Keep/Revert. Use real opt-in tests
+exhausted audio recovery, pending retry, unreadable presets) and a Minimum window action. These controls exist only in demo
+mode. Preview time is a static 20-second fixture and the retry example has a static eight-second
+delay for layout inspection; neither simulates controller deadlines. Commands stay blocked, including Keep/Revert. Use real opt-in tests
 for countdown/rollback behavior; the demo cannot prove hardware or persistence outcomes.

@@ -4,6 +4,11 @@ import copy
 import math
 
 
+def valid_dimensions(mode):
+    return all(type(mode.get(k)) is int and 0 < mode[k] <= 65536
+               for k in ("width", "height", "pixelWidth", "pixelHeight"))
+
+
 def candidates(inventory,metadata,keys,require_rollback=True):
     if set(keys)!={'pg','benq'} or len(set(keys.values()))!=2:raise ValueError('Expected two distinct saved monitor identities')
     public={}
@@ -20,6 +25,7 @@ def candidates(inventory,metadata,keys,require_rollback=True):
     result={}
     for role,key in keys.items():
         display=public[key];current=display['current'];detail=private[key]
+        if not valid_dimensions(current):raise ValueError('Current display dimensions are invalid; no size comparison is safe')
         if current.get('mirrorOf'):raise ValueError('Preview requires two independent desktops')
         if detail.get('metadataError') or detail.get('error'):raise ValueError('Mode metadata unavailable; no candidate is qualified')
         if any(current.get(field)!=detail.get(field) for field in ('modeID','width','height','pixelWidth','pixelHeight','rotation')):
@@ -40,8 +46,8 @@ def candidates(inventory,metadata,keys,require_rollback=True):
             seen.add(identifier)
             if flags.get('variableRefresh') is not False or flags.get('proMotion') is not False:continue
             if mode.get('usableForDesktop') is not True:continue
-            if any(type(mode.get(k)) is not int or mode[k]<=0 for k in ('width','height','pixelWidth','pixelHeight')):continue
-            if type(mode.get('hz')) not in (int,float) or not math.isfinite(mode['hz']) or abs(mode['hz']-120)>=.2:continue
+            if not valid_dimensions(mode):continue
+            if type(mode.get('hz')) not in (int,float) or not 0 < mode['hz'] <= 1000 or not math.isfinite(mode['hz']) or abs(mode['hz']-120)>=.2:continue
             if mode['pixelWidth']!=2*mode['width'] or mode['pixelHeight']!=2*mode['height']:continue
             if abs(mode['width']/mode['height']-panel[0]/panel[1])>.003:continue
             choices.append(dict(mode,interface_percent=round(100*current['width']/mode['width'],1),current=identifier==current['modeID']))

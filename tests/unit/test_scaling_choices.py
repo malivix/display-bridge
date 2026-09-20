@@ -34,6 +34,22 @@ class ScalingChoices(unittest.TestCase):
             a,b,k=self.fixture();a.append(copy.deepcopy(a[0]))
             if not duplicate:a[-1]['current']['key']='other'
             with self.assertRaises(ValueError):candidates(a,b,k)
+    def test_extreme_numeric_modes_are_excluded_without_overflow(self):
+        for values in ({'hz':10**400}, {'width':10**400,'pixelWidth':2*10**400},
+                       {'height':True}, {'pixelHeight':65537}):
+            with self.subTest(fields=list(values)):
+                a,b,k=self.fixture()
+                a[0]['modes'].append(dict(a[0]['modes'][0],modeID=3,**values))
+                b['displays'][0]['modes'].append({'modeID':3,'variableRefresh':False,'proMotion':False})
+                self.assertEqual(len(candidates(a,b,k)['displays']['pg']['choices']),1)
+
+    def test_invalid_current_dimensions_fail_before_size_arithmetic(self):
+        for value in (True,0,-1,10**400,1920.0):
+            a,b,k=self.fixture()
+            a[0]['current']['width']=value;b['displays'][0]['width']=value
+            with self.subTest(value_type=type(value).__name__),self.assertRaises(ValueError):
+                candidates(a,b,k,require_rollback=False)
+
     def test_non_hidpi_and_wrong_refresh_excluded(self):
         a,b,k=self.fixture()
         for i,values in enumerate([{'pixelWidth':1920},{'hz':60},{'hz':float('nan')},{'usableForDesktop':False}],3):

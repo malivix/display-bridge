@@ -298,7 +298,8 @@ def sync_audio(config, profile, deadline=None, refresh=False):
     return {'state':state,'selected':selected,'route_changed':bool(decision),'refreshed':refreshed}
 
 
-def capture(host, m1ddc):
+def capture_configuration(host, m1ddc):
+    if host not in INPUTS:raise ValueError('Choose Mac A or Mac B before capture')
     screens = layout()
     # The shared deployment intentionally targets the two external monitors only.
     if len(screens) != 2 or any(x.get('mirrorOf') for x in screens):
@@ -319,6 +320,25 @@ def capture(host, m1ddc):
         if read_inputs(config) != INPUTS[host]:
             raise RuntimeError(f'Both monitors must show Mac {host} during capture')
         time.sleep(.25)
+    validate_capture_modes(screens,json.loads(command([MODE_INFO,'status'])),keys)
+    return config
+
+
+def capture_review(host,m1ddc):
+    config=capture_configuration(host,m1ddc)
+    monitors=[]
+    for role in ('pg','benq'):
+        screen=next(s for s in config['baseline']['screens'] if s['key']==config['keys'][role])
+        monitors.append({'monitor':role,'local_input':INPUTS[host][role],
+                         **{key:screen[key] for key in ('width','height','pixelWidth','pixelHeight','rotation')}})
+    return {'read_only':True,'status':'review-ready','host':host,'monitors':monitors,
+            'display_policy':'Fixed 120-Hz HiDPI; HDR-off preference confirmed',
+            'audio_routes':['pg','benq','built-in'],
+            'limits':'Snapshot only, not enrollment authorization. No configuration or services changed. Capture must recheck current hardware before saving. Sound and rotation still require physical qualification.'}
+
+
+def capture(host, m1ddc):
+    config=capture_configuration(host,m1ddc)
     ROOT.mkdir(parents=True, exist_ok=True)
     for path, value in [(BASELINE, config['baseline']), (CONFIG, config)]:
         temporary = path.with_suffix('.tmp')
@@ -644,7 +664,7 @@ def main():
 
 def run_main(resources):
     parser = argparse.ArgumentParser()
-    action_argument = parser.add_argument('action', choices=['capabilities', 'capture', 'check', 'run', 'once', 'test-layouts', 'restore','status','pause','pause-for','resume','repair-audio','audio-manual','audio-auto','speaker','diagnostics','support-summary','history','hidpi','doctor','display-info','ddc-history','monitor-adjust','monitor-settings','brightness-list','brightness-save','brightness-apply','brightness-remove','preset-save','preset-remove','preview-options','preview-start','preview-keep','preview-revert','preview-repair','rotation-auto','rotation-manual'])
+    action_argument = parser.add_argument('action', choices=['capabilities', 'capture-review', 'capture', 'check', 'run', 'once', 'test-layouts', 'restore','status','pause','pause-for','resume','repair-audio','audio-manual','audio-auto','speaker','diagnostics','support-summary','history','hidpi','doctor','display-info','ddc-history','monitor-adjust','monitor-settings','brightness-list','brightness-save','brightness-apply','brightness-remove','preset-save','preset-remove','preview-options','preview-start','preview-keep','preview-revert','preview-repair','rotation-auto','rotation-manual'])
     parser.add_argument('--host', choices=['A', 'B'])
     parser.add_argument('--m1ddc', default=str(Path.home() / '.local/bin/display-ddc'))
     parser.add_argument('--minutes',type=int,default=30)
@@ -661,6 +681,7 @@ def run_main(resources):
     parser.add_argument('--orientation',type=int,choices=[0,90])
     parser.add_argument('--replace',action='store_true')
     args = parser.parse_args()
+    if args.action in ('capture','capture-review') and args.host is None:parser.error('capture and capture-review require --host A or --host B')
     if args.preview_seconds is not None and args.action!='preview-start':parser.error('--preview-seconds requires preview-start')
     if args.action=='capabilities':
         print(json.dumps({'protocol':1,'read_only':True,'commands':list(action_argument.choices)}));return
@@ -791,6 +812,8 @@ def run_main(resources):
     if args.action != 'check' and os.environ.get('DISPLAY_AUTO_INSTALLER_PID') != str(os.getppid()):
         try:fcntl.flock(maintenance,fcntl.LOCK_SH | fcntl.LOCK_NB)
         except BlockingIOError:raise RuntimeError('Installation in progress; try again when it finishes')
+    if args.action=='capture-review':
+        print(json.dumps(capture_review(args.host,args.m1ddc),indent=2));return
     if args.action in ('capture','restore','test-layouts','once'):
         from preview_service import mutation_guard
         from types import SimpleNamespace
@@ -816,8 +839,6 @@ def run_main(resources):
     if args.action != 'run' or sys.stderr.isatty():
         LOG.addHandler(console)
     if args.action == 'capture':
-        if args.host is None:
-            parser.error('capture requires --host A or --host B')
         capture(args.host, args.m1ddc)
         return
     if args.action=='run':

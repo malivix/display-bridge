@@ -43,6 +43,23 @@ The two roles must use this mapping. Other inputs remain unknown; automation doe
 or switch a physical input. The saved pair is bound to locally discovered identities.
 Extra or replacement displays make automation idle until the setup is deliberately recaptured.
 
+## Review a prospective enrollment
+
+With compatible helpers already built and available, run the checkout's read-only review:
+
+```sh
+python3 display-auto.py capture-review --host A
+```
+
+Use `B` for the other host. This can inspect a first enrollment without valid saved config,
+but it does not build missing helpers or install anything. It checks the exact supported
+pair, fixed-120-Hz/HDR-off HiDPI modes, audio discovery and two local input readings, then
+rechecks mode metadata. The summary omits device IDs and helper paths. Configuration and
+services are unchanged; maintenance/DDC coordination files may be created.
+
+`review-ready` is a snapshot, not enrollment approval or physical qualification. Normal
+capture re-inspects hardware before saving. A native guided setup interface remains planned.
+
 ## Install each host
 
 From the repository folder, run `./scripts/test`, then `python3 install.py A` on Mac A or

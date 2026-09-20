@@ -223,6 +223,23 @@ else:raise AssertionError('Unexpected overwrite')
                 audio.assert_not_called()
             self.assertEqual(config.read_bytes(),b'original config');self.assertEqual(baseline.read_bytes(),b'original baseline')
 
+    def test_capture_review_is_host_scoped_and_does_not_save_configuration(self):
+        screens=[{'key':key,'hz':120,'width':1280,'height':720,'pixelWidth':2560,'pixelHeight':1440,'rotation':0,'modeID':1}
+                 for key in ('1715:17120:example-pg','2513:32963:example-benq')]
+        metadata={'displays':[dict(row,variableRefresh=False,proMotion=False,hdrPreferenceEnabled=False) for row in screens]}
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder);config=root/'config.json';baseline=root/'baseline.json'
+            config.write_bytes(b'original config');baseline.write_bytes(b'original baseline')
+            with patch.object(c,'layout',return_value=screens),patch.object(c,'command',return_value=json.dumps(metadata)),patch.object(c,'CONFIG',config),patch.object(c,'BASELINE',baseline),patch.object(c,'ROOT',root),patch.object(c,'capture_identifiers',return_value={'pg':'private-ddc-pg','benq':'private-ddc-benq'}),patch.object(c,'capture_audio',return_value={'pg':'private-audio-pg','benq':'private-audio-benq','fallback':'private-audio-mac'}),patch.object(c,'read_inputs',return_value=c.INPUTS['B']),patch.object(c.time,'sleep'):
+                review=c.capture_review('B','example-ddc')
+                drifted=json.loads(json.dumps(metadata));drifted['displays'][0]['width']=1440
+                with patch.object(c,'command',side_effect=[json.dumps(metadata),json.dumps(drifted)]):
+                    with self.assertRaisesRegex(ValueError,'changed during capture'):c.capture_review('B','example-ddc')
+            self.assertTrue(review['read_only']);self.assertEqual(review['host'],'B')
+            self.assertEqual([row['local_input'] for row in review['monitors']],[18,15])
+            self.assertNotIn('private-',json.dumps(review));self.assertNotIn('example-pg',json.dumps(review))
+            self.assertEqual(config.read_bytes(),b'original config');self.assertEqual(baseline.read_bytes(),b'original baseline')
+
     def test_diagnostics_are_local_private_and_tolerate_missing_files(self):
         with tempfile.TemporaryDirectory() as temp:
             root=Path(temp);path=o.diagnostics(root,root)

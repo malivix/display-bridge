@@ -73,7 +73,8 @@ separate opt-in physical check. Never depend on accessibility text size enlargin
 
 The read-only checklist now [prioritizes setup actions](../log/setup-next-action.md).
 [Capture policy validation](../log/capture-mode-policy.md) is implemented as a prerequisite;
-mutable guided enrollment and upgrade UI remain unimplemented.
+[Prospective enrollment review](../log/enrollment-review.md) is implemented as a read-only CLI boundary.
+Mutable guided enrollment and upgrade UI remain unimplemented.
 
 Build on the existing read-only setup/preflight and coordinated installer. Show prerequisite,
 identity, input-map, orientation and version agreement before enabling activation. Review

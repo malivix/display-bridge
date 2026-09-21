@@ -51,6 +51,13 @@ monitoring or Accessibility permission is added.
 Choose **Keyboard shortcuts…** in More controls for an in-app reference that follows
 your selected interface text size. This help remains available when saved controls are unreadable.
 
+## Native macOS Shortcuts
+
+The optional signed companion provides **Get Display Bridge Status**, **Pause Display
+Bridge** and **Resume Display Bridge**. These are separate from the window keyboard
+shortcuts above and are not included in the standard ad-hoc build. See the
+[Shortcuts guide](shortcuts.md) for setup, typed outputs, examples and limitations.
+
 ## Display snapshots
 
 **Displays → Refresh display details** reads modes without changing settings. The schematic

@@ -1,6 +1,24 @@
 # Changelog
 
-## 2.10.2 — unreleased
+## 2.11.0 — current source milestone
+
+Source changes only; installed production activation of the optional Shortcuts
+build remains unqualified. See the [usage guide](docs/shortcuts.md) and
+[qualification limits](docs/qualification.md).
+
+- Preserve keyboard focus when recovery actions disappear, keep Overview aligned
+  at the top, and reveal controls reached by keyboard navigation.
+- Offer Check health directly for unrecognized monitor inputs without changing
+  the enrolled mapping or offering an unsafe repair action.
+- Add typed native Shortcuts status, timed pause and resume through the existing
+  controller boundary. Validate requests, distinguish saved and uncertain outcomes,
+  and avoid automatic retries or result-dialog waits.
+- Add optional signed metadata packaging while retaining the standard ad-hoc build.
+  Verify isolated companion execution and coordinated bundle-content restoration.
+- Verify caught SIGINT rollback after installer release activation with disposable
+  state and stubbed services; this does not establish power-loss durability.
+
+## 2.10.2 — source milestone
 
 These are source changes, not a newly qualified binary release. Updating the checkout
 alone does not update an installed controller or menu app. See the

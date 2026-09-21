@@ -14,6 +14,8 @@ which screens show this Mac and adjusts its desktop.
 The menu app provides status, pause/resume, speaker preferences, brightness and volume,
 local diagnostics, named brightness presets, and reversible size previews with saved presets.
 BenQ auto-rotation requires calibration.
+Optional [native Shortcuts actions](docs/shortcuts.md) provide status and timed
+pause/resume; they require an explicitly signed build.
 Speaker selection preserves an external headset. Runtime stays local and does not call BetterDisplay.
 
 **Early, hardware-specific software.** Apple-silicon macOS 13+, Python 3.10+, and Xcode

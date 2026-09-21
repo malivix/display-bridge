@@ -4,6 +4,7 @@
 | --- | --- |
 | Install, upgrade, or calibrate rotation | [Installation](install.md) |
 | Use controls or investigate a problem | [Usage and troubleshooting](usage.md) |
+| Use optional native status or pause/resume actions | [macOS Shortcuts](shortcuts.md) |
 | Change code or run checks | [Development](development.md) |
 | Understand module boundaries | [Architecture](../ARCHITECTURE.md) |
 | Check compatibility and unverified behavior | [Qualification](qualification.md) |

@@ -149,6 +149,8 @@ locking with redirected synthetic state. Production activation, first notificati
 permission and distributed release readiness remain unqualified. See the
 [execution evidence](log/shortcuts-companion-execution.md) and
 [implementation plan](plans/local-shortcuts.md).
+The [Shortcuts usage guide](shortcuts.md) explains discovery, the three actions and
+how to interpret their outputs.
 
 ## Calibrate BenQ rotation
 

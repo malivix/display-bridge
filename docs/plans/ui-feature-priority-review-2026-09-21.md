@@ -16,7 +16,7 @@ the product choices and primary sources.
 | Priority | Next result | Status and acceptance |
 | --- | --- | --- |
 | First | Finish accessibility qualification of existing UI | Compact size comparison, ownership/speaker summary, precise controls and contextual audio preferences are implemented. Recovery focus, top alignment and hidden keyboard focus are fixed. Long-name Overview/Audio and selected keyboard paths passed; high contrast, VoiceOver speech and the remaining dialog matrix are open. |
-| Active feature | Qualify local Shortcuts status, then add timed pause/resume | Bounded typed status and optional signed packaging are implemented. Private signed build and bundle rollback passed; actual companion-process execution and ownership-lock interaction remain open. Verify running/stopped behavior before adding mutations through the existing command boundary. Named size-preset preview follows separately with Keep/Revert. |
+| Active feature | Add bounded local Shortcuts pause/resume | Typed status and optional signed packaging are implemented. Private real-companion warm/cold execution, typed output and duplicate-lock behavior passed; production activation remains unqualified. Route pause/resume through the existing command boundary with bounded arguments and explicit request outcomes. Named size-preset preview follows separately with Keep/Revert. |
 | Reliability | Explain and reduce measured rotation delays | Timing reports exist; exact-revision physical samples remain pending. Separate sensor observation, confirmation, layout and readback. Optimize the measured slow phase, not guessed polling intervals. |
 | Release | Finish installer interruption and hardware qualification | Full installer commit-phase interruption, Mac B, concurrent controllers and headset transitions remain open. Keep source tests, package checks and physical outcomes separate. |
 | Research only | BenQ comfort-settings inspector | Establish narrow firmware/transport-bound protocol evidence before exposing controls. Unreadable or multiplexed values cannot be presented as confirmed settings. Retain OSD guidance if reliable inspection is unavailable. |
@@ -357,3 +357,12 @@ signature before activation. Private production-bundle construction, 305 unit te
 native checks and isolated metadata/signature rollback passed.
 [Evidence and limits](../log/shortcuts-menu-packaging.md). Actual companion-process
 execution and ownership-lock interaction are next; no live installation occurred.
+
+### Isolated companion execution qualified
+
+The real companion sources now have Shortcuts warm/cold execution evidence,
+structured freshness consumption and ordinary duplicate-process lock coverage in
+an isolated signed bundle. CLI calls were limited to startup capabilities; fresh,
+stale and malformed observations stayed distinct. [Scope and limits](../log/shortcuts-companion-execution.md).
+Production activation and release qualification remain open. The next source slice
+is bounded pause/resume through the existing command boundary.

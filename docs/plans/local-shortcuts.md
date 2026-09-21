@@ -2,7 +2,7 @@
 
 Status: signed synthetic integration qualified on the development Mac;
 real status projection, action source and optional signed packaging implemented;
-companion-process execution remains unqualified and no live installation has occurred.
+isolated companion-process execution passed; production activation remains unqualified.
 This extends the [current product plan](ui-feature-priority-review-2026-09-21.md).
 
 ## Intended user outcome
@@ -114,3 +114,13 @@ notification permission. Inspect these effects during warm/cold Shortcuts execut
 and confirm duplicate launches do not steal ownership. Do not claim that a passing
 reader self-test establishes background execution behavior. Use disposable state
 and a private bundle identity before testing installed activation.
+
+## Companion execution result
+
+The isolated real companion passed warm/cold action execution, structured freshness
+consumption, malformed-to-fresh recovery and ordinary duplicate-process ownership.
+See [the evidence and isolation changes](../log/shortcuts-companion-execution.md).
+Earlier pending integration entries above describe the sequence of work; this is
+the current result. Installed production activation, first notification permission
+and distribution coverage remain unqualified. Bounded pause/resume is the next
+source feature; it must reuse controller command validation.

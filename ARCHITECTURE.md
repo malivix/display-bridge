@@ -18,8 +18,8 @@ panel keyboard routing.
 `SelfTests.swift` holds isolated checks; `main.swift` selects test entry points or starts the app.
 `ShortcutStatus.swift` projects bounded local observations into allowlisted status
 fields; `StatusIntent.swift` exposes them as an App Intents entity and read-only action.
-The action has optional signed metadata packaging; companion-app execution qualification
-remains pending. Its latest-status entity re-reads on resolution
+The action has optional signed metadata packaging and isolated companion execution
+evidence; production activation remains unqualified. Its latest-status entity re-reads on resolution
 and never authorizes hardware mutations.
 The app submits controller commands and reads health;
 it does not maintain an independent hardware state machine. CLI execution has bounded time

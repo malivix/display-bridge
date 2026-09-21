@@ -127,7 +127,7 @@ No login credentials, cloud service, or administrator access are needed at runti
 Test ordinary input changes, both-away, and both return orders. Listen to the selected output;
 a software readback cannot prove that sound works. Mac B qualification is still pending.
 
-## Optional native Shortcuts build (integration qualification pending)
+## Optional native Shortcuts build (production activation pending)
 
 The standard build remains ad-hoc signed and does not package native Shortcuts
 metadata. The optional path requires full Xcode, its App Intents metadata tools,
@@ -143,10 +143,12 @@ silently producing an unusable action. Unset the variable to use the standard pa
 The graphical setup has no signing-identity selector.
 
 The package records whether Shortcuts metadata is included. Packaging and isolated
-bundle rollback have passed locally, but execution through the actual companion
-process is still being qualified. Only the separate signed synthetic app has
-passed Shortcuts execution so far. This optional build is not a claim of distributed
-release readiness. See the [implementation plan](plans/local-shortcuts.md).
+bundle rollback have passed locally. A private build of the real companion also
+passed warm/cold Shortcuts execution, typed status consumption and duplicate-process
+locking with redirected synthetic state. Production activation, first notification
+permission and distributed release readiness remain unqualified. See the
+[execution evidence](log/shortcuts-companion-execution.md) and
+[implementation plan](plans/local-shortcuts.md).
 
 ## Calibrate BenQ rotation
 

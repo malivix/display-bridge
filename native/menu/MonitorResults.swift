@@ -65,10 +65,24 @@ enum MonitorResponse {
         let monitor=role=="pg" ? "PG42UQ":"BenQ RD280UG"
         switch self {
         case .snapshot(_,let brightness,let volume):
-            return "Read-only snapshot · \(monitor)\nBrightness: \(brightness.percent)% (\(brightness.value) / \(brightness.maximum))\nSpeaker volume: \(volume.percent)% (\(volume.value) / \(volume.maximum))\n\nThese are monitor hardware settings. Speaker volume does not select the macOS audio output. Nothing was changed."
+            return "Read-only snapshot · \(monitor)\nRead at \(date.formatted(date:.abbreviated,time:.standard))\nBrightness: \(brightness.percent)% (\(brightness.value) / \(brightness.maximum))\nSpeaker volume: \(volume.percent)% (\(volume.value) / \(volume.maximum))\n\nThese are monitor hardware settings. Speaker volume does not select the macOS audio output. Nothing was changed."
         case .adjustment(_,let feature,let setting):
             let name=feature=="luminance" ? "Brightness":"Speaker volume"
             return "\(monitor) · \(name): \(setting.percent)%\nConfirmed at \(date.formatted(date:.omitted,time:.standard)). Refresh after using the monitor's own controls."
         }
+    }
+}
+
+// Session-only observations are kept per target. A failed BenQ request must
+// never reuse PG's reading, and returning to a target must not imply a new read.
+struct MonitorReadings {
+    private var readings:[String:String]=[:]
+    mutating func accept(_ response:MonitorResponse,at date:Date)->String {
+        let summary=response.summary(at:date)
+        readings[response.role]=summary
+        return summary
+    }
+    func previous(for role:String)->String? {
+        readings[role].map{"Previous reading (not refreshed):\n"+$0}
     }
 }

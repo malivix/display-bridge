@@ -324,14 +324,14 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
         monitorReason?.font=NSFont.systemFont(ofSize:size);monitorFeedback?.font=NSFont.systemFont(ofSize:size)
         for (heading,body) in overviewFields {heading.font=NSFont.boldSystemFont(ofSize:size);body.font=NSFont.systemFont(ofSize:size)}
     }
-    var verifiedMonitorReading:String?
+    var monitorReadings=MonitorReadings()
     func presentMonitorResponse(_ response:CommandResult,_ arguments:[String]) {
         if let reading=MonitorResponse.decode(response,arguments:arguments) {
-            let text=reading.summary(at:Date());verifiedMonitorReading=text
+            let text=monitorReadings.accept(reading,at:Date())
             showMonitorResult(text,reading.role)
         } else {
             operationResult=(response.code==0 ? "Monitor response could not be validated.":"Monitor command failed; see the error for details.")+" Read settings again; do not assume the action succeeded. It was not retried."
-            monitorFeedback?.stringValue=operationResult + (verifiedMonitorReading.map{"\n\nPrevious reading (not refreshed):\n"+$0} ?? "")
+            monitorFeedback?.stringValue=operationResult + (monitorReadings.previous(for:monitorRole).map{"\n\n"+$0} ?? "")
             contentTabs?.selectTabViewItem(withIdentifier:"monitor-controls")
         }
     }
@@ -360,7 +360,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
     }
     @objc func selectMonitor(_ sender:NSPopUpButton) {
         monitorRole=sender.indexOfSelectedItem==0 ? "pg":"benq"
-        monitorFeedback?.stringValue="No readback for this selection yet. Read settings to inspect it."
+        monitorFeedback?.stringValue=monitorReadings.previous(for:monitorRole) ?? "No readback for this selection yet. Read settings to inspect it."
         refresh()
     }
     @objc func adjustMonitor(_ sender:NSButton) {

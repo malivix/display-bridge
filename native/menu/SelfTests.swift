@@ -165,6 +165,17 @@ func runMenuSelfTests() {
     let snapshot:[String:Any]=["monitor":"benq","read_only":true,"settings":["luminance":setting,"volume":setting]]
     let snapshotArgs=["monitor-settings","--monitor","benq"]
     precondition(monitorResult(snapshot,snapshotArgs)?.summary(at:Date()).contains("Brightness: 30%") == true)
+    var readings=MonitorReadings()
+    let readDate=Date(timeIntervalSince1970:1000)
+    _=readings.accept(monitorResult(validMonitor)!,at:readDate)
+    precondition(readings.previous(for:"pg")?.contains("PG42UQ")==true)
+    precondition(readings.previous(for:"benq")==nil)
+    let benqSummary=readings.accept(monitorResult(snapshot,snapshotArgs)!,at:readDate)
+    precondition(benqSummary.contains("Read at "+readDate.formatted(date:.abbreviated,time:.standard)))
+    precondition(readings.previous(for:"benq")?.contains("Previous reading (not refreshed):")==true)
+    precondition(readings.previous(for:"benq")?.contains("PG42UQ")==false)
+    precondition(readings.previous(for:"pg")?.contains("BenQ")==false)
+    precondition(readings.previous(for:"unmanaged")==nil)
     for (field,value) in [("read_only",1 as Any),("settings",["luminance":setting]),("monitor","pg")] {
         var invalid=snapshot;invalid[field]=value;precondition(monitorResult(invalid,snapshotArgs)==nil)
     }

@@ -152,7 +152,7 @@ final class SizeChooser: NSObject, NSWindowDelegate {
     }
     @objc func checkAvailability() {
         validity.observe(availability())
-        availabilityLabel.stringValue=validity.reason.map{"\($0) Cancel and reopen to inspect fresh choices."} ?? ""
+        availabilityLabel.stringValue=validity.reason.map{"Earlier check failed: \($0) Cancel and reopen to inspect fresh choices."} ?? ""
         availabilityLabel.isHidden=validity.reason==nil
         previewButton?.isEnabled=selectedIndex>=0 && validity.reason==nil
     }

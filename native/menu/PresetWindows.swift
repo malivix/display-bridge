@@ -71,7 +71,7 @@ final class PresetDialog: NSObject, NSWindowDelegate, NSTextFieldDelegate {
         guard presets==nil else{return}
         if unavailableReason==nil {unavailableReason=availability()}
         let error=presetNameError(name.stringValue)
-        let context=unavailableReason.map{$0+" Cancel and reopen when ready."}
+        let context=unavailableReason.map{"Earlier check failed: "+$0+" Cancel and reopen to check again."}
         let message=context ?? (name.stringValue.isEmpty ? "Enter a name for this preset.":error ?? "")
         let changed=errorLabel.stringValue != message
         errorLabel.stringValue=message
@@ -178,7 +178,7 @@ final class BrightnessChooser: NSObject, NSWindowDelegate {
     }
     @objc private func checkAvailability() {
         if unavailableReason==nil {unavailableReason=availability()}
-        let message=unavailableReason.map{$0+" Cancel and reopen when ready."}
+        let message=unavailableReason.map{"Earlier check failed: "+$0+" Cancel and reopen to check again."}
             ?? "Saved values are not live readings. Apply checks the current input and range, then verifies the result. Nothing runs automatically."
         let changed=note.stringValue != message
         note.stringValue=message

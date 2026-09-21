@@ -343,8 +343,12 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
             showMonitorResult(text,reading.role)
         } else {
             operationResult=(response.code==0 ? "Monitor response could not be validated.":"Monitor command failed; see the error for details.")+" Read settings again; do not assume the action succeeded. It was not retried."
-            monitorFeedback?.stringValue=operationResult + (monitorReadings.previous(for:monitorRole).map{"\n\n"+$0} ?? "")
-            contentTabs?.selectTabViewItem(withIdentifier:"monitor-controls")
+            if let role=MonitorResponse.requestedRole(arguments) {
+                monitorReadings.markUnconfirmed(for:role)
+                showMonitorResult(operationResult + (monitorReadings.previous(for:role).map{"\n\n"+$0} ?? ""),role)
+            } else {
+                showMonitorResult(operationResult,nil)
+            }
         }
     }
     func showMonitorResult(_ text:String,_ role:String?) {

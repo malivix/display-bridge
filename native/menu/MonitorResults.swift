@@ -27,20 +27,27 @@ private func monitorBoolean(_ value:Any?)->Bool? {
     return number.boolValue
 }
 
+private func monitorOption(_ name:String,in arguments:[String])->String? {
+    let positions=arguments.indices.filter{arguments[$0]==name}
+    guard positions.count==1,let index=positions.first,index+1<arguments.count else{return nil}
+    return arguments[index+1]
+}
+
 enum MonitorResponse {
     case snapshot(role:String,brightness:MonitorSetting,volume:MonitorSetting)
     case adjustment(role:String,feature:String,setting:MonitorSetting)
 
     static let commands:Set<String>=["monitor-settings","monitor-adjust","monitor-set","brightness-apply"]
+    static func requestedRole(_ arguments:[String])->String? {
+        guard let action=arguments.first,commands.contains(action),
+              let role=monitorOption("--monitor",in:arguments),["pg","benq"].contains(role) else{return nil}
+        return role
+    }
     static func decode(_ response:CommandResult,arguments:[String])->MonitorResponse? {
-        func option(_ name:String)->String? {
-            let positions=arguments.indices.filter{arguments[$0]==name}
-            guard positions.count==1,let index=positions.first,index+1<arguments.count else{return nil}
-            return arguments[index+1]
-        }
+        func option(_ name:String)->String? {monitorOption(name,in:arguments)}
         guard response.code==0,response.output.utf8.count<=1_048_576,
               let action=arguments.first,commands.contains(action),
-              let role=option("--monitor"),["pg","benq"].contains(role),
+              let role=requestedRole(arguments),
               let data=response.output.data(using:.utf8),
               let report=(try? JSONSerialization.jsonObject(with:data)) as? [String:Any],
               report["monitor"] as? String==role else{return nil}
@@ -81,6 +88,11 @@ enum MonitorResponse {
 // never reuse PG's reading, and returning to a target must not imply a new read.
 struct MonitorReadings {
     private var readings:[String:String]=[:]
+    private var unconfirmed:Set<String>=[]
+    mutating func markUnconfirmed(for role:String) {
+        guard ["pg","benq"].contains(role) else{return}
+        unconfirmed.insert(role)
+    }
     private var settings:[String:[String:MonitorObservation]]=[:]
     func observation(for role:String,feature:String)->MonitorObservation? {
         settings[role]?[feature]
@@ -99,11 +111,13 @@ struct MonitorReadings {
             else {age="read ≥1 day ago"}
             return "\(name): \(observation.setting.percent)% · \(age)"
         }
-        return "Previous readings · use Read to refresh\n"+rows.joined(separator:"\n")
+        let heading=unconfirmed.contains(role) ? "Request unconfirmed · previous readings":"Previous readings · use Read to refresh"
+        return heading+"\n"+rows.joined(separator:"\n")
     }
     mutating func accept(_ response:MonitorResponse,at date:Date)->String {
         let summary=response.summary(at:date)
         readings[response.role]=summary
+        unconfirmed.remove(response.role)
         switch response {
         case .snapshot(let role,let brightness,let volume):
             settings[role] = ["luminance":MonitorObservation(setting:brightness,date:date),

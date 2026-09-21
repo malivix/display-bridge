@@ -218,6 +218,17 @@ func runMenuSelfTests() {
     precondition(readings.compactSummary(for:"pg",at:volumeDate).contains("Speaker volume: not read"))
     precondition(readings.compactSummary(for:"unmanaged",at:volumeDate).contains("Brightness: not read"))
     precondition(readings.compactSummary(for:"benq",at:readDate.addingTimeInterval(-1)).contains("time unavailable"))
+    precondition(MonitorResponse.requestedRole(["monitor-settings","--monitor","benq"])=="benq")
+    precondition(MonitorResponse.requestedRole(["monitor-settings","--monitor","benq","--monitor","pg"])==nil)
+    precondition(MonitorResponse.requestedRole(["monitor-settings","--monitor","unknown"])==nil)
+    readings.markUnconfirmed(for:"benq")
+    precondition(readings.compactSummary(for:"benq",at:volumeDate).hasPrefix("Request unconfirmed"))
+    precondition(!readings.compactSummary(for:"pg",at:volumeDate).contains("unconfirmed"))
+    precondition(readings.observation(for:"benq",feature:"volume")?.date==volumeDate)
+    _=readings.accept(monitorResult(validMonitor)!,at:volumeDate)
+    precondition(readings.compactSummary(for:"benq",at:volumeDate).contains("unconfirmed"))
+    _=readings.accept(monitorResult(snapshot,snapshotArgs)!,at:volumeDate)
+    precondition(!readings.compactSummary(for:"benq",at:volumeDate).contains("unconfirmed"))
     for (field,value) in [("read_only",1 as Any),("settings",["luminance":setting]),("monitor","pg")] {
         var invalid=snapshot;invalid[field]=value;precondition(monitorResult(invalid,snapshotArgs)==nil)
     }

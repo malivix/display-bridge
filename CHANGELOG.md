@@ -6,6 +6,9 @@ Source changes only; installed production activation of the optional Shortcuts
 build remains unqualified. See the [usage guide](docs/shortcuts.md) and
 [qualification limits](docs/qualification.md).
 
+- Accept the product code each enrolled panel publishes on the input a host uses, so
+  capture identifies the BenQ on both Mac A and Mac B. Ambiguous and unknown panels
+  are still rejected.
 - Scale native controls and window minimum heights with interface text size; validate
   size comparison reports before offering preview actions.
 - Keep development reviews window-only, allow one review at a time across bundle

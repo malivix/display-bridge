@@ -373,9 +373,11 @@ def capture_configuration(host, m1ddc):
         raise RuntimeError('Capture requires exactly two online, extended displays. Close the laptop lid if applicable.')
     if any(abs(s['hz']-120)>.2 for s in screens):raise RuntimeError('Select fixed 120 Hz on both displays before capture')
     screens=[dict(s,strictMode=True) for s in screens]
+    from hidpi_report import PANEL_IDENTITIES
     keys = {}
-    for name, prefix in [('pg', '1715:17120:'), ('benq', '2513:32963:')]:
-        found = [x['key'] for x in screens if x['key'].startswith(prefix)]
+    for name in ('pg', 'benq'):
+        prefixes = tuple(f'{identity}:' for identity in PANEL_IDENTITIES[name])
+        found = [x['key'] for x in screens if x['key'].startswith(prefixes)]
         if len(found) != 1:
             raise RuntimeError(f'Cannot uniquely identify {name}; no configuration written')
         keys[name] = found[0]

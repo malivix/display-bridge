@@ -228,4 +228,29 @@ class ReliabilityTests(unittest.TestCase):
             with patch.object(c,'BASELINE',path):
                 with self.assertRaisesRegex(RuntimeError,'differs'): c.validate_config(config)
 
+    def test_capture_identifies_benq_on_either_input_edid(self):
+        # The RD280UG publishes a different EDID product code per physical input, so
+        # the two hosts see different model numbers for the same panel.
+        screens=[{'key':'1715:17120:example-pg','hz':120,'width':2048,'height':1152,
+                  'pixelWidth':4096,'pixelHeight':2304,'rotation':0,'x':0,'y':0},
+                 {'key':None,'hz':120,'width':1280,'height':853,
+                  'pixelWidth':2560,'pixelHeight':1706,'rotation':0,'x':-1280,'y':0}]
+        for host,benq in [('A','2513:32963:example-benq'),('B','2513:32959:example-benq')]:
+            pair=[dict(screens[0]),dict(screens[1],key=benq)]
+            with patch.object(c,'layout',return_value=pair),patch.object(c,'command',return_value='[]'),\
+                 patch.object(c,'capture_identifiers',return_value={}),patch.object(c,'capture_audio',return_value={}),\
+                 patch.object(c,'read_inputs',return_value=c.INPUTS[host]),patch('time.sleep'),\
+                 patch('display_snapshot.validate_capture_modes'):
+                config=c.capture_configuration(host,'/tmp/display-ddc')
+            self.assertEqual(config['keys'],{'pg':'1715:17120:example-pg','benq':benq})
+
+    def test_capture_rejects_an_unknown_panel(self):
+        pair=[{'key':'1715:17120:example-pg','hz':120,'width':2048,'height':1152,
+               'pixelWidth':4096,'pixelHeight':2304,'rotation':0,'x':0,'y':0},
+              {'key':'2513:1:example-unknown','hz':120,'width':1280,'height':853,
+               'pixelWidth':2560,'pixelHeight':1706,'rotation':0,'x':-1280,'y':0}]
+        with patch.object(c,'layout',return_value=pair),patch('display_snapshot.validate_capture_modes'):
+            with self.assertRaisesRegex(RuntimeError,'Cannot uniquely identify benq'):
+                c.capture_configuration('B','/tmp/display-ddc')
+
 if __name__=='__main__': unittest.main()

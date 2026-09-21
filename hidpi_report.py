@@ -7,8 +7,12 @@ from pathlib import Path
 
 # Panel specifications for this project only; never infer another monitor's panel
 # resolution from its largest advertised/supersampled framebuffer.
-PANELS = {'1715:17120': ('PG42UQ', 3840, 2160),
-          '2513:32963': ('BenQ RD280UG', 3840, 2560)}
+# A monitor may publish a different EDID product code on each physical input, so one
+# panel can present more than one vendor:model identity across the two hosts.
+PANEL_IDENTITIES = {'pg': ('1715:17120',), 'benq': ('2513:32963', '2513:32959')}
+PANEL_SPECS = {'pg': ('PG42UQ', 3840, 2160), 'benq': ('BenQ RD280UG', 3840, 2560)}
+PANELS = {identity: PANEL_SPECS[role]
+          for role, identities in PANEL_IDENTITIES.items() for identity in identities}
 
 def describe(mode, panel, current):
     w, h = panel

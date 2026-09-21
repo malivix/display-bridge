@@ -77,7 +77,8 @@ rechecks mode metadata. The summary omits device IDs and helper paths. Configura
 services are unchanged; maintenance/DDC coordination files may be created.
 
 `review-ready` is a snapshot, not enrollment approval or physical qualification. Normal
-capture re-inspects hardware before saving. A native guided setup interface remains planned.
+capture re-inspects hardware before saving. The independent graphical setup interface is described below; its software review is
+separate from this live hardware enrollment review.
 
 ## Optional graphical setup
 

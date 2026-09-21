@@ -182,6 +182,9 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
             let previewSize=NSButton(title:"Preview size…",target:self,action:#selector(panelAction(_:)))
             previewSize.identifier=NSUserInterfaceItemIdentifier("preview-options")
             displayActions.addArrangedSubview(previewSize);previewActions.append(previewSize);scalableControls.append(previewSize)
+            let saveSize=NSButton(title:"Save current size…",target:self,action:#selector(panelAction(_:)))
+            saveSize.identifier=NSUserInterfaceItemIdentifier("preset-save-prompt")
+            displayActions.addArrangedSubview(saveSize);panelActions.append(saveSize);scalableControls.append(saveSize)
             let samples=NSButton(title:"Compare readability…",target:self,action:#selector(compareReadability))
             displayActions.addArrangedSubview(samples);scalableControls.append(samples)
             let snapshotStatus=NSTextField(wrappingLabelWithString:"");snapshotStatus.isSelectable=true
@@ -548,6 +551,10 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
         for button in panelActions {
             let action=button.identifier?.rawValue ?? "doctor"
             button.isEnabled = !busy && (controlsUsable || safeWithoutControls(action)) && (action != "brightness-list" || PresetCommands.brightness.isSubset(of:visibleCapabilities ?? []))
+            if action=="preset-save-prompt" {
+                let reason=sizePresetSaveReason(health,control,busy,visibleCapabilities)
+                button.isEnabled=reason==nil;button.toolTip=reason
+            }
         }
         let preferences=control["speaker_preferences"] as? [String:String] ?? [:]
         for (profile,popup) in speakerPopups {
@@ -824,6 +831,9 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
         alert.runModal()
     }
     func savePresetPrompt() {
+        if let reason=sizePresetSaveReason(read("health.json"),read("control.json"),busy,visibleCapabilities) {
+            message("Save size unavailable",reason);return
+        }
         let dialog=PresetDialog(fontSize:CGFloat([16,20,24][textSizeIndex()]))
         if let arguments=dialog.run() {execute(arguments)}
     }

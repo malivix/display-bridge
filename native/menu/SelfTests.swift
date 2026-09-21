@@ -194,6 +194,10 @@ func runMenuSelfTests() {
     precondition(sizePreviewReason(rotatedPreview,[:],false,expectedRotation:0,observedAfter:inspectionTime+2)==nil)
     rotatedPreview["rotation"]=["macos_degrees":true,"macos_observed_at":inspectionTime+1]
     precondition(sizePreviewReason(rotatedPreview,[:],false,expectedRotation:0,observedAfter:inspectionTime)==nil)
+    precondition(sizePresetSaveReason(previewReady,[:],false,["preset-save"])==nil)
+    precondition(sizePresetSaveReason(previewReady,[:],false,[]) != nil)
+    precondition(sizePresetSaveReason(previewReady,[:],false,nil)?.contains("unverified")==true)
+    precondition(sizePresetSaveReason(previewReady,[:],true,["preset-save"]) != nil)
     var percentCalls:[[String]]=[]
     let unsupportedPercent=runCompatibleMenuCommand(percentArgs) { args,_,_ in
         percentCalls.append(args);return CommandResult(output:"{}",code:0)

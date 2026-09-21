@@ -130,6 +130,12 @@ func sizePreviewReason(_ health:[String:Any],_ control:[String:Any],_ busy:Bool,
     return nil
 }
 
+func sizePresetSaveReason(_ health:[String:Any],_ control:[String:Any],_ busy:Bool,_ capabilities:Set<String>?)->String? {
+    if let reason=sizePreviewReason(health,control,busy) {return reason}
+    guard let capabilities=capabilities else{return "Preset support is unverified. Check support in Controls."}
+    return capabilities.contains("preset-save") ? nil:"This controller does not support saving sizes. Update the menu and controller together."
+}
+
 struct AudioOverridePresentation {
     let summary:String
     let action:String

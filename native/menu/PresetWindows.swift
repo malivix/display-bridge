@@ -34,7 +34,7 @@ final class PresetDialog: NSObject, NSWindowDelegate {
         let stack=NSStackView();stack.orientation = .vertical;stack.alignment = .leading;stack.spacing=16
         stack.translatesAutoresizingMaskIntoConstraints=false;window.contentView!.addSubview(stack)
         NSLayoutConstraint.activate([stack.leadingAnchor.constraint(equalTo:window.contentView!.leadingAnchor,constant:20),stack.trailingAnchor.constraint(equalTo:window.contentView!.trailingAnchor,constant:-20),stack.topAnchor.constraint(equalTo:window.contentView!.topAnchor,constant:20),stack.bottomAnchor.constraint(lessThanOrEqualTo:window.contentView!.bottomAnchor,constant:-20)])
-        let intro=NSTextField(wrappingLabelWithString:saving ? "Save the sizes currently displayed for this orientation. The highlighted preview choice is not applied. Replacement affects only this name and orientation.":"Select the saved name and orientation to remove. Current display settings and presets for the other orientation are preserved.")
+        let intro=NSTextField(wrappingLabelWithString:saving ? "Save the sizes currently displayed for this orientation. Opening this dialog does not change display sizes. Replacement affects only this name and orientation.":"Select the saved name and orientation to remove. Current display settings and presets for the other orientation are preserved.")
         if let role=brightnessMonitor {intro.stringValue="Save the current hardware brightness of \(role=="pg" ? "PG42UQ":"BenQ RD280UG"). Replacement affects only this name and monitor. Display size and speaker volume are unchanged."}
         let font=NSFont.systemFont(ofSize:fontSize);intro.font=font
         stack.addArrangedSubview(intro);intro.widthAnchor.constraint(equalTo:stack.widthAnchor).isActive=true

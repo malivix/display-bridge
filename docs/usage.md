@@ -78,6 +78,10 @@ before dispatch and rejects this unsupported command. The existing ±5 controls 
 
 ## Display size and named presets
 
+Use **Displays → Save current size…** to name your current size pair without opening a
+preview first. Both monitors must be local and ready, and the controller must support
+preset saving. The name dialog saves only after you submit it; Cancel leaves presets alone.
+
 **Displays → Compare readability…** opens two identical sample windows. Place one on
 PG and one on BenQ, then compare the text samples and 200-point rectangle at your usual
 viewing distance. The rectangle measures macOS points, not millimeters. The windows

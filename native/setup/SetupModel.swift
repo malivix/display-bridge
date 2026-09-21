@@ -22,7 +22,19 @@ func setupReview(_ json:String,host:String)->SetupReview {
           checks.allSatisfy({["ok","error"].contains($0["status"] as? String ?? "")}) else{return unavailable}
     let ready=checks.allSatisfy{$0["status"] as? String=="ok"}
     guard report["status"] as? String==(ready ? "prerequisites-ready":"attention-required") else{return unavailable}
-    let rows=names.map{name in "\(checks.first{$0["name"] as? String==name}!["status"] as? String=="ok" ? "✓":"Needs attention:") \(name)"}
+    // The validated check name is the reason code. Render local guidance, never
+    // arbitrary subprocess detail (which may include private paths or raw errors).
+    let remedies=[
+        "Platform":"Run setup on an Apple-silicon Mac. This installer cannot run on Intel Macs or other operating systems.",
+        "macOS version":"Use macOS 13 or newer on the supported Mac, then review software again.",
+        "Python":"Use Python 3.10 or newer and rebuild this setup app with that interpreter. Reopening the same app retains its original Python location.",
+        "Source files":"Rebuild this setup app from a complete, clean project checkout. Do not modify files inside the app bundle.",
+        "Build tools":"Install or select Xcode Command Line Tools on this Mac, then review software again. The macOS SDK, Swift, Clang and make must be available.",
+        "Service namespace":"Follow the service migration instructions in the installation guide to review older Display Bridge LaunchAgents. Preserve existing settings and backups; do not delete or stop services blindly."
+    ]
+    let failed=names.filter{name in checks.first{$0["name"] as? String==name}?["status"] as? String=="error"}
+    let rows=failed.map{"Needs attention: \($0)\n\(remedies[$0]!)"}
+        + names.filter{!failed.contains($0)}.map{"✓ \($0)"}
     return SetupReview(ready:ready,text:([ready ? "Software prerequisites passed":"Resolve these software prerequisites first"]+rows+["Hardware has not been inspected by this review. Installation independently checks the saved setup and current monitor state."]).joined(separator:"\n\n"))
 }
 struct SetupSelection {
@@ -45,6 +57,17 @@ func runSetupTests() {
     var report:[String:Any]=["read_only":true,"host":"A","status":"prerequisites-ready","checks":names.map{["name":$0,"status":"ok"]}]
     func json()->String {String(decoding:try! JSONSerialization.data(withJSONObject:report),as:UTF8.self)}
     precondition(setupReview(json(),host:"A").ready && !setupReview(json(),host:"B").ready)
+    for name in names {
+        report["status"]="attention-required"
+        report["checks"]=names.map{["name":$0,"status":$0==name ? "error":"ok","detail":"PRIVATE-UNTRUSTED-DETAIL"]}
+        let result=setupReview(json(),host:"A")
+        precondition(!result.ready && result.text.contains("Needs attention: \(name)\n"))
+        precondition(!result.text.contains("PRIVATE-UNTRUSTED-DETAIL"))
+        precondition(result.text.range(of:"Needs attention:")!.lowerBound < result.text.range(of:"✓")!.lowerBound)
+    }
+    report["status"]="prerequisites-ready" // Contradictory success cannot enable installation.
+    precondition(!setupReview(json(),host:"A").ready)
+    report["checks"]=names.map{["name":$0,"status":"ok"]}
     report["read_only"]=1;precondition(!setupReview(json(),host:"A").ready)
     report["read_only"]=true;report["checks"]=[["name":"Platform","status":"ok"]]
     precondition(!setupReview(json(),host:"A").ready)

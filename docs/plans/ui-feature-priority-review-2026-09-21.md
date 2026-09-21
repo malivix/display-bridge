@@ -1,6 +1,7 @@
 # UI and feature delivery review
 
-Reviewed source `c3e19ba` on 2026-09-21. This is the current priority order and
+Initial review covered source `c3e19ba` on 2026-09-21. See the delivery update below
+before treating the original findings as open. This is the current priority order and
 supersedes the delivery ordering in [the earlier follow-up](ui-feature-follow-up-2026-09-21.md).
 This review changes documentation only; it does not install software or qualify hardware.
 
@@ -129,5 +130,38 @@ obscure this project's deterministic behavior. Virtual displays, PiP, HDR boosti
 undocumented MoonHalo control introduce larger scope or protocol uncertainty. Automatic
 input switching, software disconnect and network control conflict with current invariants.
 
-The next implementation item is order 1, not another broad feature expansion. This report
-does not change the active installation, confirm CI on a new revision, or approve a release.
+## Delivery update after `d4fa522`
+
+Orders 1 and 2 have source implementations and isolated validation: typed, dated readings;
+feature-specific numeric proposals; visible unconfirmed results; capability explanations;
+and contextual audio preservation with expiry and Resume. These do not qualify live DDC
+or headset behavior. The percentage dialog now rejects invalid text and latches lost
+readiness. Preset names are also validated during editing, with submission validation retained.
+
+Order 3 is partly delivered: comparison samples lead into the existing preview chooser;
+reference filters preserve the selected monitor; Displays exposes Save current size; and
+open choices latch readiness loss or a newer contradictory rotation readback. The chooser
+has its own cohesive module. Saved visual calibration metadata remains unimplemented.
+
+Primary product pages were reopened for this update: [BetterDisplay](https://github.com/waydabber/BetterDisplay),
+[MonitorControl](https://github.com/MonitorControl/MonitorControl),
+[Lunar](https://lunar.fyi/) and [Display Pilot 2](https://www.benq.com/en-us/monitor/software/display-pilot-2.html).
+The useful design references remain readable scale selection, direct targeted controls,
+user-adjusted calibration, and model-specific capabilities. Feature advertising is not
+evidence of compatibility with this pair or a public implementation API.
+
+### Remaining work, in priority order
+
+| Priority | Next deliverable | Completion evidence |
+| --- | --- | --- |
+| High | Qualify existing UI before adding panels | Current-build keyboard traversal, focus retention during refresh, modal cancellation, VoiceOver names/values, light/dark appearance and Largest/minimum layout; inspect ready, stale, unknown, paused, recovery and unsupported states. Record failures individually. |
+| High | Close modal context gaps | Audit all save/apply dialogs against readiness changes while open. Explain lost eligibility locally and retain canonical controller validation immediately before mutation. UI polling alone is not an atomic ownership guarantee. |
+| High | Measure rotation delay | One opt-in physical sample with exact installed revision and phase durations; separate sensor observation, debounce, native layout and readback. Optimize the measured slow phase without extra polling or weaker guards. |
+| High | Qualify upgrade interruption and recovery | Inject failures in isolated installer fixtures at each mutation boundary; establish what can recover after process death. Preserve backups and document remaining power-loss limits before any stronger release claim. |
+| Medium | Save visual matching preferences | Add identity- and orientation-bound preference metadata only after schema, invalidation, damaged-file preservation and rollback are designed. Reuse qualified modes and Keep/Revert; do not describe a preference as measured physical calibration. |
+| Medium | Local Shortcuts | Start with status and timed pause, then named presets. Explicit targets, typed outcomes, no network listener; accepted daemon work must not be described as cancelled merely because its caller exits. |
+
+The next slice is UI qualification and any defects it reveals. New feature implementation
+follows the table rather than restarting completed items. Mac B and physical tests remain
+separate from source delivery. This update does not install software, confirm CI on a new
+revision, or approve a release.

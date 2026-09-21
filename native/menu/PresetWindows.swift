@@ -15,11 +15,12 @@ func presetNameError(_ value:String)->String? {
     return nil
 }
 
-final class PresetDialog: NSObject, NSWindowDelegate {
+final class PresetDialog: NSObject, NSWindowDelegate, NSTextFieldDelegate {
     let window:NSPanel
     let presets:[[String:Any]]?
     let brightnessMonitor:String?
     let name=NSTextField()
+    let submit=NSButton()
     let replace=NSButton(checkboxWithTitle:"Replace existing preset",target:nil,action:nil)
     let selector=NSPopUpButton()
     let errorLabel=NSTextField(wrappingLabelWithString:"")
@@ -39,7 +40,7 @@ final class PresetDialog: NSObject, NSWindowDelegate {
         let font=NSFont.systemFont(ofSize:fontSize);intro.font=font
         stack.addArrangedSubview(intro);intro.widthAnchor.constraint(equalTo:stack.widthAnchor).isActive=true
         if saving {
-            name.font=font;name.placeholderString="Preset name, e.g. Reading";name.setAccessibilityLabel("Preset name")
+            name.delegate=self;name.font=font;name.placeholderString="Preset name, e.g. Reading";name.setAccessibilityLabel("Preset name")
             stack.addArrangedSubview(name);name.widthAnchor.constraint(equalTo:stack.widthAnchor).isActive=true
             replace.font=font;stack.addArrangedSubview(replace);window.initialFirstResponder=name
         } else {
@@ -53,13 +54,26 @@ final class PresetDialog: NSObject, NSWindowDelegate {
         errorLabel.font=font;errorLabel.textColor = .systemRed;errorLabel.isSelectable=true
         errorLabel.setAccessibilityLabel("Preset validation error");stack.addArrangedSubview(errorLabel)
         errorLabel.widthAnchor.constraint(equalTo:stack.widthAnchor).isActive=true
-        let submit=NSButton(title:brightnessMonitor==nil ? (saving ? "Save current size":"Remove selected preset"):"Save current brightness",target:self,action:#selector(confirm(_:)))
+        submit.title=brightnessMonitor==nil ? (saving ? "Save current size":"Remove selected preset"):"Save current brightness"
+        submit.target=self;submit.action=#selector(confirm(_:))
         submit.font=font
         // Destructive removal is explicit; Return in the selector must not remove a preset.
         if saving {submit.keyEquivalent="\r"}
         submit.isEnabled=saving || !(presets ?? []).isEmpty
         let cancel=NSButton(title:"Cancel",target:self,action:#selector(cancel(_:)));cancel.font=font;cancel.keyEquivalent="\u{1b}"
         stack.addArrangedSubview(submit);stack.addArrangedSubview(cancel)
+        if saving {validateName(announce:false)}
+    }
+    func controlTextDidChange(_ notification:Notification) {validateName(announce:true)}
+    private func validateName(announce:Bool) {
+        guard presets==nil else{return}
+        let error=presetNameError(name.stringValue)
+        let message=name.stringValue.isEmpty ? "Enter a name for this preset.":error ?? ""
+        let changed=errorLabel.stringValue != message
+        errorLabel.stringValue=message
+        errorLabel.textColor=name.stringValue.isEmpty ? .secondaryLabelColor:.systemRed
+        submit.isEnabled=error==nil
+        if announce && changed {NSAccessibility.post(element:errorLabel,notification:.valueChanged)}
     }
     @objc func confirm(_ sender:NSButton) {
         if let presets=presets {

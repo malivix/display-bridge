@@ -7,14 +7,9 @@ enum ShortcutControlOutcome:String,AppEnum,Sendable {
     case requestSaved,notSent,outcomeUnknown
     static var typeDisplayRepresentation:TypeDisplayRepresentation = "Automation request outcome"
     static var caseDisplayRepresentations:[Self:DisplayRepresentation] = [
-        .requestSaved:"Request saved",.notSent:"Request not sent",.outcomeUnknown:"Outcome unknown"]
-    var message:String {
-        switch self {
-        case .requestSaved:return "Request saved. The controller applies it after its current operation; check status for progress."
-        case .notSent:return "Request not sent. Use a supported controller outside demo mode, with a pause duration of 1–1440 minutes."
-        case .outcomeUnknown:return "The request may have been saved. Check status before retrying; a timeout does not cancel accepted controller work."
-        }
-    }
+        .requestSaved:DisplayRepresentation(title:"Request saved",subtitle:"The controller applies it after its current operation. Check status for progress."),
+        .notSent:DisplayRepresentation(title:"Request not sent",subtitle:"Check controller support, demo mode and the 1–1440 minute pause limit."),
+        .outcomeUnknown:DisplayRepresentation(title:"Outcome unknown",subtitle:"Check status before retrying. A timeout does not cancel accepted work.")]
 }
 
 enum ShortcutAutomationRequest:Sendable {
@@ -56,18 +51,18 @@ struct PauseDisplayBridge:AppIntent {
     static var description=IntentDescription("Request a timed automation pause for 1–1440 minutes. An operation already in progress can finish before the controller pauses.")
     static var openAppWhenRun:Bool = false
     @Parameter(title:"Minutes",default:30) var minutes:Int
-    func perform() async throws -> some IntentResult & ReturnsValue<ShortcutControlOutcome> & ProvidesDialog {
+    func perform() async throws -> some IntentResult & ReturnsValue<ShortcutControlOutcome> {
         let duration=minutes
         let outcome=await Task.detached {executeShortcutControl(.pause(minutes:duration))}.value
-        return .result(value:outcome,dialog:IntentDialog(stringLiteral:outcome.message))
+        return .result(value:outcome)
     }
 }
 struct ResumeDisplayBridge:AppIntent {
     static var title:LocalizedStringResource = "Resume Display Bridge"
     static var description=IntentDescription("Request resumption of automatic display and audio reconciliation. Enrollment and ownership checks still apply; a manual audio override remains preserved.")
     static var openAppWhenRun:Bool = false
-    func perform() async throws -> some IntentResult & ReturnsValue<ShortcutControlOutcome> & ProvidesDialog {
+    func perform() async throws -> some IntentResult & ReturnsValue<ShortcutControlOutcome> {
         let outcome=await Task.detached {executeShortcutControl(.resume)}.value
-        return .result(value:outcome,dialog:IntentDialog(stringLiteral:outcome.message))
+        return .result(value:outcome)
     }
 }

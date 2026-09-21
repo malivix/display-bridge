@@ -142,3 +142,14 @@ The bounded source slice is implemented and passes native/package checks; see
 Shortcuts pause/resume against the private companion with a recording command
 stub. Keep the installed controller outside that test and verify rejection before
 dispatch as well as typed saved/unknown outcomes after dispatch.
+
+## Control execution result
+
+Isolated current-build pause/resume execution passed, including invalid-duration
+no-dispatch, malformed-acknowledgement no-retry, typed consumption and cold-start
+resume. Testing exposed a default result-dialog wait; the intents now return typed
+outcomes without that optional presentation dependency. See
+[the exact evidence and registration lesson](../log/shortcuts-control-execution.md).
+Production activation remains unqualified. Before adding another mutation action,
+review the complete local source range for publication and qualify coordinated
+installation when fresh ownership permits it; keep physical checks separate.

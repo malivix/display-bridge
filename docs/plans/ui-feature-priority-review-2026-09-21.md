@@ -16,7 +16,7 @@ the product choices and primary sources.
 | Priority | Next result | Status and acceptance |
 | --- | --- | --- |
 | First | Finish accessibility qualification of existing UI | Compact size comparison, ownership/speaker summary, precise controls and contextual audio preferences are implemented. Recovery focus, top alignment and hidden keyboard focus are fixed. Long-name Overview/Audio and selected keyboard paths passed; high contrast, VoiceOver speech and the remaining dialog matrix are open. |
-| Active feature | Qualify Shortcuts pause/resume execution | Timed pause/resume source, bounded submission tests and signed metadata are implemented. Exercise both actions through Shortcuts against the isolated command stub, including invalid duration and uncertain acknowledgement. Status warm/cold and duplicate-lock checks passed; production activation remains unqualified. Named size-preset preview follows separately with Keep/Revert. |
+| Active delivery | Review and deliver the completed UI/Shortcuts source | Status and pause/resume passed isolated companion execution, typed output and relevant failure paths. The result-dialog wait is fixed. Review the local commit range and publication gates, then qualify coordinated installation when fresh ownership permits it. Production activation remains unqualified. Named size-preset preview follows separately with Keep/Revert. |
 | Reliability | Explain and reduce measured rotation delays | Timing reports exist; exact-revision physical samples remain pending. Separate sensor observation, confirmation, layout and readback. Optimize the measured slow phase, not guessed polling intervals. |
 | Release | Finish installer interruption and hardware qualification | Full installer commit-phase interruption, Mac B, concurrent controllers and headset transitions remain open. Keep source tests, package checks and physical outcomes separate. |
 | Research only | BenQ comfort-settings inspector | Establish narrow firmware/transport-bound protocol evidence before exposing controls. Unreadable or multiplexed values cannot be presented as confirmed settings. Retain OSD guidance if reliable inspection is unavailable. |
@@ -374,3 +374,11 @@ capability checks and a single canonical CLI dispatch. Native regressions, signe
 metadata and package checks passed. [Evidence and limits](../log/shortcuts-control-actions.md).
 Shortcuts UI execution with the isolated command stub is next; no live pause or
 resume was requested during implementation.
+
+### Pause/resume execution checked and dialog wait fixed
+
+Real Shortcuts execution against a private recording stub passed pause, resume,
+invalid-duration rejection, unknown acknowledgement without retry, typed consumption
+and cold-start resume. The observed default dialog wait is removed. See
+[scope, evidence and registration handling](../log/shortcuts-control-execution.md).
+Review and deliver the completed source before adding further feature scope.

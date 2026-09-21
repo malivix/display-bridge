@@ -52,6 +52,14 @@ func rotationSummary(_ health:[String:Any],_ control:[String:Any],_ now:Double=D
     let profile=health["profile"] as? String ?? "unknown"
     let current=statusFresh(health,now)
     let status=health["status"] as? String ?? "unknown"
+    let transition=health["transition"] as? [String:Any] ?? [:]
+    let phaseTitles=["rotation_check":"Checking rotation and orientation","layout_apply":"Applying desktop layout","input_confirmation":"Checking monitor ownership","audio":"Layout checked; reconciling audio"]
+    var phaseMessage:String?
+    if status=="recovering",let phase=transition["phase"] as? String,let title=phaseTitles[phase],
+       let started=health["updated_at"] as? NSNumber,CFGetTypeID(started) != CFBooleanGetTypeID(),
+       started.doubleValue.isFinite,started.doubleValue>=0,started.doubleValue<=now,now-started.doubleValue<15 {
+        phaseMessage="Controller phase: \(title) · \(Int(now-started.doubleValue))s since phase report"
+    }
     let reason:String
     if !controlsAvailable(control) {reason="Rotation controls unavailable"}
     else if rotation["enabled"] as? Bool != true {reason="Rotation not calibrated"}
@@ -62,6 +70,7 @@ func rotationSummary(_ health:[String:Any],_ control:[String:Any],_ now:Double=D
     else if status.hasPrefix("preview-") {reason="Rotation held during size preview or restoration"}
     else if profile=="away" || profile=="pg" {reason="Rotation waiting for BenQ to show this Mac"}
     else if !["extended","benq"].contains(profile) {reason="Rotation waiting for known input ownership"}
+    else if let phaseMessage=phaseMessage {reason=phaseMessage}
     else if rotation["state"] as? String == "sensor-unavailable" {reason="Rotation waiting for a calibrated sensor reading"}
     else if angle("sensor_degrees")==nil || !sensorFresh {reason="Rotation sensor freshness unavailable; waiting for a new reading"}
     else if !confirmed {reason="Rotation waiting for a matching sensor confirmation"}

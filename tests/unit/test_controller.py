@@ -140,6 +140,19 @@ class ReliabilityTests(unittest.TestCase):
                 c.watch({'host':'A','poll_interval':0}, once=True)
             apply.assert_not_called()
 
+    def test_live_phase_is_published_before_each_operation(self):
+        events=[];reports=[]
+        def health(config,status,*args,**details):
+            reports.append(details)
+            if 'transition' in details:
+                events.append(details['transition']['phase'])
+                self.assertEqual(status,'recovering')
+                self.assertIn('recovery',details)
+        with patch.object(c,'write_health',side_effect=health),patch.object(c,'read_inputs',return_value={'pg':17,'benq':19}),patch.object(c,'apply_rotation',side_effect=lambda *a:events.append('native')),patch.object(c,'apply',side_effect=lambda *a:events.append('layout')),patch.object(c,'sync_audio',side_effect=lambda *a,**k:events.append('audio-call')):
+            c.watch({'host':'A','poll_interval':0},once=True)
+        self.assertEqual(events,['rotation_check','native','layout_apply','layout','input_confirmation','audio','audio-call'])
+        self.assertNotIn('transition',reports[-1])
+
     def test_failed_transitions_keep_only_completed_phase_timings(self):
         for failing,expected,completed in [('apply_rotation','rotation_check',set()),('apply','layout_apply',{'rotation_check'}),('sync_audio','audio',{'rotation_check','layout','layout_apply','input_confirmation'})]:
             with self.subTest(phase=expected), patch.object(c,'write_health'), patch.object(c,'read_inputs',return_value={'pg':17,'benq':19}), patch.object(c,'apply_rotation',return_value=False), patch.object(c,'apply',return_value=True), patch.object(c,'sync_audio',return_value='ready'), patch.object(c,'record') as record:

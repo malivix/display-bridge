@@ -32,6 +32,16 @@ func runMenuSelfTests() {
     let rotationText=rotationSummary(rotationHealth,[:],100)
     precondition(rotationText.contains("sensor confirmed") && rotationText.contains("Last sensor: 90° · read 1 second ago"))
     precondition(rotationText.contains("macOS last readback: 0° · read 20 seconds ago"))
+    var phaseHealth=rotationHealth;phaseHealth["status"]="recovering"
+    phaseHealth["transition"]=["phase":"layout_apply"];phaseHealth["updated_at"]=98.0
+    precondition(rotationSummary(phaseHealth,[:],100).contains("Applying desktop layout · 2s"))
+    precondition(rotationSummary(phaseHealth,["paused":true],100).contains("Rotation paused"))
+    for invalid:Any in [true,Double.nan,Double.infinity,101.0,80.0,"98"] {
+        phaseHealth["updated_at"]=invalid
+        precondition(!rotationSummary(phaseHealth,[:],100).contains("Controller phase:"))
+    }
+    phaseHealth["transition"]=["phase":"private untrusted text"];phaseHealth["updated_at"]=98.0
+    precondition(!rotationSummary(phaseHealth,[:],100).contains("private untrusted text"))
     precondition(rotationSummary(rotationHealth,[:],120).contains("status stale"))
     precondition(rotationSummary(rotationHealth,["paused":true],100).contains("Rotation paused"))
     precondition(rotationSummary(rotationHealth,["auto_rotate":false],100).contains("Rotation manual"))

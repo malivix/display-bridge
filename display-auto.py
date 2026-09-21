@@ -637,23 +637,30 @@ def watch(config, once=False, interrupt=None):
                     started=time.monotonic()
                     reason=work.data.get('reason')
                     seconds={};phase='rotation_check';phase_started=started
+                    def publish_phase():
+                        write_health(config,'recovering',profile,inputs,recovery=work.data,
+                                     transition={'phase':phase})
                     try:
+                        publish_phase()
                         rotated=apply_rotation(config,profile,angle,inputs,deadline)
                         rotation_finished=time.monotonic()
                         seconds['rotation_check']=round(rotation_finished-started,3)
                         phase='layout_apply';phase_started=rotation_finished
+                        publish_phase()
                         if profile not in ('unknown', 'away'):
                             confirm_inputs(config, inputs, deadline)
                         changed=apply(config, profile, deadline) or rotated
                         layout_finished=time.monotonic()
                         seconds.update(layout_apply=round(layout_finished-rotation_finished,3),layout=round(layout_finished-started,3))
                         phase='input_confirmation';phase_started=layout_finished
+                        publish_phase()
                         layout_status='unchanged-away' if profile=='away' else 'unknown' if profile=='unknown' else 'verified'
                         if changed and not work.pending: work.request('layout changed')
                         if profile != 'unknown':confirm_inputs(config,inputs,deadline)
                         inputs_finished=time.monotonic()
                         seconds['input_confirmation']=round(inputs_finished-layout_finished,3)
                         phase='audio';phase_started=inputs_finished
+                        publish_phase()
                         if manual_audio:
                             audio_status='manual override'
                         else:

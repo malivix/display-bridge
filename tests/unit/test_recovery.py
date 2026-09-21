@@ -70,7 +70,7 @@ class RegressionTests(unittest.TestCase):
     def test_slow_failures_do_not_reset_the_retry_budget(self):
         attempts=[]
         def health(config,status,*a,**kw):
-            if status in ('recovering','degraded') and 'audio_journal_pending' not in kw and kw.get('recovery',{}).get('error'):
+            if status in ('recovering','degraded') and 'audio_journal_pending' not in kw and 'transition' not in kw and kw.get('recovery',{}).get('error'):
                 attempt=kw['recovery']['attempts']
                 if not attempts or len(attempts)<3:
                     attempts.append(attempt)

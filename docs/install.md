@@ -166,18 +166,12 @@ Repeat in portrait with macOS rotation matching the sensor. Use `B` for Mac B.
 Automatic rotation enables only after both orientation profiles exist. Keep PG at the origin
 and BenQ directly to its left to use the current paired-size preview feature.
 
-Stop the controller before the orientation that differs from the saved baseline:
-
-```sh
-launchctl bootout "gui/$(id -u)/io.github.display-bridge"
-```
-
-Changing the macOS rotation makes the running controller fail its recovery, because
-`display-layout` refuses a baseline whose saved rotation differs from the live one. Capture
-writes the new baseline only after that, and its own verification step rejects a pending or
-exhausted recovery, so a running controller turns the second capture into a race it usually
-loses. The capture restarts both services when it finishes. Pausing automation does not work;
-a paused controller fails the same verification.
+Expect the controller to report a failed recovery between changing the macOS rotation and
+running the capture: `display-layout` refuses a baseline whose saved rotation differs from
+the live one. No manual service handling is needed. The installer already stops the
+controller for the capture, and re-requests that pending recovery after writing the new
+baseline, so attempts counted against the replaced baseline do not leave its verification
+exhausted. Both services restart when the capture finishes.
 
 ## Upgrade or replace a saved baseline
 

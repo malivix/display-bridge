@@ -26,8 +26,10 @@ profile, and audio followed to the RD280UG.
 
 Both orientation profiles were then captured on Mac B and automatic rotation is enabled
 there. The landscape capture succeeded against the running controller; the portrait one
-required stopping it first, and needed two failed attempts and a restored landscape layout
-before that cause was identified. Each attempt rolled back and left the installation working.
+needed two failed attempts and the controller stopped by hand before the cause was
+identified. Each attempt rolled back and left the installation working. The installer now
+re-requests a pending recovery after it replaces the baseline, so that manual step is no
+longer required; that path has unit coverage but has not been re-run against hardware.
 
 That is a first deployment, one observed transition and a completed rotation enrollment, not
 a Mac B switching, listening or rotation qualification. Listening, both-away and both-return

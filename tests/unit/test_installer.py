@@ -282,3 +282,33 @@ class InstallerEntryTests(unittest.TestCase):
             with patch.object(module.sys, "executable", value):
                 with self.assertRaises(SystemExit):
                     module.interpreter_path()
+
+    def test_replacing_the_baseline_requeues_exhausted_recovery(self):
+        module = self.load()
+        from recovery_state import Recovery
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            recovery = Recovery(root / "recovery.json")
+            recovery.data.update(state=[18, 15], profile="extended", orientation=0)
+            recovery.request("orientation changed")
+            for _ in range(3):
+                recovery.failed("Rotation changed for the enrolled BenQ", now=0)
+            self.assertTrue(recovery.exhausted)
+
+            self.assertTrue(module.requeue_recovery(root))
+
+            reloaded = Recovery(root / "recovery.json")
+            self.assertFalse(reloaded.exhausted)
+            self.assertTrue(reloaded.pending)
+            self.assertEqual(reloaded.data["attempts"], 0)
+            self.assertIsNone(reloaded.data["error"])
+            self.assertEqual(reloaded.data["state"], [18, 15])
+            self.assertEqual(reloaded.data["profile"], "extended")
+            self.assertEqual(reloaded.data["orientation"], 0)
+
+    def test_replacing_the_baseline_does_not_invent_recovery(self):
+        module = self.load()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.assertFalse(module.requeue_recovery(root))
+            self.assertFalse((root / "recovery.json").exists())

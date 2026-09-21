@@ -84,6 +84,22 @@ def preflight(package, home):
             'checks':checks,'limits':'Software prerequisites only. No build, monitor read, service change or installation was performed. Display ownership, saved configuration, pending recovery, permissions and hardware behavior are not qualified. The installer rechecks its live requirements.'}
 
 
+def requeue_recovery(root):
+    """Re-request pending recovery after the baseline it failed against is replaced.
+
+    Attempts counted while the previous baseline was saved leave recovery exhausted,
+    and one-shot verification then refuses to retry instead of reconciling against the
+    baseline just written. Re-requesting keeps the journal and its reason history; it
+    neither drops pending work nor invents any.
+    """
+    from recovery_state import Recovery
+    recovery = Recovery(root / "recovery.json")
+    if not recovery.pending:
+        return False
+    recovery.request("baseline replaced by capture")
+    return True
+
+
 def interpreter_path():
     """Absolute interpreter recorded in the installed services and wrapper.
 
@@ -442,6 +458,7 @@ def run_install(argv, resources):
                 (root / "baseline.json").write_text(
                     json.dumps(previous["baseline"], indent=2) + "\n"
                 )
+                requeue_recovery(root)
                 print("Preserved existing display baseline; checking current profile.")
                 run(
                     [python, str(bin_dir / "display-auto.py"), "once"],

@@ -6,8 +6,10 @@ Source changes only; installed production activation of the optional Shortcuts
 build remains unqualified. See the [usage guide](docs/shortcuts.md) and
 [qualification limits](docs/qualification.md).
 
-- Document that a rotation capture for the orientation that differs from the saved
-  baseline needs the controller stopped first.
+- Re-request pending recovery after a capture replaces the baseline, so attempts counted
+  against the replaced one no longer leave verification exhausted. A rotation capture for
+  the orientation that differs from the saved baseline no longer needs manual service
+  handling.
 - Record the stable interpreter path in the installed services instead of a resolved
   one, so a Python patch upgrade no longer leaves them unable to start. Reject a
   relative or missing interpreter at entry.

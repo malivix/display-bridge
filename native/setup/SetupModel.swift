@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 import Foundation
 import CoreFoundation
+import Darwin
 
 func setupArguments(_ script:URL,host:String,preflight:Bool)->[String] {
     // Keep Python import caches out of the signed source snapshot.
@@ -100,5 +101,49 @@ func runSetupTests() {
     attempt["pid"]=42;attempt["started_at"]=898.0;precondition(observed(true)==nil)
     attempt["started_at"]=1001.0;precondition(observed(true)==nil)
     attempt["started_at"]=900.0;attempt["host"]="B";precondition(observed(true)==nil)
+    runSetupProcessTests()
     print("PASS setup readiness, failure guidance and current-attempt correlation")
+}
+
+// An actual child writes a report, waits for explicit release, then fails. No
+// installer, service, monitor helper, user configuration or audio is invoked.
+func runSetupProcessTests() {
+    let directory=FileManager.default.temporaryDirectory.appendingPathComponent("setup-process-"+UUID().uuidString)
+    try! FileManager.default.createDirectory(at:directory,withIntermediateDirectories:false,attributes:[.posixPermissions:0o700])
+    defer {try? FileManager.default.removeItem(at:directory)}
+    let reportURL=directory.appendingPathComponent("progress.json")
+    precondition(readMenuState(reportURL)==nil)
+    let child=Process(),input=Pipe()
+    child.executableURL=URL(fileURLWithPath:"/bin/sh")
+    child.arguments=["-c",#"umask 077; printf '{"schema":1,"pid":%s,"host":"A","status":"running","phase":"building","recovery":"not-needed","started_at":1000,"updated_at":1000}' "$$" > "$1"; read -t 10 release; exit 7"#,"setup-process-test",reportURL.path]
+    child.standardInput=input;child.standardOutput=FileHandle.nullDevice;child.standardError=FileHandle.nullDevice
+    try! child.run()
+    defer {
+        try? input.fileHandleForWriting.close()
+        try? input.fileHandleForReading.close()
+        if child.isRunning {Darwin.kill(child.processIdentifier,SIGKILL)}
+    }
+    func awaitCondition(_ condition:()->Bool)->Bool {
+        let deadline=ProcessInfo.processInfo.systemUptime+5
+        while !condition() {
+            if ProcessInfo.processInfo.systemUptime>=deadline{return false}
+            Thread.sleep(forTimeInterval:0.01)
+        }
+        return true
+    }
+    precondition(awaitCondition{readMenuState(reportURL) != nil},"Fixture failed to publish report")
+    let record=readMenuState(reportURL)!
+    let live=setupAttemptSummary(record,pid:child.processIdentifier,host:"A",launchedAt:999,running:child.isRunning,now:1001)
+    precondition(live?.contains("A process exists")==true)
+    precondition(live?.contains("Reported outcome: Completed")==false)
+    // A new launch must not accept the preceding attempt even if its PID matches.
+    precondition(setupAttemptSummary(record,pid:child.processIdentifier,host:"A",launchedAt:1002,running:true,now:1003)==nil)
+    try! input.fileHandleForWriting.write(contentsOf:Data("finish\n".utf8))
+    try! input.fileHandleForWriting.close()
+    precondition(awaitCondition{!child.isRunning},"Fixture failed to exit")
+    precondition(child.terminationStatus==7)
+    let ended=setupAttemptSummary(readMenuState(reportURL)!,pid:child.processIdentifier,host:"A",launchedAt:999,running:child.isRunning,now:1003)
+    precondition(ended?.contains("Outcome unknown · recorded process not found")==true)
+    precondition(ended?.contains("Reported outcome: Completed")==false)
+    print("PASS actual setup child: waiting, failed exit, retained report and prior-attempt rejection")
 }

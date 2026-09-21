@@ -42,3 +42,8 @@ bounded, read-only status projection for both the checkout and installed control
 Stored display keys and audio UIDs belong only in per-machine runtime configuration.
 Model vendor/product identifiers in source select supported panel specifications; they are
 not authorization for mutations. Mutation authorization also requires enrolled device identity.
+
+`native/setup/` is an independent graphical installer front end. `setup_gui.py` builds a private
+app containing a clean committed source snapshot. It invokes the existing installer for software
+review and explicit activation; the menu app is not the installer's parent. `SETUP_SOURCES` defines
+its build inventory. The front end owns presentation/process observation, not hardware mutations.

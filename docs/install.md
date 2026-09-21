@@ -79,6 +79,38 @@ services are unchanged; maintenance/DDC coordination files may be created.
 `review-ready` is a snapshot, not enrollment approval or physical qualification. Normal
 capture re-inspects hardware before saving. A native guided setup interface remains planned.
 
+## Optional graphical setup
+
+From a clean, trusted Git checkout on the Mac being configured, run:
+
+```sh
+python3 setup_gui.py
+```
+
+This builds and opens a separate setup app. It does not install automatically. Choose Mac A or
+Mac B, run **Review software**, prepare both monitors as described above and check **Both
+monitors are prepared**, then choose **Install / upgrade**. Changing roles clears the previous
+review and preparation confirmation. The regular upgrade path preserves existing enrollment;
+baseline replacement and rotation calibration remain separate CLI operations.
+
+The setup app bundles a committed source snapshot and shows its revision. Rebuild from an
+updated clean checkout for newer code; an existing setup app retains its bundled revision. It is independent of
+the menu app being replaced. Progress belongs to the installer; software review does not qualify
+hardware. Close and Quit are held while the installer runs. Output goes to a private file under
+`~/Library/Logs/DisplayBridgeSetup`, available through **Show installation log**. Forced app/process
+termination and power loss are not guaranteed to recover automatically; inspect the report and
+logs before retrying. The installer retains its own locks, fresh checks and rollback path.
+
+Use **Last installation** to inspect the stored outcome without starting another attempt.
+An exit status or recorded completion does not establish physical desktop or sound behavior.
+The graphical flow has synthetic UI coverage; live installation and Mac B qualification remain
+pending. Keep generated apps/logs private and build separately on each Mac; they can contain
+local Python paths. The generated app remains under the checkout's ignored `.local-only` folder;
+do not delete it while its installer is active.
+
+For UI-only inspection, `python3 setup_gui.py --demo` blocks real installer/helper/service calls
+and provides a ten-second simulation. `--build-only` builds without opening the app.
+
 ## Install each host
 
 From the repository folder, run `./scripts/test`, then `python3 install.py A` on Mac A or

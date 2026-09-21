@@ -45,3 +45,23 @@ phase/outcome/recovery separately and hiding raw IDs/errors/extra fields. Missin
 reports stay unavailable; a stored running record with a missing PID stays outcome unknown.
 Cancellation of the view cannot cancel the installer. Rollback is a coordinated release; old
 controllers must decline the new command gracefully.
+
+## Independent setup application
+
+`setup_gui.py` now builds a separate AppKit setup app from a committed source snapshot; real
+builds require a clean trusted checkout. Archive extraction rejects traversal, links and special
+files. The window requires an explicit role, validated software preflight and monitor-preparation
+confirmation. Role changes invalidate the prior review. Installation uses the existing installer
+as a subprocess with private regular-file output, preserving the installer as sole mutation owner.
+
+The setup app holds ordinary Close/Quit during its owned task. It correlates progress by process
+ID, host and attempt start time, and never substitutes an older record for a new attempt. This is
+not forced-termination or power-loss recovery. There is no timeout that kills an active installer.
+An unresponsive child requires investigation, not automatic restart. The recorded outcome and
+private log remain the handoff; physical qualification is still required.
+
+Demo mode never launches the installer and provides a bounded active-state simulation. Verify
+Largest text, role invalidation, prerequisite gating, Close/Quit and completion in the isolated
+window. Ordinary verification compiles the setup executable and runs model tests without UI or
+hardware. A real bundled build must be checked after committing the source; do not activate it
+while the live input prerequisite is unresolved.

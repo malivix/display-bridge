@@ -19,6 +19,9 @@ MENU_SOURCES = (
     "native/menu/SelfTests.swift",
 )
 
+SETUP_SOURCES = ("native/setup/main.swift", "native/setup/SetupModel.swift",
+                 "native/menu/Commands.swift", "native/menu/InstallationReport.swift")
+
 RUNTIME_MODULES = (
     "display-auto.py",
     "audio_policy.py",

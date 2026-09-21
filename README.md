@@ -34,6 +34,10 @@ python3 install.py A --preflight  # software checks only
 python3 install.py A  # use B on the other Mac
 ```
 
+For an optional guided window, run `python3 setup_gui.py` from a clean trusted checkout.
+It reviews software first and requires an explicit Install / upgrade action. See the
+[graphical setup instructions and qualification limits](docs/install.md#optional-graphical-setup).
+
 Installation builds locally and starts per-user services. The first installation briefly tests
 mirroring and restores the saved desktop. It needs no administrator access. Capture settings
 separately on each Mac; never copy mode IDs or device identities between hosts.

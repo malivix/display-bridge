@@ -12,7 +12,7 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-from release_manifest import MENU_SOURCES
+from release_manifest import MENU_SOURCES, SETUP_SOURCES
 
 
 def run(*args, **kwargs):
@@ -36,7 +36,7 @@ def main():
     ).strip()
     with tempfile.TemporaryDirectory(prefix="display-bridge-verify-") as directory:
         build = Path(directory)
-        for name in ("display-layout", "display-menu"):
+        for name in ("display-layout", "display-menu", "display-setup"):
             run(
                 "swiftc",
                 "-sdk",
@@ -44,10 +44,11 @@ def main():
                 "-target",
                 "arm64-apple-macos13.0",
                 "-O",
-                *(str(ROOT / source) for source in (MENU_SOURCES if name == "display-menu" else ("native/display-layout.swift",))),
+                *(str(ROOT / source) for source in (MENU_SOURCES if name == "display-menu" else SETUP_SOURCES if name == "display-setup" else ("native/display-layout.swift",))),
                 "-o",
                 str(build / name),
             )
+        run(str(build / "display-setup"), "--self-test")
         for name, frameworks in (
             ("display-audio", ("Foundation", "CoreAudio")),
             ("display-rotate", ("Foundation", "CoreGraphics")),

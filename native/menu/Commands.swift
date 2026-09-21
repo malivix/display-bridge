@@ -5,6 +5,14 @@ import Darwin
 
 let menuStatusFreshnessInterval:TimeInterval = 15
 
+// Every entry point shares the same demo boundary, including background intents.
+func menuDemoMode(
+    arguments:[String]=CommandLine.arguments,
+    bundleFlag:Bool=Bundle.main.object(forInfoDictionaryKey:"DisplayBridgeDemo") as? Bool == true
+)->Bool {
+    arguments.contains("--demo") || bundleFlag
+}
+
 enum PresetCommands {
     static let brightness:Set<String>=["brightness-list","brightness-save","brightness-apply","brightness-remove"]
     static let size:Set<String>=["preset-save","preset-remove"]

@@ -711,6 +711,11 @@ func runNotificationTest() {
 }
 
 func runShortcutStatusTests() {
+    precondition(!menuDemoMode(arguments:[],bundleFlag:false))
+    precondition(menuDemoMode(arguments:["--demo"],bundleFlag:false))
+    precondition(menuDemoMode(arguments:[],bundleFlag:true))
+    precondition(menuDemoMode(arguments:["--demo"],bundleFlag:true))
+    precondition(!menuDemoMode(arguments:["--demo-other"],bundleFlag:false))
     let base:[String:Any] = ["updated_at":100.0,"status":"ready","profile":"extended",
                             "recovery":["pending":false],"audio_journal_pending":false]
     let ready=ShortcutStatusSnapshot(health:base,control:[:],now:101)
@@ -764,6 +769,13 @@ func runShortcutStatusTests() {
     let health=root.appendingPathComponent("health.json"),control=root.appendingPathComponent("control.json")
     try! JSONSerialization.data(withJSONObject:base).write(to:health)
     precondition(ShortcutStatusSnapshot.read(root:root,now:101)==ready)
+    let intentStatus=DisplayBridgeStatusResult.readLatest(root:root,now:101)
+    if CommandLine.arguments.contains("--demo") {
+        precondition(intentStatus.freshness == .unavailable && intentStatus.controller == .unknown,
+                     "A command-line demo must not return controller observations through Shortcuts")
+    } else {
+        precondition(intentStatus.freshness == .fresh && intentStatus.controller == .ready)
+    }
     precondition(try! FileManager.default.contentsOfDirectory(atPath:root.path)==["health.json"])
     precondition(mkfifo(control.path,0o600)==0)
     precondition(ShortcutStatusSnapshot.read(root:root,now:101).pauseRequest == .unknown)

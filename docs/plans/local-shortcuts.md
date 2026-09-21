@@ -103,3 +103,14 @@ unreadable state; FIFO/symlink/oversize rejection; paused and recovering states;
 unknown ownership; Shortcuts execution with app running/stopped; action discovery
 after package replacement; and metadata-preserving rollback. Native compilation
 or a directly invoked `perform()` alone does not satisfy that gate.
+
+## Companion startup checks
+
+The demo reader mismatch is fixed and covered in both command-line test modes;
+see [the regression evidence](../log/shortcuts-demo-isolation.md). The next isolated
+companion test must cover more than the returned entity: normal startup acquires
+the menu lock, probes CLI capabilities, refreshes the menu heartbeat and may request
+notification permission. Inspect these effects during warm/cold Shortcuts execution,
+and confirm duplicate launches do not steal ownership. Do not claim that a passing
+reader self-test establishes background execution behavior. Use disposable state
+and a private bundle identity before testing installed activation.

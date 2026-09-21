@@ -101,6 +101,7 @@ def main():
         )
         run(str(build / "test-ddc"))
         run(str(build / "display-menu"), "--self-test")
+        run(str(build / "display-menu"), "--self-test", "--demo")
     print("PASS native builds and isolated self-tests; physical tests not run")
 
 

@@ -86,8 +86,14 @@ class ServiceTests(unittest.TestCase):
         from preview_service import save_preset,options
         saved=save_preset(self.c,'Reading')
         self.assertTrue(saved['saved'])
-        choice=options(self.c)['presets'][0]
+        stored=(self.root/'size-presets.json').read_bytes()
+        report=options(self.c)
+        choice=report['presets'][0]
         self.assertTrue(choice['available'])
+        current=next(row for row in report['options'] if row['size']=='current')
+        self.assertGreater(choice['physical_size_percent'],0)
+        self.assertEqual(choice['physical_size_percent'],current['physical_size_percent'])
+        self.assertEqual((self.root/'size-presets.json').read_bytes(),stored)
         enqueue(self.c,'start',preset='Reading',fingerprint=choice['fingerprint'])
         self.assertEqual(self.service.step(),'preview',self.health)
         self.assertEqual(Service(self.c).step(),'reverted')

@@ -74,7 +74,7 @@ def options(c):
         item={'name':entry['name'],'rotation':entry['rotation'],'revision':size_presets.revision(entry),'available':False}
         try:
             pair=size_presets.resolve(entry,context['rotation'],report);files=build(config,report,pair)
-            item.update(available=True,modes=pair['modes'],fingerprint=hashlib.sha256(files['config.json']).hexdigest())
+            item.update(available=True,modes=pair['modes'],physical_size_percent=physical_size_percent(pair['modes']),fingerprint=hashlib.sha256(files['config.json']).hexdigest())
         except ValueError as error:item['reason']=str(error)
         presets.append(item)
     if hardware.context()!=context:raise RuntimeError('Inputs or orientation changed during inspection')

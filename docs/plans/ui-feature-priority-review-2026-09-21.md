@@ -142,6 +142,11 @@ Order 3 is partly delivered: comparison samples lead into the existing preview c
 reference filters preserve the selected monitor; Displays exposes Save current size; and
 open choices latch readiness loss or a newer contradictory rotation readback. The chooser
 has its own cohesive module. Saved visual calibration metadata remains unimplemented.
+Named size presets already bind the selected mode pair to host, enrolled display identities,
+DDC identities and orientation; a second store is not needed to remember a preferred pair.
+Resolved presets now also expose the existing model-based physical-size estimate for preview
+comparison. Extra visual calibration metadata should follow a demonstrated workflow need;
+neither presets nor that estimate measure optical sharpness or viewing distance.
 
 Primary product pages were reopened for this update: [BetterDisplay](https://github.com/waydabber/BetterDisplay),
 [MonitorControl](https://github.com/MonitorControl/MonitorControl),

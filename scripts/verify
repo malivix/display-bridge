@@ -48,6 +48,7 @@ def main():
                 "-o",
                 str(build / name),
             )
+        run(str(build / "display-layout"), "--self-test")
         run(str(build / "display-setup"), "--self-test")
         for name, frameworks in (
             ("display-audio", ("Foundation", "CoreAudio")),

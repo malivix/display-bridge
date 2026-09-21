@@ -98,6 +98,95 @@ func matchingMode(_ id: CGDirectDisplayID, _ saved: Screen) throws -> CGDisplayM
     }
     return selected
 }
+func runLayoutSelfTests() {
+    func screen(_ key: String, _ w: Int, _ h: Int, rotation: Double = 0,
+                x: Int = 0, y: Int = 0, mirrorOf: String? = nil,
+                modeID: Int32? = 1, strictMode: Bool? = true) -> Screen {
+        Screen(key: key, width: w, height: h, pixelWidth: w * 2, pixelHeight: h * 2,
+               hz: 120, rotation: rotation, x: x, y: y, mirrorOf: mirrorOf,
+               modeID: modeID, ioFlags: nil, strictMode: strictMode)
+    }
+    func expect(_ condition: Bool, _ name: String) {
+        if !condition {
+            FileHandle.standardError.write(Data("FAIL \(name)\n".utf8)); exit(1)
+        }
+    }
+    let pg = screen("pg", 2048, 1152)
+    let benq = screen("benq", 1280, 853, x: -1280)
+
+    expect(mismatches(baseline: [pg, benq], live: [pg, benq]).isEmpty,
+           "identical layouts match")
+    expect(mismatches(baseline: [pg, benq], live: [pg]).map(\.key) == ["topology"],
+           "a missing display is a topology mismatch")
+    expect(mismatches(baseline: [pg], live: [pg, benq]).map(\.key) == ["topology"],
+           "an extra display is a topology mismatch")
+
+    let mirrored = screen("benq", 1280, 853, mirrorOf: "pg")
+    expect(mismatches(baseline: [pg, mirrored], live: [pg, mirrored]).isEmpty,
+           "a mirrored screen matches when it mirrors its master")
+    expect(!mismatches(baseline: [pg, mirrored], live: [pg, benq]).isEmpty,
+           "a mirrored screen does not match when it has its own desktop")
+    expect(!mismatches(baseline: [pg, benq], live: [pg, mirrored]).isEmpty,
+           "an unmirrored screen does not match when it is mirrored")
+
+    let rotated = screen("benq", 853, 1280, rotation: 90, x: -853)
+    expect(!mismatches(baseline: [pg, benq], live: [pg, rotated]).isEmpty,
+           "rotation is compared")
+    let moved = screen("benq", 1280, 853, x: -999)
+    expect(!mismatches(baseline: [pg, benq], live: [pg, moved]).isEmpty,
+           "position is compared")
+
+    let mirroredRotated = screen("benq", 853, 1280, rotation: 90, x: -853, mirrorOf: "pg")
+    expect(mismatches(baseline: [pg, screen("benq", 1280, 853, mirrorOf: "pg")],
+                      live: [pg, mirroredRotated]).isEmpty,
+           "a mirrored screen ignores its own geometry and rotation")
+
+    print("PASS layout comparison: topology, mirroring, rotation, position")
+}
+struct Mismatch { let key: String; let reason: String }
+
+/// Does `live` already satisfy `baseline`? Pure: no CoreGraphics calls, so this is
+/// testable without displays and is the only place layout equality is defined.
+/// A screen naming `mirrorOf` is compared only on that relationship, because a
+/// mirrored display adopts its master's mode, geometry and rotation.
+func mismatches(baseline: [Screen], live: [Screen]) -> [Mismatch] {
+    let now = Dictionary(uniqueKeysWithValues: live.map { ($0.key, $0) })
+    guard Set(now.keys) == Set(baseline.map(\.key)) else {
+        return [Mismatch(key: "topology", reason: "online set differs from the saved set")]
+    }
+    var found: [Mismatch] = []
+    for saved in baseline {
+        let live = now[saved.key]!
+        if let master = saved.mirrorOf {
+            if live.mirrorOf != master {
+                found.append(Mismatch(key: saved.key, reason: "is not mirroring \(master)"))
+            }
+            continue
+        }
+        if live.mirrorOf != nil {
+            found.append(Mismatch(key: saved.key, reason: "is mirrored but should not be"))
+            continue
+        }
+        if saved.strictMode == true, let wanted = saved.modeID, live.modeID != wanted {
+            found.append(Mismatch(key: saved.key, reason: "mode differs"))
+        }
+        if live.width != saved.width || live.height != saved.height ||
+           live.pixelWidth != saved.pixelWidth || live.pixelHeight != saved.pixelHeight ||
+           live.rotation != saved.rotation {
+            found.append(Mismatch(key: saved.key, reason: "size or rotation differs"))
+        }
+        if let flags = saved.ioFlags, live.ioFlags != flags {
+            found.append(Mismatch(key: saved.key, reason: "mode flags differ"))
+        }
+        if abs(live.hz - saved.hz) > 0.2 {
+            found.append(Mismatch(key: saved.key, reason: "refresh differs"))
+        }
+        if live.x != saved.x || live.y != saved.y {
+            found.append(Mismatch(key: saved.key, reason: "position differs"))
+        }
+    }
+    return found
+}
 func run() throws {
     let args = CommandLine.arguments
     if args.count == 2 && args[1] == "status" {
@@ -178,6 +267,7 @@ func run() throws {
         throw error
     }
 }
+if CommandLine.arguments.contains("--self-test") { runLayoutSelfTests(); exit(0) }
 do { try run() }
 catch {
     FileHandle.standardError.write(Data(("\(error)\n").utf8)); exit(1)

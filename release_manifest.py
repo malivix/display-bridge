@@ -16,6 +16,7 @@ MENU_SOURCES = (
     "native/menu/ListeningCheck.swift",
     "native/menu/Presentation.swift",
     "native/menu/PresetWindows.swift",
+    "native/menu/SizeChooser.swift",
     "native/menu/ReadabilitySamples.swift",
     "native/menu/PercentChooser.swift",
     "native/menu/MenuApp.swift",

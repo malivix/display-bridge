@@ -64,9 +64,10 @@ rotation or other settings; refresh after changing them.
 ## Precise brightness and volume
 
 In Controls, choose a monitor and **Set percentage…**. Select brightness or monitor
-speaker volume, move the slider, then choose **Apply requested percentage**. Dragging
+speaker volume, type a whole percentage from 0 to 100 or move the slider, then choose **Apply requested percentage**. Dragging
 never sends writes. The proposal starts from the selected setting’s previous reading, labeled unrefreshed.
-Without a reading, Apply stays disabled until you move the slider. Switching between
+Without a reading, Apply stays disabled until you enter a valid number or move the slider.
+Blank, fractional and out-of-range input cannot be applied. Switching between
 brightness and volume resets the proposal to that feature’s own reading;
 any previous reading is shown separately. Cancel/Escape discards the proposal.
 

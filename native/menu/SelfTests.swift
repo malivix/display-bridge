@@ -185,6 +185,10 @@ func runMenuSelfTests() {
     let snapshot:[String:Any]=["monitor":"benq","read_only":true,"settings":["luminance":setting,"volume":setting]]
     let snapshotArgs=["monitor-settings","--monitor","benq"]
     precondition(monitorResult(snapshot,snapshotArgs)?.summary(at:Date()).contains("Brightness: 30%") == true)
+    for text in ["", " ", "-1", "+1", "1.5", "101", "1e2", "25%", "１２", "1\n", "0000"] {
+        precondition(requestedPercentage(text)==nil)
+    }
+    for value in [0,1,50,99,100] {precondition(requestedPercentage(String(value))==value)}
     var readings=MonitorReadings()
     let readDate=Date(timeIntervalSince1970:1000)
     _=readings.accept(monitorResult(validMonitor)!,at:readDate)

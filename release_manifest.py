@@ -9,6 +9,8 @@ MENU_SOURCES = (
     "native/menu/EditingMenu.swift",
     "native/menu/main.swift",
     "native/menu/Commands.swift",
+    "native/menu/ShortcutStatus.swift",
+    "native/menu/StatusIntent.swift",
     "native/menu/MonitorResults.swift",
     "native/menu/HealthReport.swift",
     "native/menu/EnrollmentReview.swift",

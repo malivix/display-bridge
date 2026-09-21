@@ -17,7 +17,7 @@ func automationPaused(_ control:[String:Any],_ now:Double=Date().timeIntervalSin
 // Presentation only: hardware authorization remains in the controller.
 func statusFresh(_ health:[String:Any],_ now:Double=Date().timeIntervalSince1970)->Bool {
     guard let updated=health["updated_at"] as? Double,updated.isFinite,now.isFinite else{return false}
-    return now>=updated && now-updated<15
+    return now>=updated && now-updated<menuStatusFreshnessInterval
 }
 func statusAge(_ health:[String:Any],_ now:Double=Date().timeIntervalSince1970)->String {
     guard let updated=health["updated_at"] as? Double,updated.isFinite,now.isFinite,now>=updated else{return "Status age unavailable"}

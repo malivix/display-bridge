@@ -3,6 +3,8 @@ import Foundation
 import CoreFoundation
 import Darwin
 
+let menuStatusFreshnessInterval:TimeInterval = 15
+
 enum PresetCommands {
     static let brightness:Set<String>=["brightness-list","brightness-save","brightness-apply","brightness-remove"]
     static let size:Set<String>=["preset-save","preset-remove"]

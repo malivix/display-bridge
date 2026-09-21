@@ -16,6 +16,11 @@ without resetting recovery or replaying actions.
 reference filtering and modal validity; `PresetWindows.swift` owns saved-preset dialogs and
 panel keyboard routing.
 `SelfTests.swift` holds isolated checks; `main.swift` selects test entry points or starts the app.
+`ShortcutStatus.swift` projects bounded local observations into allowlisted status
+fields; `StatusIntent.swift` exposes them as an App Intents entity and read-only action.
+The action is source-implemented; signing-aware metadata packaging and companion-app
+execution qualification remain pending. Its latest-status entity re-reads on resolution
+and never authorizes hardware mutations.
 The app submits controller commands and reads health;
 it does not maintain an independent hardware state machine. CLI execution has bounded time
 and output, so a stalled child does not permanently disable menu actions. `observability.py`,

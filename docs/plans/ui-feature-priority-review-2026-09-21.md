@@ -338,3 +338,13 @@ field from another action and launching the app from stopped. Duplicate test-bun
 registrations initially selected the wrong build and were removed narrowly.
 [Evidence and limits](../log/shortcuts-signed-execution.md). Production status,
 process integration and signing-aware packaging remain the next implementation work.
+
+### Real status projection and action source delivered
+
+The App Intent now has a bounded real-state reader and six typed, allowlisted result
+fields. Native tests verify strict freshness, unknown/malformed state, requested pause,
+recovery and read-only file behavior. The actual action's multi-file metadata extraction
+also passed. [Validation and limits](../log/shortcuts-status-projection.md).
+The feature remains unavailable through the standard installer until signing-aware
+packaging and companion-process execution are qualified. Those are the next slice;
+do not substitute synthetic execution evidence for the real app's integration.

@@ -1,7 +1,7 @@
 # Native macOS Shortcuts integration
 
 Status: signed synthetic integration qualified on the development Mac;
-production feature not yet delivered.
+real status projection and action source implemented; production feature not yet delivered.
 This extends the [current product plan](ui-feature-priority-review-2026-09-21.md).
 
 ## Intended user outcome
@@ -80,6 +80,14 @@ use the existing coordinated snapshot. Do not introduce a new status store or
 write to the controller's health file. Ordinary tests must use disposable state.
 
 ## Later actions and acceptance
+
+The real source action now exposes six allowlisted fields via the bounded regular-file
+reader. Freshness shares the menu's 15-second threshold. Timestamp/boolean types are
+checked strictly; missing recovery information stays unknown. Requested pause is
+distinct from reported controller state. The latest-status entity re-reads when
+resolved; it is not a persistent historical snapshot. The current installer does not
+yet package its App Intents metadata or qualified signing identity. Do not advertise
+it as an available installed action until that integration passes.
 
 Timed pause/resume follows read-only status. Validate bounded inputs and route
 through the existing CLI/controller boundary. Distinguish request acceptance,

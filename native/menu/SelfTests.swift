@@ -4,6 +4,7 @@ import UserNotifications
 import Darwin
 
 func runMenuSelfTests() {
+    runShortcutStatusTests()
     func installationJSON(_ report:[String:Any])->String {String(decoding:try! JSONSerialization.data(withJSONObject:report),as:UTF8.self)}
     let installed=demoInstallationReport("ready",200)
     precondition(installationSummary(installationJSON(installed),200).contains("Reported outcome: Completed"))
@@ -707,4 +708,71 @@ func runNotificationTest() {
         }
     }
     dispatchMain()
+}
+
+func runShortcutStatusTests() {
+    let base:[String:Any] = ["updated_at":100.0,"status":"ready","profile":"extended",
+                            "recovery":["pending":false],"audio_journal_pending":false]
+    let ready=ShortcutStatusSnapshot(health:base,control:[:],now:101)
+    precondition(ready.freshness == .fresh && ready.controller == .ready && ready.arrangement == .extended)
+    precondition(ready.ageSeconds==1 && ready.recovery == .clear && ready.pauseRequest == .notPaused)
+    let entity=DisplayBridgeStatusResult(snapshot:ready)
+    precondition(entity.freshness == .fresh && entity.controller == .ready && entity.ageSeconds==1)
+    precondition(entity.arrangement == .extended && entity.recovery == .clear && entity.pauseRequest == .notPaused)
+    precondition(ShortcutStatusSnapshot(health:base,control:[:],now:115).freshness == .stale)
+    for bad in [true as Any,"100",Double.nan,Double.infinity,-1.0,102.0] {
+        var health=base;health["updated_at"]=bad
+        let result=ShortcutStatusSnapshot(health:health,control:[:],now:101)
+        precondition(result.freshness == .unavailable && result.controller == .unknown && result.ageSeconds==nil)
+    }
+    for state in ["unexpected-private-error","", "unknown"] {
+        var health=base;health["status"]=state
+        precondition(ShortcutStatusSnapshot(health:health,control:[:],now:101).freshness == .unavailable)
+    }
+    var special=base;special["status"]="state-error";special["profile"]=NSNull()
+    let error=ShortcutStatusSnapshot(health:special,control:nil,now:101)
+    precondition(error.freshness == .fresh && error.controller == .stateError && error.arrangement == .unknown)
+    precondition(error.pauseRequest == .unknown)
+    special["status"]="preview-needs-repair"
+    precondition(ShortcutStatusSnapshot(health:special,control:[:],now:101).controller == .previewNeedsRepair)
+    special["status"]="waiting-for-known-input";special["profile"]="unknown"
+    precondition(ShortcutStatusSnapshot(health:special,control:[:],now:101).arrangement == .unknown)
+    special=base;special["recovery"]=["pending":true]
+    precondition(ShortcutStatusSnapshot(health:special,control:[:],now:101).recovery == .pending)
+    special=base;special.removeValue(forKey:"audio_journal_pending")
+    precondition(ShortcutStatusSnapshot(health:special,control:[:],now:101).recovery == .unknown)
+    special=base;special["recovery"]=["pending":0]
+    precondition(ShortcutStatusSnapshot(health:special,control:[:],now:101).recovery == .unknown)
+    special["audio_journal_pending"]=true
+    precondition(ShortcutStatusSnapshot(health:special,control:[:],now:101).recovery == .pending)
+    for (control,expected) in [(["paused":true],ShortcutPauseRequest.paused),
+                               (["paused":true,"pause_until":102.0],.paused),
+                               (["paused":true,"pause_until":101.0],.notPaused),
+                               (["paused":1],.unknown),(["paused":"true"],.unknown),
+                               (["paused":true,"pause_until":true],.unknown),
+                               (["paused":false,"pause_until":Double.nan],.unknown)] as [([String:Any],ShortcutPauseRequest)] {
+        precondition(ShortcutStatusSnapshot(health:base,control:control,now:101).pauseRequest==expected)
+    }
+    special=base;special["error"]="private detail";special["inputs"]=["untrusted":"value"]
+    special["audio"]=["selected":["name":"Private speaker name"]];special["pid"]=1234
+    precondition(ShortcutStatusSnapshot(health:special,control:[:],now:101)==ready)
+    let root=FileManager.default.temporaryDirectory.appendingPathComponent("shortcut-status-test-"+UUID().uuidString)
+    let missing=ShortcutStatusSnapshot.read(root:root,now:101)
+    precondition(missing.freshness == .unavailable && !FileManager.default.fileExists(atPath:root.path))
+    try! FileManager.default.createDirectory(at:root,withIntermediateDirectories:true)
+    defer {try? FileManager.default.removeItem(at:root)}
+    let health=root.appendingPathComponent("health.json"),control=root.appendingPathComponent("control.json")
+    try! JSONSerialization.data(withJSONObject:base).write(to:health)
+    precondition(ShortcutStatusSnapshot.read(root:root,now:101)==ready)
+    precondition(try! FileManager.default.contentsOfDirectory(atPath:root.path)==["health.json"])
+    precondition(mkfifo(control.path,0o600)==0)
+    precondition(ShortcutStatusSnapshot.read(root:root,now:101).pauseRequest == .unknown)
+    try! FileManager.default.removeItem(at:control)
+    try! FileManager.default.createSymbolicLink(at:control,withDestinationURL:health)
+    precondition(ShortcutStatusSnapshot.read(root:root,now:101).pauseRequest == .unknown)
+    try! Data("{broken".utf8).write(to:health)
+    precondition(ShortcutStatusSnapshot.read(root:root,now:101).freshness == .unavailable)
+    try! Data(repeating:32,count:1_048_577).write(to:health)
+    precondition(ShortcutStatusSnapshot.read(root:root,now:101).freshness == .unavailable)
+    print("PASS allowlisted Shortcuts status: freshness, recovery, pause requests and bounded read-only files")
 }

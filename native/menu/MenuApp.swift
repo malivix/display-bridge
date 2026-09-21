@@ -425,6 +425,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
             }
         }
         NSApp.setActivationPolicy(.accessory)
+        NSApp.mainMenu=makeEditingMenu(allowClipboard:!demo)
         item=NSStatusBar.system.statusItem(withLength:NSStatusItem.variableLength)
         item.button?.image=NSImage(systemSymbolName:"display.2",accessibilityDescription:"Display Bridge")
         if !demo {

@@ -6,6 +6,7 @@ MENU_BUILD = "2102"
 
 # One source inventory for menu installation, prerequisite checks and native verification.
 MENU_SOURCES = (
+    "native/menu/EditingMenu.swift",
     "native/menu/main.swift",
     "native/menu/Commands.swift",
     "native/menu/MonitorResults.swift",

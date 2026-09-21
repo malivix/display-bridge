@@ -474,6 +474,17 @@ func timingSummary(_ json:String)->String {
     return lines.joined(separator:"\n")
 }
 
+// Notification previews may be visible on the lock screen. Keep raw controller
+// errors, device names and local paths inside the app's private status view.
+func failureNotificationBody(_ health:[String:Any])->String? {
+    switch health["status"] as? String {
+    case "degraded":return "Automatic display or audio recovery needs attention. Open Display Bridge to inspect the current failure and available repair action."
+    case "state-error":return "Saved settings or recovery state could not be used safely. Open Display Bridge to check health before making changes."
+    case "preview-needs-repair":return "Display-size restoration needs attention. Open Display Bridge to inspect the pending restoration and next action."
+    default:return nil
+    }
+}
+
 func failureIncident(_ health:[String:Any])->String? {
     let state=health["status"] as? String ?? ""
     guard ["degraded","state-error","preview-needs-repair"].contains(state) else{return nil}

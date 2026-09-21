@@ -415,7 +415,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
         }
         NSApp.setActivationPolicy(.accessory)
         item=NSStatusBar.system.statusItem(withLength:NSStatusItem.variableLength)
-        item.button?.image=NSImage(systemSymbolName:"display.2",accessibilityDescription:"Display Auto")
+        item.button?.image=NSImage(systemSymbolName:"display.2",accessibilityDescription:"Display Bridge")
         if !demo {
         UNUserNotificationCenter.current().delegate=self
         let repair=UNNotificationAction(identifier:"repair",title:"Repair audio",options:[])
@@ -826,10 +826,9 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
             }
             return
         }
-        guard let incident=failureIncident(health),let attempt=failureAlerts.reserve(incident) else{return}
-        let r=health["recovery"] as? [String:Any] ?? [:]
-        let content=UNMutableNotificationContent();content.title="Display Auto needs attention"
-        content.body=health["error"] as? String ?? r["error"] as? String ?? "Recovery stopped after three attempts. Open the display menu for details."
+        guard let incident=failureIncident(health),let body=failureNotificationBody(health),let attempt=failureAlerts.reserve(incident) else{return}
+        let content=UNMutableNotificationContent();content.title="Display Bridge needs attention"
+        content.body=body
         content.categoryIdentifier=state=="state-error" || state=="preview-needs-repair" ? "state-failure":"failure"
         content.userInfo=["incident":incident]
         center.getNotificationSettings{settings in

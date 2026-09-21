@@ -171,7 +171,10 @@ retrying.
 
 Persistent-failure notifications suppress repeats for the same incident until recovery;
 distinct failures may alert separately. Clicking opens the status window. An outdated
-repair notification opens status instead of issuing repair.
+repair notification opens status instead of issuing repair. Notifications use a brief
+failure-category summary; raw errors, device names and paths remain in the private
+status view. The banner uses Display Bridge, while macOS may still list the installed
+application as Display Auto in notification settings.
 
 ## Setup checks, reports and privacy
 

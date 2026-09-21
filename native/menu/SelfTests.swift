@@ -468,6 +468,14 @@ func runMenuSelfTests() {
     precondition(ddc.contains("Read recovered · 1.25 s") && ddc.contains("benq"))
     var alerts=FailureAlerts()
     let broken:[String:Any]=["status":"degraded","profile":"pg","recovery":["reason":"audio"]]
+    for state in ["degraded","state-error","preview-needs-repair"] {
+        let body=failureNotificationBody(["status":state,"error":"PRIVATE-DEVICE-DETAIL","recovery":["error":"PRIVATE-PATH"]])!
+        precondition(body.contains("Open Display Bridge") && body.count<200)
+        precondition(!body.contains("PRIVATE"))
+    }
+    for state in ["ready","recovering","settling","waiting-for-ddc","unknown"] {
+        precondition(failureNotificationBody(["status":state])==nil)
+    }
     let first=failureIncident(broken)!
     var retry=broken;retry["updated_at"]=123;retry["recovery"]=["reason":"audio","attempts":3]
     precondition(failureIncident(retry)==first)

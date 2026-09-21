@@ -55,6 +55,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
     var displayTextIndex:Int?
     var panelActions:[NSButton]=[]
     var previewActions:[NSButton]=[]
+    var previewConfirmationRow:NSStackView?
     var previewToken:String?
     var busy=false
     var operationStarted:Double?
@@ -135,6 +136,13 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
             let copySummary=NSButton(title:"Copy reviewed summary",target:self,action:#selector(copyReviewedSummary))
             copySummary.toolTip="Copy only the displayed support-summary body. Review it before sharing."
             reportRow.addArrangedSubview(copySummary);copySummaryButton=copySummary;scalableControls.append(copySummary)
+            let more=NSButton(title:"More controls",target:self,action:#selector(openControls(_:)))
+            let actions=NSStackView(views:[more]);actions.spacing=12;reportRow.addArrangedSubview(actions);scalableControls.append(more)
+            for (title,action) in [("Health","doctor"),("Diagnostics","diagnostics")] {
+                let button=NSButton(title:title,target:self,action:#selector(panelAction(_:)))
+                button.identifier=NSUserInterfaceItemIdentifier(action);actions.addArrangedSubview(button)
+                panelActions.append(button);scalableControls.append(button)
+            }
             let reportNote=NSTextField(wrappingLabelWithString:"");reportNote.translatesAutoresizingMaskIntoConstraints=false
             detailView.addSubview(reportNote);reportStatus=reportNote;scalableControls.append(reportNote)
             reportRow.translatesAutoresizingMaskIntoConstraints=false;scroll.translatesAutoresizingMaskIntoConstraints=false
@@ -153,13 +161,18 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
             modeScroll.documentView=modeContent;modeView.addSubview(modeScroll);modeText=modeContent
             let refreshModes=NSButton(title:"Refresh display details",target:self,action:#selector(panelAction(_:)))
             refreshModes.identifier=NSUserInterfaceItemIdentifier("display-info");refreshModes.translatesAutoresizingMaskIntoConstraints=false;scalableControls.append(refreshModes)
-            modeView.addSubview(refreshModes);panelActions.append(refreshModes)
+            let displayActions=NSStackView();displayActions.orientation = .vertical;displayActions.alignment = .leading;displayActions.spacing=10
+            displayActions.translatesAutoresizingMaskIntoConstraints=false;modeView.addSubview(displayActions)
+            displayActions.addArrangedSubview(refreshModes);panelActions.append(refreshModes)
+            let previewSize=NSButton(title:"Preview size…",target:self,action:#selector(panelAction(_:)))
+            previewSize.identifier=NSUserInterfaceItemIdentifier("preview-options")
+            displayActions.addArrangedSubview(previewSize);previewActions.append(previewSize);scalableControls.append(previewSize)
             let snapshotStatus=NSTextField(wrappingLabelWithString:"");snapshotStatus.isSelectable=true
             snapshotStatus.translatesAutoresizingMaskIntoConstraints=false;modeView.addSubview(snapshotStatus)
             modeStatus=snapshotStatus;scalableControls.append(snapshotStatus)
             NSLayoutConstraint.activate([snapshotStatus.leadingAnchor.constraint(equalTo:modeView.leadingAnchor,constant:12),snapshotStatus.trailingAnchor.constraint(equalTo:modeView.trailingAnchor,constant:-12),snapshotStatus.topAnchor.constraint(equalTo:modeView.topAnchor,constant:12)])
             modeScroll.translatesAutoresizingMaskIntoConstraints=false
-            NSLayoutConstraint.activate([refreshModes.leadingAnchor.constraint(equalTo:modeView.leadingAnchor,constant:12),refreshModes.bottomAnchor.constraint(equalTo:modeView.bottomAnchor,constant:-12),modeScroll.leadingAnchor.constraint(equalTo:modeView.leadingAnchor,constant:12),modeScroll.trailingAnchor.constraint(equalTo:modeView.trailingAnchor,constant:-12),modeScroll.topAnchor.constraint(equalTo:snapshotStatus.bottomAnchor,constant:8),modeScroll.bottomAnchor.constraint(equalTo:refreshModes.topAnchor,constant:-12)])
+            NSLayoutConstraint.activate([displayActions.leadingAnchor.constraint(equalTo:modeView.leadingAnchor,constant:12),displayActions.bottomAnchor.constraint(equalTo:modeView.bottomAnchor,constant:-12),modeScroll.leadingAnchor.constraint(equalTo:modeView.leadingAnchor,constant:12),modeScroll.trailingAnchor.constraint(equalTo:modeView.trailingAnchor,constant:-12),modeScroll.topAnchor.constraint(equalTo:snapshotStatus.bottomAnchor,constant:8),modeScroll.bottomAnchor.constraint(equalTo:displayActions.topAnchor,constant:-12)])
             displays.view=modeView;tabs.addTabViewItem(displays)
             let audioTab=NSTabViewItem(identifier:"audio");audioTab.label="Audio"
             let audioScroll=NSScrollView();audioScroll.hasVerticalScroller=true
@@ -238,18 +251,11 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
             let pause=NSButton(title:"Pause",target:self,action:#selector(togglePause(_:)));pauseButton=pause
             let sizeRow=NSStackView(views:[sizes,pause]);sizeRow.spacing=16;footer.addArrangedSubview(sizeRow)
             scalableControls.append(contentsOf:[sizes,pause])
-            let previewRow=NSStackView();previewRow.spacing=12;footer.addArrangedSubview(previewRow)
-            for (title,action) in [("Preview size…","preview-options"),("Keep size","preview-keep"),("Revert size","preview-revert")] {
+            let previewRow=NSStackView();previewRow.spacing=12;footer.addArrangedSubview(previewRow);previewConfirmationRow=previewRow
+            for (title,action) in [("Keep size","preview-keep"),("Revert size","preview-revert")] {
                 let button=NSButton(title:title,target:self,action:#selector(panelAction(_:)))
                 button.identifier=NSUserInterfaceItemIdentifier(action);previewRow.addArrangedSubview(button)
                 previewActions.append(button);scalableControls.append(button)
-            }
-            let more=NSButton(title:"More controls",target:self,action:#selector(openControls(_:)))
-            let actions=NSStackView(views:[more]);actions.spacing=12;footer.addArrangedSubview(actions);scalableControls.append(more)
-            for (title,action) in [("Health","doctor"),("Diagnostics","diagnostics")] {
-                let button=NSButton(title:title,target:self,action:#selector(panelAction(_:)))
-                button.identifier=NSUserInterfaceItemIdentifier(action);actions.addArrangedSubview(button)
-                panelActions.append(button);scalableControls.append(button)
             }
             if demo {
                 let scenarios=NSPopUpButton();scenarios.addItems(withTitles:["ready","pg-only","benq-only","stale","paused","away","unknown-input","preview","recovery","recovery-wait","presets-error","controls-error","brightness-empty","older-controller","display-refresh-failed","monitor-response-error"])
@@ -511,6 +517,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
 
         let preview=health["preview"] as? [String:Any] ?? [:]
         previewToken=preview["token"] as? String
+        previewConfirmationRow?.isHidden=preview["state"] as? String != "preview"
         for button in previewActions {
             let action=button.identifier?.rawValue
             if action=="preview-options" {button.isEnabled = !busy && controlsUsable && fresh && state=="ready" && health["profile"] as? String == "extended" && !automationPaused(control)}

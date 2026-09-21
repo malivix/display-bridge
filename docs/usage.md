@@ -16,7 +16,7 @@ or rotation calibration, use the [installation guide](install.md).
 | Displays | Refresh the logical-layout schematic and current/saved display modes. |
 | Audio | Set speaker preferences for all four profiles, preserve a manual output, resume automatic audio or request repair. |
 | Controls | Choose a monitor, read or adjust brightness/volume, manage brightness presets and check preset-command support. |
-| Window footer | Pause/Resume, change this app's text size, preview display size, and Keep/Revert an active preview. |
+| Window footer | Pause/Resume and change this app's text size. Keep/Revert appears here across all tabs during an active preview. |
 
 Overview keeps recovery near the top, with its action before long error details. Audio puts
 the current output, repair reason and manual controls before profile preferences.
@@ -28,7 +28,7 @@ both enrolled-model monitors must show this Mac in extended mode with fixed 120-
 and HDR off. The report saves no enrollment and changes no services. Use the
 [coordinated installer](install.md) for activation, which rechecks hardware independently.
 
-More controls opens the compact menu. Advanced contains rotation, timed pause, audio
+In Details, More controls opens the compact menu. Health and Diagnostics are also available there. Advanced contains rotation, timed pause, audio
 preferences, monitor controls and reports. Active preview and restoration actions remain
 at the top level. Repair actions explain why they are unavailable and recheck status when
 clicked; they do not override manual audio preservation.
@@ -63,7 +63,7 @@ rotation or other settings; refresh after changing them.
 
 ## Display size and named presets
 
-With both enrolled monitors local, extended and healthy, choose **Preview size…**. Select
+With both enrolled monitors local, extended and healthy, choose **Displays → Preview size…**. Select
 a relative size or available named preset, then **Preview selected size**. Selection alone
 changes nothing. The comparison shows current/proposed logical and framebuffer dimensions
 and an estimated interface-size change for each monitor. It compares each monitor with

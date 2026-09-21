@@ -45,7 +45,7 @@ def preflight(package, home):
         major=0
     add('macOS version',compatible and major>=13,'macOS 13 or newer is required.')
     add('Python',sys.version_info>=(3,10),'Python 3.10 or newer is required.')
-    sources=(*RUNTIME_MODULES,'setup_menu.py','scripts/test','native/display-layout.swift',
+    sources=(*RUNTIME_MODULES,'install_progress.py','setup_menu.py','scripts/test','native/display-layout.swift',
              'native/display-audio.m','native/display-rotate.m','native/display-mode-info.m',
              *MENU_SOURCES,'vendor/m1ddc/Makefile','tests/native/test_ddc.m')
     missing=[name for name in sources if not (package/name).is_file()]
@@ -82,11 +82,21 @@ def run_install(argv, resources):
 
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("host", choices=("A", "B"))
-    parser.add_argument("--preflight", action="store_true", help="Report software prerequisites without installing or accessing monitors")
+    inspection = parser.add_mutually_exclusive_group()
+    inspection.add_argument("--preflight", action="store_true", help="Report software prerequisites without installing or accessing monitors")
+    inspection.add_argument("--status", action="store_true", help="Read the latest local installer outcome without installing")
     capture = parser.add_mutually_exclusive_group()
     capture.add_argument("--capture-fixed-120", action="store_true")
     capture.add_argument("--capture-rotation", action="store_true")
     args = parser.parse_args(argv)
+    if args.status:
+        if args.capture_fixed_120 or args.capture_rotation:
+            parser.error("--status cannot be combined with capture options")
+        from install_progress import read_progress
+        result=read_progress(Path.home()/'.config/display-auto',args.host)
+        print(json.dumps(result,indent=2))
+        if not result['available']:raise SystemExit(1)
+        return
     if args.preflight:
         if args.capture_fixed_120 or args.capture_rotation:
             parser.error("--preflight cannot be combined with capture options")
@@ -120,6 +130,9 @@ def run_install(argv, resources):
     # Enqueue also takes install.lock. Recheck after exclusive acquisition so a
     # request arriving between the preliminary check and lock cannot be missed.
     require_idle_preview(root)
+    from install_progress import InstallProgress
+    progress = resources.enter_context(InstallProgress(root, role))
+    progress.phase('building')
     sdk = run(
         ["/usr/bin/xcrun", "--sdk", "macosx", "--show-sdk-path"],
         capture_output=True,
@@ -252,6 +265,7 @@ def run_install(argv, resources):
             home / "Library/LaunchAgents/io.github.display-bridge.menu.plist",
         ]
         current = root / "current"
+        progress.phase('backing-up')
         snapshot(files, backup, current)
         release = root / "releases" / (VERSION + "-" + stamp)
         release.mkdir(parents=True)
@@ -274,6 +288,7 @@ def run_install(argv, resources):
         try:
             # A failed/timed-out stop may already have taken effect. Keep it
             # inside recovery so the prior service is restarted on this path.
+            progress.phase('stopping-controller', recovery='pending')
             if running:
                 run(["launchctl", "bootout", service], check=True)
             stop_deadline = time.monotonic() + 8
@@ -288,6 +303,7 @@ def run_install(argv, resources):
                             "Previous controller has not stopped; no new files installed"
                         )
                     time.sleep(0.05)
+            progress.phase('activating')
             activated = True
             atomic_link(release, current)
             for name in INSTALLED_FILES:
@@ -302,6 +318,7 @@ def run_install(argv, resources):
             )
             (bin_dir / "display-auto.sh").chmod(0o755)
             fcntl.flock(controller_lock, fcntl.LOCK_UN)
+            progress.phase('checking-configuration')
             previous = (
                 json.loads((root / "config.json").read_text())
                 if (root / "config.json").exists()
@@ -479,6 +496,7 @@ def run_install(argv, resources):
             (root / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
             shutil.copy2(root / "manifest.json", release / "manifest.json")
             fcntl.flock(maintenance, fcntl.LOCK_UN)
+            progress.phase('starting-controller')
             launched_at = time.time()
             run(
                 ["launchctl", "bootstrap", f"gui/{os.getuid()}", str(plist)],
@@ -515,8 +533,10 @@ def run_install(argv, resources):
             # Keep companion failures inside the controller rollback boundary.
             from setup_menu import install_menu
 
+            progress.phase('installing-menu')
             install_menu(package)
         except BaseException:
+            progress.phase('recovering')
             fcntl.flock(controller_lock, fcntl.LOCK_UN)
             run(["launchctl", "bootout", service], capture_output=True)
             if activated:
@@ -536,6 +556,7 @@ def run_install(argv, resources):
             fcntl.flock(maintenance, fcntl.LOCK_UN)
             if running:
                 run(["launchctl", "bootstrap", f"gui/{os.getuid()}", str(plist)], check=True, timeout=10)
+            progress.phase('recovery-finished', recovery='completed-unverified')
             print(
                 (f"Installation failed; prior files restored from {backup}" if activated else
                  "Installation failed before activation; the active release was not changed."),
@@ -544,6 +565,7 @@ def run_install(argv, resources):
             raise
     print(f"Installed Display Bridge v{VERSION} for Mac {role}. Backup: {backup}")
     print(f"Check: {python} {bin_dir}/display-auto.py check")
+    progress.succeed()
 
 
 if __name__ == "__main__":

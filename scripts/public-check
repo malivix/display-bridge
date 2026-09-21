@@ -49,6 +49,7 @@ BLOCKED_NAMES = {
     "scaling-preview.json",
     "preview-status.json",
     "preview-request.json",
+    "install-progress.json",
 }
 PATTERNS = {
     "concrete home path": re.compile(r"/(?:Users|home)/[A-Za-z0-9_.-]+/"),
@@ -72,6 +73,7 @@ def check_blob(name, mode, data):
         or set(path.parts) & BLOCKED_PARTS
         or path.suffix in BLOCKED_SUFFIXES
         or path.name.startswith(".env")
+        or path.name.startswith(".install-progress-")
         or path.name in BLOCKED_NAMES
         or name in ("display-layout", "vendor/m1ddc/m1ddc")
     ):

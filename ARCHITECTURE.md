@@ -36,7 +36,9 @@ Native boundaries:
 release, and coordinates menu installation. `rollback.py` restores coordinated controller/menu snapshots. Backup contents are checked
 before mutation; a failed post-restore check restores the pre-rollback snapshot.
 `release_manifest.py` defines the version and installed inventory used by installation and health checks.
-The checkout is independent from the running installed release.
+The checkout is independent from the running installed release. `install_progress.py` is
+installer-only: it records the latest attempt under the install lock and provides a bounded,
+read-only status projection. It never authorizes, resumes or retries installation.
 
 Stored display keys and audio UIDs belong only in per-machine runtime configuration.
 Model vendor/product identifiers in source select supported panel specifications; they are

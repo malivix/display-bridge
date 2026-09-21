@@ -32,6 +32,25 @@ Preflight cannot be combined with either capture option.
 recovery, permissions and physical behavior remain unqualified. Continue with the setup
 requirements below; the actual installer still performs its own live checks.
 
+## Inspect the latest installation attempt
+
+```sh
+python3 install.py A --status
+```
+
+Use `B` for the other host. This reads private `install-progress.json` without creating state,
+installing or contacting monitors. Exit 0 means a valid report was read, including a failed or
+incomplete attempt; inspect its `status`, `phase` and `recovery` fields for the outcome. Exit 1
+means no valid report exists for that host. The report contains local process/timing metadata;
+keep it private unless reviewed.
+
+Reporting begins after installation locks and initial guards succeed. An earlier failure can
+leave the previous attempt's record unchanged; compare attempt IDs and start times. A stored
+`running` record is not proof the installer still runs. `process_observation` reports only
+whether that PID exists, without proving its identity. Forced termination may leave an unfinished
+phase. `completed-unverified` recovery means the rollback/restart commands returned, not that
+hardware was physically qualified. Status never resumes installation or retries recovery.
+
 ## Input mapping
 
 | Monitor | Mac A | Mac B |

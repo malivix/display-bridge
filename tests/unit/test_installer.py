@@ -200,6 +200,10 @@ class InstallerEntryTests(unittest.TestCase):
                 with self.assertRaises(expected) as caught:
                     module.main(['A'])
             self.assertEqual((root/'config.json').read_text(),'original configuration')
+            from install_progress import read_progress
+            report=read_progress(root,'A')
+            self.assertEqual(report['status'],'failed')
+            self.assertEqual(report['recovery'],'not-needed' if lock_error else 'completed-unverified' if stop_error is not None else 'pending')
             if lock_error:self.assertEqual(events,[])
             else:
                 if stop_error is not None:
@@ -222,3 +226,25 @@ class InstallerEntryTests(unittest.TestCase):
         for error in (subprocess.CalledProcessError(5,command),subprocess.TimeoutExpired(command,10),KeyboardInterrupt()):
             with self.subTest(error=type(error).__name__):
                 self.exercise_service_failure(lock_error=False,stop_error=error)
+
+    def test_status_is_read_only_and_exit_zero_means_report_available(self):
+        import json
+        from install_progress import InstallProgress
+        module=self.load()
+        with tempfile.TemporaryDirectory() as directory:
+            home=Path(directory);root=home/'.config/display-auto';root.mkdir(parents=True)
+            with InstallProgress(root,'A'):pass
+            path=root/'install-progress.json';before=path.read_bytes()
+            with patch('pathlib.Path.home',return_value=home),patch.object(module,'run',side_effect=AssertionError('Status must not run helpers')):
+                output=io.StringIO()
+                with contextlib.redirect_stdout(output):module.main(['A','--status'])
+                report=json.loads(output.getvalue())
+                self.assertTrue(report['read_only']);self.assertEqual(report['status'],'incomplete')
+                with contextlib.redirect_stdout(io.StringIO()),self.assertRaises(SystemExit) as unavailable:
+                    module.main(['B','--status'])
+                self.assertEqual(unavailable.exception.code,1)
+                with contextlib.redirect_stderr(io.StringIO()),self.assertRaises(SystemExit) as conflict:
+                    module.main(['A','--status','--capture-fixed-120'])
+                self.assertEqual(conflict.exception.code,2)
+            self.assertEqual(path.read_bytes(),before)
+            self.assertEqual(list(root.iterdir()),[path])

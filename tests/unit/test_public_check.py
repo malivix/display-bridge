@@ -9,7 +9,7 @@ check = runpy.run_path(str(Path(__file__).resolve().parents[2]/'scripts/public-c
 class PublicationTests(unittest.TestCase):
     def test_private_artifacts_cannot_be_force_added(self):
         for name in ('.local-only/notes.md', 'evidence/report.json', 'bundle.zip',
-                     'x/.env.production', 'CLAUDE.local.md', 'config.json', 'display-layout', 'vendor/m1ddc/.objects/a.o'):
+                     'x/.env.production', 'CLAUDE.local.md', 'config.json', 'install-progress.json', 'nested/.install-progress-synthetic', 'display-layout', 'vendor/m1ddc/.objects/a.o'):
             with self.subTest(name=name):
                 self.assertTrue(check(name, '100644', b'private'))
 

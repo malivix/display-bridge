@@ -35,3 +35,6 @@ AGENTS.local.md
 /health.json
 /control.json
 /recovery.json
+
+/install-progress.json
+.install-progress-*

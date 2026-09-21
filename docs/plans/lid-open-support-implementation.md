@@ -32,6 +32,12 @@ baseline, so the lid needs no new saved baselines.
 - Author commits as `Malivix <20479554+malivix@users.noreply.github.com>`.
 - The derived baseline file keeps the name `rotation-active.json`. Do not rename it.
 - Stage A is behavior-preserving. Any observable change in Stage A is a bug.
+- Locate every edit site by its unique anchor text, never by the line numbers quoted
+  in this plan. Task 1 inserts code above every later anchor, so the numbers are stale
+  before you read them. They are advisory only.
+- A baseline row that names `mirrorOf` still carries its master's geometry, because rows
+  decode into a type whose geometry is required. Those values are never compared and
+  never applied; they describe what the mirrored display will show.
 
 ---
 
@@ -279,7 +285,9 @@ Replace lines 117-127 of `native/display-layout.swift`:
     }
 ```
 
-with:
+with this, **keeping `let source = args[3]` and its `require` exactly as they are** —
+Task 3 removes them. Removing them here leaves the `selected` filter below referencing a
+name that no longer exists, so this task could not compile or verify itself:
 
 ```swift
     // Set equality pins the topology exactly; it is strictly as strong as also
@@ -288,6 +296,8 @@ with:
                 "Display topology differs from the saved setup; no changes applied")
     try require(unknownMasters(baseline: baseline.screens).isEmpty,
                 "Saved layout mirrors a display that is not a source in the same baseline; no changes applied")
+    let source = args[3]
+    try require(source == "extended" || byKey[source] != nil, "Unknown source; no changes applied")
     for saved in baseline.screens where saved.mirrorOf == nil {
         try require(saved.width > 0 && saved.height > 0 && saved.pixelWidth > 0 && saved.pixelHeight > 0 &&
                     saved.hz.isFinite && saved.hz >= 0 &&
@@ -306,8 +316,7 @@ swiftc -sdk "$SDK" -target arm64-apple-macos13.0 -O native/display-layout.swift 
 /tmp/dl-test --self-test
 ```
 
-Expected: PASS lines, exit 0. Compilation will still fail at `let source = args[3]` removal in
-Task 3 only if you removed it here; leave `source` in place for now.
+Expected: PASS lines, exit 0, and the file still compiles because `source` is untouched.
 
 - [ ] **Step 5: Commit**
 
@@ -505,8 +514,15 @@ Append to `tests/unit/test_controller.py` inside `ReliabilityTests`:
             {'key': 'BQ', 'width': 1280, 'height': 853, 'x': -1280, 'y': 0, 'rotation': 90,
              'pixelWidth': 2560, 'pixelHeight': 1706, 'hz': 120, 'modeID': 2, 'strictMode': True}]}
         config = {'keys': {'pg': 'PG', 'benq': 'BQ'}, 'baseline': saved}
-        mirrored = next(s for s in c.derive_baseline(config, 'pg')['screens'] if s['key'] == 'BQ')
-        self.assertEqual(mirrored, {'key': 'BQ', 'mirrorOf': 'PG'})
+        rows = {s['key']: s for s in c.derive_baseline(config, 'pg')['screens']}
+        mirrored, master = rows['BQ'], rows['PG']
+        self.assertEqual(mirrored['mirrorOf'], 'PG')
+        # Rows decode into a type whose geometry is required, so a mirrored row carries
+        # its master's. It never carries a mode requirement of its own.
+        for field in ('width', 'height', 'pixelWidth', 'pixelHeight', 'hz', 'rotation'):
+            self.assertEqual(mirrored[field], master[field], field)
+        self.assertNotIn('modeID', mirrored)
+        self.assertNotIn('strictMode', mirrored)
 ```
 
 - [ ] **Step 2: Run it to verify it fails**
@@ -522,23 +538,34 @@ Expected: FAIL, `module 'controller' has no attribute 'derive_baseline'`.
 Replace `matches` (lines 196-220) with:
 
 ```python
+GEOMETRY = ('width', 'height', 'pixelWidth', 'pixelHeight', 'hz', 'rotation', 'x', 'y')
+
 def derive_baseline(config, profile):
     """The layout intent for a profile, as a baseline the native helper can apply.
 
     A screen keeps its saved mode when it shows its own desktop. A screen that should
-    mirror carries only its key and master, because a mirrored display adopts its
-    master's mode, geometry and rotation. This is the only description of intent;
-    the native helper owns the comparison against the live layout.
+    mirror names its master and carries that master's geometry, because a mirrored
+    display adopts its master's mode: the values are never compared and never applied,
+    they describe what it will show. This is the only description of intent; the native
+    helper owns the comparison against the live layout.
     """
     keys = config['keys']
     source = keys.get(profile)
+    saved_rows = {s['key']: s for s in config['baseline']['screens']}
+
+    def mirror_row(key, master):
+        row = {field: saved_rows[master][field]
+               for field in GEOMETRY if field in saved_rows.get(master, {})}
+        row.update(key=key, mirrorOf=master)
+        return row
+
     screens = []
     for saved in config['baseline']['screens']:
         if source is None or saved['key'] == source:
             screens.append(dict(saved, x=saved['x'] if source is None else 0,
                                 y=saved['y'] if source is None else 0))
         else:
-            screens.append({'key': saved['key'], 'mirrorOf': source})
+            screens.append(mirror_row(saved['key'], source))
     return {'screens': screens}
 ```
 
@@ -929,10 +956,15 @@ git commit -m "feat(controller): accept an enrolled built-in display in configur
             return rows.get('LID')
 
         # The PG never rotates, so it is the target whenever it is present.
-        self.assertEqual(lid('extended'), {'key': 'LID', 'mirrorOf': 'PG'})
-        self.assertEqual(lid('pg'), {'key': 'LID', 'mirrorOf': 'PG'})
+        self.assertEqual(lid('extended')['mirrorOf'], 'PG')
+        self.assertEqual(lid('pg')['mirrorOf'], 'PG')
         # Only when the PG is away does the BenQ become the target.
-        self.assertEqual(lid('benq'), {'key': 'LID', 'mirrorOf': 'BQ'})
+        self.assertEqual(lid('benq')['mirrorOf'], 'BQ')
+        # The lid has no saved geometry of its own, so it carries its target's. The
+        # portrait BenQ's geometry must never leak onto the lid while the PG is present.
+        self.assertEqual(lid('extended')['width'], 2048)
+        self.assertEqual(lid('extended')['rotation'], 0)
+        self.assertEqual(lid('benq')['width'], 853)
         # A closed lid contributes no row at all.
         self.assertNotIn('LID', {s['key'] for s in
                                  c.derive_baseline(config, 'extended')['screens']})
@@ -976,9 +1008,12 @@ def derive_baseline(config, profile, lid_online=False):
         # The PG never rotates, so it is the target whenever it shows this Mac; the
         # BenQ is the target only when the PG is away.
         target = keys['pg'] if profile in ('extended', 'pg') else keys['benq']
-        screens.append({'key': builtin, 'mirrorOf': target})
+        screens.append(mirror_row(builtin, target))
     return {'screens': screens}
 ```
+
+Restate the whole function including `GEOMETRY` and the `mirror_row` helper from Task 4, so
+the lid row is built the same way as any other mirrored row.
 
 Pass `lid_online` from `apply`, computed from the live layout:
 
@@ -994,14 +1029,18 @@ def apply(config, profile, deadline=None):
     return json.loads(result).get('changed', False)
 ```
 
-Relax the topology guard that produces `inactive-setup` so the enrolled pair plus the
-enrolled built-in is an accepted set, while any other extra display still idles. Locate it via:
+Relax the topology guard that produces `inactive-setup`. Its anchor is the raise in
+`display-auto.py`:
 
-```bash
-grep -n "is not the active two-monitor setup" display-auto.py
+```python
+        raise SetupUnavailable('Saved PG and BenQ pair is not the active two-monitor setup; automation idle')
 ```
 
-and widen its accepted key set to include `keys['builtin']` when the built-in is online.
+Widen its guarding condition so the enrolled pair, optionally plus the enrolled built-in, is
+accepted, while any other extra display still idles. Update the message too, since the
+accepted setup is no longer necessarily two monitors — for example `Saved displays are not the
+active setup; automation idle`. Grep for `SetupUnavailable` to find every place that message
+or class is asserted on, including tests, and update them together.
 
 - [ ] **Step 4: Run the tests to verify they pass**
 

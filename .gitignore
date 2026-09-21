@@ -38,3 +38,4 @@ AGENTS.local.md
 
 /install-progress.json
 .install-progress-*
+.superpowers/

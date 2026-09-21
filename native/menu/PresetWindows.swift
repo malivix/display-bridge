@@ -232,6 +232,15 @@ func panelRefreshArguments(_ tab:String,_ report:String,_ monitor:String)->[Stri
 }
 final class DisplayPanel: NSWindow {
     var onShortcut:((PanelShortcut)->Void)?
+    override func makeFirstResponder(_ responder:NSResponder?)->Bool {
+        let accepted=super.makeFirstResponder(responder)
+        if accepted,let control=firstResponder as? NSControl,control.enclosingScrollView != nil {
+            // Tab can focus controls below the viewport without revealing them.
+            contentView?.layoutSubtreeIfNeeded()
+            control.scrollToVisible(control.bounds.insetBy(dx:-4,dy:-4))
+        }
+        return accepted
+    }
     override func performKeyEquivalent(with event:NSEvent)->Bool {
         guard isKeyWindow,NSApp.modalWindow==nil,attachedSheet==nil,
               let shortcut=panelShortcut(event.charactersIgnoringModifiers ?? "",event.modifierFlags,event.isARepeat),

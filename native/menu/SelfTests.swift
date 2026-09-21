@@ -368,6 +368,22 @@ func runMenuSelfTests() {
     precondition(audioRepairReason(audioHealth,["paused":true],false) != nil)
     precondition(audioRepairReason(audioHealth,[:],true) != nil)
     precondition(audioRepairReason(audioHealth,["audio_manual_until":Date().timeIntervalSince1970+60],false) != nil)
+    // Exercise actual window focus and clipping without presenting a window.
+    _ = NSApplication.shared
+    let focusPanel=DisplayPanel(contentRect:NSRect(x:0,y:0,width:500,height:300),styleMask:[.titled],backing:.buffered,defer:false)
+    let focusScroll=NSScrollView(frame:NSRect(x:0,y:0,width:500,height:300))
+    let focusDocument=NSView(frame:NSRect(x:0,y:0,width:500,height:900))
+    focusScroll.documentView=focusDocument;focusPanel.contentView!.addSubview(focusScroll)
+    let focusPopup=NSPopUpButton(frame:NSRect(x:20,y:30,width:200,height:30))
+    focusPopup.addItem(withTitle:"Example speaker");focusDocument.addSubview(focusPopup)
+    focusScroll.contentView.scroll(to:NSPoint(x:0,y:600))
+    precondition(focusPanel.makeFirstResponder(focusPopup))
+    precondition(focusPopup.visibleRect.contains(focusPopup.bounds),"Keyboard focus must reveal an offscreen control")
+    let focusedOrigin=focusScroll.contentView.bounds.origin
+    precondition(focusPanel.makeFirstResponder(focusPopup))
+    precondition(focusScroll.contentView.bounds.origin==focusedOrigin,"Repeated focus must not scroll an already visible control")
+    precondition(focusPanel.makeFirstResponder(nil))
+    precondition(focusScroll.contentView.bounds.origin==focusedOrigin,"Clearing focus must preserve scroll position")
     // Exercise real clip/document coordinates after a tall report shrinks.
     let overviewClip=NSScrollView(frame:NSRect(x:0,y:0,width:600,height:440))
     let overviewDocument=OverviewStackView(frame:NSRect(x:0,y:0,width:600,height:650))

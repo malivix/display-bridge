@@ -301,3 +301,13 @@ recovery-to-ready UI reproduction pass; focus remains on Overview. Native verifi
 passed. See [cause, evidence and limits](../log/overview-top-alignment.md).
 The next qualification work is long-name layout and keyboard traversal; VoiceOver speech
 and physical testing remain separate requirements.
+
+### Long-name and keyboard check exposed and fixed hidden focus
+
+Largest/minimum Overview and Audio wrap a long synthetic output name correctly.
+Forward Audio traversal exposed a real defect: an offscreen preference received
+focus without becoming visible. The main panel now reveals focused controls.
+The failing native regression passes, and current-source UI checks cover first/last
+preferences, reverse traversal and refresh retention. [Evidence and limits](../log/keyboard-focus-scrolling.md).
+Other tabs/dialogs, VoiceOver speech and high contrast remain unqualified; do not
+interpret this slice as completion of the full accessibility matrix.

@@ -382,6 +382,14 @@ func runMenuSelfTests() {
     print("PASS contextual recovery actions, stale clicks, busy state and changed preview tokens")
     let comparisonCurrent:[String:Any]=["modes":["pg":["width":1920,"height":1080,"pixelWidth":3840,"pixelHeight":2160]]]
     let comparisonLarger:[String:Any]=["modes":["pg":["width":1536,"height":864,"pixelWidth":3072,"pixelHeight":1728]]]
+    var sizeValidity=SizePreviewValidity()
+    sizeValidity.observe(nil);precondition(sizeValidity.reason==nil)
+    sizeValidity.observe("Monitor switched away")
+    sizeValidity.observe(nil)
+    precondition(sizeValidity.reason=="Monitor switched away")
+    sizeValidity.observe("Recovering")
+    precondition(sizeValidity.reason=="Monitor switched away")
+    precondition(SizePreviewValidity().reason==nil)
     let groupedChoices:[[String:Any]]=[["size":"current"],["size":"match-benq"],["size":"match-pg-larger"],["size":"match-benq-smaller"],["size":"match-benq","preset":"Custom"],["label":"Match PG size to BenQ"]]
     precondition(matchingChoiceIndices(groupedChoices,reference:nil)==[0,1,2,3,4,5])
     precondition(matchingChoiceIndices(groupedChoices,reference:"benq")==[1,3])

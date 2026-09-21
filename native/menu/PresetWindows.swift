@@ -56,10 +56,21 @@ func matchingChoiceIndices(_ choices:[[String:Any]],reference:String?)->[Int] {
     }
 }
 
+// Once context is lost, old options require a fresh inspection even if readiness returns.
+struct SizePreviewValidity {
+    private(set) var reason:String?
+    mutating func observe(_ unavailable:String?) {
+        if reason==nil {reason=unavailable}
+    }
+}
+
 final class SizeChooser: NSObject, NSWindowDelegate {
     let choices:[[String:Any]]
     let current:[String:Any]
     let notes:String
+    let availability:()->String?
+    var validity=SizePreviewValidity()
+    let availabilityLabel=NSTextField(wrappingLabelWithString:"")
     let window:NSPanel
     let selector=NSPopUpButton()
     let referenceSelector=NSPopUpButton()
@@ -74,8 +85,8 @@ final class SizeChooser: NSObject, NSWindowDelegate {
         let index=selector.indexOfSelectedItem
         return visibleIndices.indices.contains(index) ? visibleIndices[index]:-1
     }
-    init(choices:[[String:Any]],current:[String:Any],notes:String,orientation:String,fontSize:CGFloat,canSave:Bool,canRemove:Bool,durations:[Int]=[20]) {
-        self.choices=choices;self.current=current;self.notes=notes
+    init(choices:[[String:Any]],current:[String:Any],notes:String,orientation:String,fontSize:CGFloat,canSave:Bool,canRemove:Bool,durations:[Int]=[20],availability:@escaping ()->String?) {
+        self.choices=choices;self.current=current;self.notes=notes;self.availability=availability
         self.durations=previewDurations(["preview_seconds":durations])
         window=NSPanel(contentRect:NSRect(x:0,y:0,width:660,height:720),styleMask:[.titled,.closable,.resizable],backing:.buffered,defer:false)
         super.init()
@@ -109,6 +120,8 @@ final class SizeChooser: NSObject, NSWindowDelegate {
         scroll.documentView=comparison;stack.addArrangedSubview(scroll)
         scroll.widthAnchor.constraint(equalTo:stack.widthAnchor).isActive=true
         scroll.heightAnchor.constraint(greaterThanOrEqualToConstant:140).isActive=true
+        availabilityLabel.font=intro.font;stack.addArrangedSubview(availabilityLabel)
+        availabilityLabel.widthAnchor.constraint(equalTo:stack.widthAnchor).isActive=true
         for (index,title) in ["Preview selected size","Save current as preset…","Remove a saved preset…","Cancel"].enumerated() {
             let button=NSButton(title:title,target:self,action:#selector(finish(_:)));button.tag=index;button.font=intro.font
             button.setContentHuggingPriority(.required,for:.vertical)
@@ -126,7 +139,7 @@ final class SizeChooser: NSObject, NSWindowDelegate {
         selector.removeAllItems()
         for index in visibleIndices {selector.addItem(withTitle:choices[index]["label"] as? String ?? "Size")}
         selector.isEnabled = !visibleIndices.isEmpty
-        previewButton?.isEnabled = !visibleIndices.isEmpty
+        checkAvailability()
         selectionChanged(selector)
     }
     @objc func selectionChanged(_ sender:NSPopUpButton) {
@@ -137,9 +150,25 @@ final class SizeChooser: NSObject, NSWindowDelegate {
         comparison.string=sizeComparison(current,choices[selectedIndex])+(notes.isEmpty ? "":"\n\n"+notes)
         comparison.scrollRangeToVisible(NSRange(location:0,length:0))
     }
-    @objc func finish(_ sender:NSButton) {if sender.tag==0 && selectedIndex<0 {return};result=sender.tag;NSApp.stopModal()}
+    @objc func checkAvailability() {
+        validity.observe(availability())
+        availabilityLabel.stringValue=validity.reason.map{"\($0) Cancel and reopen to inspect fresh choices."} ?? ""
+        availabilityLabel.isHidden=validity.reason==nil
+        previewButton?.isEnabled=selectedIndex>=0 && validity.reason==nil
+    }
+    @objc func finish(_ sender:NSButton) {
+        if sender.tag==0 {
+            checkAvailability()
+            guard selectedIndex>=0 && validity.reason==nil else{return}
+        }
+        result=sender.tag;NSApp.stopModal()
+    }
     func windowShouldClose(_ sender:NSWindow)->Bool {result = -1;NSApp.stopModal();return true}
     func run()->Int {
+        let timer=Timer(timeInterval:1,target:self,selector:#selector(checkAvailability),userInfo:nil,repeats:true)
+        RunLoop.main.add(timer,forMode:.modalPanel)
+        defer {timer.invalidate()}
+        checkAvailability()
         window.center();window.recalculateKeyViewLoop();window.makeKeyAndOrderFront(nil);NSApp.runModal(for:window);window.orderOut(nil)
         return result
     }

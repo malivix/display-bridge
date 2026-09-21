@@ -11,3 +11,7 @@ Acceptance: inspect sample-to-chooser navigation in a hardware-free demo and Can
 without dispatching a physical change; test availability states through the shared helper.
 No persisted configuration; rollback is the prior coordinated menu/controller snapshot.
 Guided reference choice and saved visual calibration remain later work.
+
+The size chooser also observes readiness while modal and latches the first loss of context.
+It requires reopening after loss instead of re-enabling old options on recovery. This is
+presentation safety; backend fingerprint/ownership validation remains authoritative.

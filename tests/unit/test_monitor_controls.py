@@ -1,5 +1,5 @@
 import unittest
-from monitor_controls import adjust,number,inspect
+from monitor_controls import adjust,number,inspect,set_percent
 
 
 class Controls(unittest.TestCase):
@@ -27,6 +27,38 @@ class Controls(unittest.TestCase):
             return str(setting[0] if actual is None or not any(c[0]=='set' for c in calls) else actual)
         self.calls=calls
         return adjust({'host':host},role,'volume',step,request)
+
+    def test_percent_target_uses_live_range_and_one_confirmed_write(self):
+        calls=[];value=[10]
+        def request(action,feature,target=None):
+            calls.append((action,feature,target))
+            if feature=='input':return '19'
+            if action=='max':return '50'
+            if action=='set':value[0]=target;return ''
+            return str(value[0])
+        result=set_percent({'host':'A'},'benq','luminance',75,request)
+        self.assertEqual(result['value'],38)
+        self.assertEqual(result['percent'],76)  # Nearest hardware step, not an invented 75% readback.
+        self.assertEqual(sum(call[0]=='set' for call in calls),1)
+        calls.clear()
+        self.assertFalse(set_percent({'host':'A'},'benq','luminance',76,request)['changed'])
+        self.assertFalse(any(call[0]=='set' for call in calls))
+
+    def test_invalid_percent_never_contacts_monitor(self):
+        for value in (True,-1,101,50.0,'50',None):
+            with self.assertRaises(ValueError):
+                set_percent({'host':'A'},'benq','luminance',value,lambda *a:self.fail('Unexpected hardware request'))
+
+    def test_percent_target_stops_on_input_loss(self):
+        for inputs,expected_writes in [([15],0),([19,15],0),([19,19,15],1)]:
+            source=iter(inputs);writes=[]
+            def request(action,feature,value=None):
+                if feature=='input':return str(next(source))
+                if action=='max':return '100'
+                if action=='set':writes.append(value);return ''
+                return '20'
+            with self.assertRaises(RuntimeError):set_percent({'host':'A'},'benq','luminance',50,request)
+            self.assertEqual(len(writes),expected_writes)
 
     def test_benq_uses_real_range(self):
         self.assertEqual(self.run_adjust(50,37)['value'],40)

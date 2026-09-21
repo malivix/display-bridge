@@ -54,6 +54,13 @@ def adjust(config,role,feature,step,request):
     return _change(config,role,feature,target,request)
 
 
+def set_percent(config,role,feature,percent,request):
+    if type(percent) is not int or not 0<=percent<=100:raise ValueError('Target percent must be an integer from 0 to 100')
+    def target(current,maximum):
+        return math.floor(maximum*percent/100+.5)
+    return _change(config,role,feature,target,request)
+
+
 def apply_brightness(config,role,value,expected_maximum,request):
     if type(value) is not int or type(expected_maximum) is not int or not 0<=value<=expected_maximum<=65535 or expected_maximum==0:
         raise ValueError('Invalid saved brightness range')

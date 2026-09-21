@@ -751,8 +751,9 @@ def main():
         run_main(resources)
 
 def run_main(resources):
+    from preview_service import LABELS as size_labels
     parser = argparse.ArgumentParser()
-    action_argument = parser.add_argument('action', choices=['capabilities', 'installation-status', 'audio-test', 'capture-review', 'capture', 'check', 'run', 'once', 'test-layouts', 'restore','status','pause','pause-for','resume','repair-audio','audio-manual','audio-auto','speaker','diagnostics','support-summary','history','hidpi','doctor','display-info','ddc-history','monitor-adjust','monitor-settings','brightness-list','brightness-save','brightness-apply','brightness-remove','preset-save','preset-remove','preview-options','preview-start','preview-keep','preview-revert','preview-repair','rotation-auto','rotation-manual'])
+    action_argument = parser.add_argument('action', choices=['capabilities', 'installation-status', 'audio-test', 'capture-review', 'capture', 'check', 'run', 'once', 'test-layouts', 'restore','status','pause','pause-for','resume','repair-audio','audio-manual','audio-auto','speaker','diagnostics','support-summary','history','hidpi','doctor','display-info','ddc-history','monitor-adjust','monitor-set','monitor-settings','brightness-list','brightness-save','brightness-apply','brightness-remove','preset-save','preset-remove','preview-options','preview-start','preview-keep','preview-revert','preview-repair','rotation-auto','rotation-manual'])
     parser.add_argument('--host', choices=['A', 'B'])
     parser.add_argument('--m1ddc', default=str(Path.home() / '.local/bin/display-ddc'))
     parser.add_argument('--minutes',type=int,default=30)
@@ -761,7 +762,8 @@ def run_main(resources):
     parser.add_argument('--monitor',choices=['pg','benq'])
     parser.add_argument('--feature',choices=['luminance','volume'])
     parser.add_argument('--step',type=int,choices=[-5,5])
-    parser.add_argument('--size',choices=['larger','current','more-space','match-benq','match-pg'])
+    parser.add_argument('--percent',type=int,choices=range(101),metavar='0..100')
+    parser.add_argument('--size',choices=list(size_labels))
     parser.add_argument('--preview-seconds',type=int,choices=[20,40])
     parser.add_argument('--token')
     parser.add_argument('--fingerprint')
@@ -810,14 +812,15 @@ def run_main(resources):
                     acquire_lock(lock,2)
                     result={'removed':True,**presets.remove(path,config,args.preset,args.monitor,args.fingerprint)}
         print(json.dumps(result));return
-    if args.action in ('monitor-adjust','monitor-settings','brightness-save','brightness-apply'):
+    if args.action in ('monitor-adjust','monitor-set','monitor-settings','brightness-save','brightness-apply'):
         changing=args.action!='monitor-settings'
         if changing:
             from preview_service import mutation_guard
             resources.enter_context(mutation_guard(__import__('types').SimpleNamespace(**globals())))
-        from monitor_controls import adjust,inspect,inspect_brightness,apply_brightness
+        from monitor_controls import adjust,set_percent,inspect,inspect_brightness,apply_brightness
         if args.monitor is None:parser.error('--monitor is required')
         if args.action=='monitor-adjust' and (args.feature is None or args.step is None):parser.error('--feature and --step are required')
+        if args.action=='monitor-set' and (args.feature is None or args.percent is None):parser.error('--feature and --percent are required')
         with (ROOT/'maintenance.lock').open('a') as maintenance, (ROOT/'ddc.lock').open('a') as lock:
             try:fcntl.flock(maintenance,fcntl.LOCK_SH | fcntl.LOCK_NB)
             except BlockingIOError:raise RuntimeError('Installation in progress; try again later')
@@ -846,6 +849,8 @@ def run_main(resources):
                         entry=presets.find(presets.read(path,config),args.preset,args.monitor,args.fingerprint)
                         result=apply_brightness(config,args.monitor,entry['value'],entry['maximum'],request)
                         result.update(preset=entry['name'])
+            elif args.action=='monitor-set':
+                result=set_percent(config,args.monitor,args.feature,args.percent,request)
             else:
                 result=inspect(config,args.monitor,request) if args.action=='monitor-settings' else adjust(config,args.monitor,args.feature,args.step,request)
         print(json.dumps(result));return

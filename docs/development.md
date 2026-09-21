@@ -59,7 +59,11 @@ See [security](../SECURITY.md), [installation](install.md), and [qualification](
 The compiled menu executable accepts `--demo` (or a test bundle with `DisplayBridgeDemo`
 set to true). It uses synthetic status, blocks all backend commands and notification
 requests, and does not write the controller heartbeat or save text preferences. This
-allows layout/accessibility inspection without installing or controlling monitors. Build
+allows layout/accessibility inspection without installing or controlling monitors. Reviews
+are window-only: they create no menu-bar icon and quit when their last window closes.
+All demo builds share a per-user review lock, including builds with different bundle
+identities; close the existing review before starting another. The installed menu has
+its own ownership lock and continues running when its window closes. Build
 with the same macOS 13 deployment target used by `scripts/verify`; the compiler default
 may target a newer OS than the development machine. Local preview bundles stay ignored.
 

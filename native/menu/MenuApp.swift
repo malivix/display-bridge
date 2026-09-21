@@ -8,7 +8,8 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
     let demo=menuDemoMode()
     var demoScenario="ready"
     var ownership:MenuOwnership?
-    var item:NSStatusItem!
+    var item:NSStatusItem?
+    var controlsMenu:NSMenu?
     var timer:Timer?
     var panel:NSWindow?
     var scalableControls:[NSControl]=[]
@@ -98,6 +99,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
         }
     }
     var failureAlerts=FailureAlerts(sent:Array((UserDefaults.standard.stringArray(forKey:"failureIncidents") ?? []).prefix(16)))
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender:NSApplication)->Bool {demo}
     func applicationShouldHandleReopen(_ sender:NSApplication,hasVisibleWindows flag:Bool)->Bool {showPanel();return true}
     func showPanel() {
         if panel==nil {
@@ -468,7 +470,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
         if !demo {UserDefaults.standard.set(index,forKey:"statusTextSize")}
         displayTextIndex=index;applyTextSize(index)
     }
-    @objc func openControls(_ sender:NSButton){refresh();item.menu?.popUp(positioning:nil,at:NSPoint(x:0,y:sender.bounds.height),in:sender)}
+    @objc func openControls(_ sender:NSButton){refresh();controlsMenu?.popUp(positioning:nil,at:NSPoint(x:0,y:sender.bounds.height),in:sender)}
     @objc func panelAction(_ sender:NSButton){if let action=sender.identifier?.rawValue {
         if action=="preview-keep" || action=="preview-revert" {if let token=previewToken {execute([action,"--token",token])}}
         else {execute([action])}
@@ -485,22 +487,23 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
         return readMenuState(root.appendingPathComponent(name),allowMissing:name=="control.json") ?? (name=="control.json" ? ["_read_unavailable":true]:[:])
     }
     func applicationDidFinishLaunching(_ notification:Notification) {
-        if !demo {
-            ownership=MenuOwnership(path:root.appendingPathComponent("menu.lock").path)
-            guard ownership != nil else {
-                FileHandle.standardError.write(Data("Menu already running or ownership lock unavailable.\n".utf8))
-                if let identifier=Bundle.main.bundleIdentifier {
-                    for app in NSRunningApplication.runningApplications(withBundleIdentifier:identifier) where app.processIdentifier != ProcessInfo.processInfo.processIdentifier {
-                        app.activate(options:[.activateIgnoringOtherApps])
-                    }
+        let lockPath=demo ? FileManager.default.temporaryDirectory.appendingPathComponent("io.github.display-bridge.review.lock"):root.appendingPathComponent("menu.lock")
+        ownership=MenuOwnership(path:lockPath.path)
+        guard ownership != nil else {
+            FileHandle.standardError.write(Data((demo ? "Another review is running or its lock is unavailable. Close the existing review first.\n":"Menu already running or ownership lock unavailable.\n").utf8))
+            if let identifier=Bundle.main.bundleIdentifier {
+                for app in NSRunningApplication.runningApplications(withBundleIdentifier:identifier) where app.processIdentifier != ProcessInfo.processInfo.processIdentifier {
+                    app.activate(options:[.activateIgnoringOtherApps])
                 }
-                NSApp.terminate(nil);return
             }
+            NSApp.terminate(nil);return
         }
         NSApp.setActivationPolicy(.accessory)
         NSApp.mainMenu=makeEditingMenu(allowClipboard:!demo)
-        item=NSStatusBar.system.statusItem(withLength:NSStatusItem.variableLength)
-        item.button?.image=NSImage(systemSymbolName:"display.2",accessibilityDescription:"Display Bridge")
+        if !demo {
+            item=NSStatusBar.system.statusItem(withLength:NSStatusItem.variableLength)
+            item?.button?.image=NSImage(systemSymbolName:"display.2",accessibilityDescription:"Display Bridge")
+        }
         if !demo {
         UNUserNotificationCenter.current().delegate=self
         let repair=UNNotificationAction(identifier:"repair",title:"Repair audio",options:[])
@@ -531,8 +534,8 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
         let fresh=statusFresh(health)
         let prefix=detailPrefix(health,control)
         let state=fresh ? health["status"] as? String ?? "Unknown" : "Controller unavailable"
-        item.button?.title=state == "degraded" || state == "state-error" || !fresh || !controlsUsable ? " !" : ""
-        item.button?.toolTip="Display Bridge: \(controlsUsable ? state:"Controls unavailable")"
+        item?.button?.title=state == "degraded" || state == "state-error" || !fresh || !controlsUsable ? " !" : ""
+        item?.button?.toolTip="Display Bridge: \(controlsUsable ? state:"Controls unavailable")"
         let tracked=commandSummary(health,control)
         var progress=operationResult
         if let started=operationStarted {
@@ -716,8 +719,8 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
         let advanced=NSMenuItem(title:"Advanced",action:nil,keyEquivalent:"")
         advanced.submenu=menu;compact.addItem(advanced)
         compact.addItem(.separator())
-        add(compact,"Quit menu bar (automation continues)",["quit"])
-        item.menu=compact
+        add(compact,demo ? "Quit review":"Quit menu bar (automation continues)",["quit"])
+        controlsMenu=compact;item?.menu=compact
     }
     func menuWillOpen(_ menu:NSMenu){openMenus.insert(ObjectIdentifier(menu))}
     func menuDidClose(_ menu:NSMenu){openMenus.remove(ObjectIdentifier(menu))}

@@ -6,6 +6,10 @@ Source changes only; installed production activation of the optional Shortcuts
 build remains unqualified. See the [usage guide](docs/shortcuts.md) and
 [qualification limits](docs/qualification.md).
 
+- Scale native controls and window minimum heights with interface text size; validate
+  size comparison reports before offering preview actions.
+- Keep development reviews window-only, allow one review at a time across bundle
+  identities, and exit when the last review window closes.
 - Preserve keyboard focus when recovery actions disappear, keep Overview aligned
   at the top, and reveal controls reached by keyboard navigation.
 - Offer Check health directly for unrecognized monitor inputs without changing

@@ -49,8 +49,9 @@ upgrades, and older installations.
 ## Use
 
 Open **Display Auto** from your user Applications folder to see status and controls.
-The installed app retains this name for compatibility. The background controller continues
-if you close the menu app.
+The installed app retains this name for compatibility. Closing its window keeps the
+menu icon running; Quit menu bar removes the icon while the background controller
+continues. The installed menu allows only one instance.
 
 ```sh
 ~/.local/bin/display-auto.sh status

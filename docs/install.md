@@ -125,7 +125,8 @@ LaunchAgents use `io.github.display-bridge` and `io.github.display-bridge.menu`.
 No login credentials, cloud service, or administrator access are needed at runtime.
 
 Test ordinary input changes, both-away, and both return orders. Listen to the selected output;
-a software readback cannot prove that sound works. Mac B qualification is still pending.
+a software readback cannot prove that sound works. Mac B switching and listening
+qualification are still pending.
 
 ## Optional native Shortcuts build (production activation pending)
 

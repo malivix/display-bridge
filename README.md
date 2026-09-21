@@ -19,7 +19,8 @@ pause/resume; they require an explicitly signed build.
 Speaker selection preserves an external headset. Runtime stays local and does not call BetterDisplay.
 
 **Early, hardware-specific software.** Apple-silicon macOS 13+, Python 3.10+, and Xcode
-Command Line Tools are required. Mac B and sleep/wake qualification remain incomplete.
+Command Line Tools are required. Mac B is deployed but its switching, listening and
+sleep/wake qualification remain incomplete.
 Private macOS APIs and DDC behavior can change. Read the [qualification limits](docs/qualification.md).
 
 ## Install

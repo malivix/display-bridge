@@ -11,8 +11,22 @@ compared before and after, and installed hashes, ready heartbeat, both local inp
 and fixed-120/HDR-off mode checks passed. The newer UI was visually checked in a synthetic
 demo; the computer-use adapter retained the old installed bundle identity. This is partial
 upgrade qualification, not a new physical switching or listening qualification.
-Mac B deployment, concurrent controllers, sleep/wake, headset transitions, and all cable/
-firmware combinations remain unqualified. Raw historical evidence stays local for privacy.
+Concurrent controllers, sleep/wake, headset transitions, and all cable/firmware
+combinations remain unqualified. Raw historical evidence stays local for privacy.
+
+Mac B was first deployed for source revision d99080a (2.11.0) on macOS 26.7 and an
+Apple M4 Pro laptop, with PG42UQ on HDMI 2 and RD280UG on its DisplayPort input. Capture
+had to be corrected first: the RD280UG publishes a different EDID product code per input,
+so the single hardcoded BenQ identity matched Mac A only. After that, the baseline captured,
+the installer's four layout transitions passed, both services reached a ready heartbeat, and
+host enrollment, configuration, installed hashes, both local input reads, both saved
+fixed-120/HDR-off modes, the menu app and build agreement all report ok. One live transition
+was then observed: the PG moved to the other host's input, the controller selected the BenQ
+profile, and audio followed to the RD280UG.
+
+That is a first deployment and one observed transition, not a Mac B switching or listening
+qualification. Listening, both-away and both-return orders, sleep/wake, and rotation are
+unqualified on Mac B; no orientation profiles exist there, so automatic rotation is disabled.
 
 A release should record the exact revision, OS, model/connection categories, test commands,
 physical outcomes, and unresolved cases without publishing serials, UUIDs, local paths, or logs.

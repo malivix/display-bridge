@@ -1,4 +1,7 @@
 import tempfile, unittest, plistlib
+import signal
+import subprocess
+import sys
 from pathlib import Path
 from deployment import atomic_link, snapshot, restore, require_service_namespace
 
@@ -139,3 +142,50 @@ class MalformedUnrelatedAgent(unittest.TestCase):
             path.write_bytes(content)
             require_service_namespace(home, "io.github.display-bridge")
             self.assertEqual(path.read_bytes(), content)
+
+    def test_process_death_around_pointer_swap_preserves_retry_and_restore(self):
+        # Exercise real filesystem replacement and uncatchable process termination,
+        # rather than an exception that ordinary installer cleanup could handle.
+        program = """
+import os, signal, sys
+from pathlib import Path
+from deployment import atomic_link
+root = Path(sys.argv[1])
+stage = sys.argv[2]
+replace = Path.replace
+def interrupted_replace(path, target):
+    if stage == 'before':
+        os.kill(os.getpid(), signal.SIGKILL)
+    result = replace(path, target)
+    os.kill(os.getpid(), signal.SIGKILL)
+    return result
+Path.replace = interrupted_replace
+atomic_link(root / 'new-release', root / 'current')
+"""
+        for stage in ("before", "after"):
+            with self.subTest(stage=stage), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                old, new = root / "old-release", root / "new-release"
+                for release, value in ((old, "old"), (new, "new")):
+                    release.mkdir()
+                    (release / "controller").write_text(value)
+                current, entry = root / "current", root / "controller"
+                atomic_link(old, current)
+                atomic_link(current / "controller", entry)
+                snapshot([entry], root / "backup", current)
+                metadata_before = (root / "backup/metadata.json").read_bytes()
+                child = subprocess.run(
+                    [sys.executable, "-B", "-c", program, str(root), stage],
+                    cwd=Path(__file__).resolve().parents[2], capture_output=True, timeout=5,
+                )
+                self.assertEqual(child.returncode, -signal.SIGKILL, child.stderr.decode())
+                self.assertEqual(entry.read_text(), "old" if stage == "before" else "new")
+                self.assertEqual((root / "current.new").is_symlink(), stage == "before")
+                self.assertEqual((root / "backup/metadata.json").read_bytes(), metadata_before)
+                atomic_link(new, current)
+                self.assertFalse((root / "current.new").is_symlink())
+                self.assertEqual(entry.read_text(), "new")
+                restore(root / "backup")
+                self.assertEqual(entry.read_text(), "old")
+                self.assertEqual((old / "controller").read_text(), "old")
+                self.assertEqual((new / "controller").read_text(), "new")

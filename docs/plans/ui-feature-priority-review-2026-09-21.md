@@ -16,7 +16,7 @@ the product choices and primary sources.
 | Priority | Next result | Status and acceptance |
 | --- | --- | --- |
 | First | Finish accessibility qualification of existing UI | Compact size comparison, ownership/speaker summary, precise controls and contextual audio preferences are implemented. Recovery focus, top alignment and hidden keyboard focus are fixed. Long-name Overview/Audio and selected keyboard paths passed; high contrast, VoiceOver speech and the remaining dialog matrix are open. |
-| Active feature | Add bounded local Shortcuts pause/resume | Typed status and optional signed packaging are implemented. Private real-companion warm/cold execution, typed output and duplicate-lock behavior passed; production activation remains unqualified. Route pause/resume through the existing command boundary with bounded arguments and explicit request outcomes. Named size-preset preview follows separately with Keep/Revert. |
+| Active feature | Qualify Shortcuts pause/resume execution | Timed pause/resume source, bounded submission tests and signed metadata are implemented. Exercise both actions through Shortcuts against the isolated command stub, including invalid duration and uncertain acknowledgement. Status warm/cold and duplicate-lock checks passed; production activation remains unqualified. Named size-preset preview follows separately with Keep/Revert. |
 | Reliability | Explain and reduce measured rotation delays | Timing reports exist; exact-revision physical samples remain pending. Separate sensor observation, confirmation, layout and readback. Optimize the measured slow phase, not guessed polling intervals. |
 | Release | Finish installer interruption and hardware qualification | Full installer commit-phase interruption, Mac B, concurrent controllers and headset transitions remain open. Keep source tests, package checks and physical outcomes separate. |
 | Research only | BenQ comfort-settings inspector | Establish narrow firmware/transport-bound protocol evidence before exposing controls. Unreadable or multiplexed values cannot be presented as confirmed settings. Retain OSD guidance if reliable inspection is unavailable. |
@@ -366,3 +366,11 @@ an isolated signed bundle. CLI calls were limited to startup capabilities; fresh
 stale and malformed observations stayed distinct. [Scope and limits](../log/shortcuts-companion-execution.md).
 Production activation and release qualification remain open. The next source slice
 is bounded pause/resume through the existing command boundary.
+
+### Bounded pause/resume source delivered
+
+Pause and resume now expose typed request outcomes with bounded arguments,
+capability checks and a single canonical CLI dispatch. Native regressions, signed
+metadata and package checks passed. [Evidence and limits](../log/shortcuts-control-actions.md).
+Shortcuts UI execution with the isolated command stub is next; no live pause or
+resume was requested during implementation.

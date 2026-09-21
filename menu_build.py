@@ -73,7 +73,7 @@ def build_menu(package, staged, run, shortcuts_identity=None):
             entity = metadata.get("entities", {}).get("DisplayBridgeStatusResult", {})
             fields = {p.get("identifier") for p in entity.get("properties", []) if isinstance(p, dict)}
             expected = {"freshness", "controller", "arrangement", "pauseRequest", "recovery", "ageSeconds"}
-            if ("GetDisplayBridgeStatus" not in metadata.get("actions", {}) or fields != expected
+            if (not {"GetDisplayBridgeStatus", "PauseDisplayBridge", "ResumeDisplayBridge"}.issubset(metadata.get("actions", {})) or fields != expected
                     or not metadata.get("autoShortcuts")):
                 raise RuntimeError("Native Shortcuts metadata is incomplete; bundle was not signed")
     if source_fingerprint(package) != fingerprint:

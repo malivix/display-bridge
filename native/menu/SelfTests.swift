@@ -5,6 +5,7 @@ import Darwin
 
 func runMenuSelfTests() {
     runShortcutStatusTests()
+    runShortcutControlTests()
     func installationJSON(_ report:[String:Any])->String {String(decoding:try! JSONSerialization.data(withJSONObject:report),as:UTF8.self)}
     let installed=demoInstallationReport("ready",200)
     precondition(installationSummary(installationJSON(installed),200).contains("Reported outcome: Completed"))
@@ -787,4 +788,44 @@ func runShortcutStatusTests() {
     try! Data(repeating:32,count:1_048_577).write(to:health)
     precondition(ShortcutStatusSnapshot.read(root:root,now:101).freshness == .unavailable)
     print("PASS allowlisted Shortcuts status: freshness, recovery, pause requests and bounded read-only files")
+}
+
+func runShortcutControlTests() {
+    let capability=CommandResult(output:"{\"protocol\":1,\"read_only\":true,\"commands\":[\"pause-for\",\"resume\"]}",code:0)
+    func acknowledgement(_ action:String)->CommandResult {
+        let id=String(repeating:"a",count:32)
+        let body:[String:Any] = ["requested":action,"request_id":id,
+            "control":["command_request":["id":id,"action":action]],"private":"must not escape"]
+        return CommandResult(output:String(decoding:try! JSONSerialization.data(withJSONObject:body),as:UTF8.self),code:0)
+    }
+    for request in [ShortcutAutomationRequest.pause(minutes:0),.pause(minutes:1441),.pause(minutes:Int.max)] {
+        precondition(submitShortcutControl(request,demo:false) {_,_,_ in preconditionFailure("Invalid duration dispatched")} == .notSent)
+    }
+    precondition(submitShortcutControl(.resume,demo:true) {_,_,_ in preconditionFailure("Demo dispatched")} == .notSent)
+    for request in [ShortcutAutomationRequest.pause(minutes:1),.pause(minutes:1440),.resume] {
+        var calls:[[String]]=[]
+        let outcome=submitShortcutControl(request,demo:false) { args,timeout,limit in
+            calls.append(args)
+            if args==["capabilities"] {precondition(timeout==5 && limit==16_384);return capability}
+            precondition(timeout==10 && limit==65_536)
+            return acknowledgement(args[0])
+        }
+        precondition(outcome == .requestSaved && calls == [["capabilities"],request.arguments!])
+    }
+    for probe in [CommandResult(output:"{}",code:0),CommandResult(output:capability.output,code:124),
+                  CommandResult(output:"{\"protocol\":1,\"read_only\":true,\"commands\":[]}",code:0)] {
+        var count=0
+        precondition(submitShortcutControl(.resume,demo:false) {_,_,_ in count+=1;return probe} == .notSent)
+        precondition(count==1)
+    }
+    let badAction=acknowledgement("pause-for")
+    for response in [CommandResult(output:"private failure",code:1),CommandResult(output:"timeout",code:124),
+                     CommandResult(output:"overflow",code:125),CommandResult(output:"{}",code:0),badAction,
+                     CommandResult(output:acknowledgement("resume").output.replacingOccurrences(of:"aaaaaaaa",with:"zzzzzzzz"),code:0),
+                     CommandResult(output:acknowledgement("resume").output.replacingOccurrences(of:String(repeating:"a",count:32),with:String(repeating:"a",count:32)+"\\n"),code:0)] {
+        var count=0
+        precondition(submitShortcutControl(.resume,demo:false) {_,_,_ in count+=1;return count==1 ? capability:response} == .outcomeUnknown)
+        precondition(count==2,"An uncertain dispatched request must never be retried automatically")
+    }
+    print("PASS Shortcuts control bounds, demo isolation, capabilities, coherent acknowledgements and no retry on uncertain outcomes")
 }

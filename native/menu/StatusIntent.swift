@@ -87,5 +87,9 @@ struct DisplayBridgeShortcuts:AppShortcutsProvider {
     static var appShortcuts:[AppShortcut] {
         AppShortcut(intent:GetDisplayBridgeStatus(),phrases:["Get status in \(.applicationName)"],
                     shortTitle:"Display status",systemImageName:"display")
+        AppShortcut(intent:PauseDisplayBridge(),phrases:["Pause \(.applicationName)"],
+                    shortTitle:"Pause automation",systemImageName:"pause.circle")
+        AppShortcut(intent:ResumeDisplayBridge(),phrases:["Resume \(.applicationName)"],
+                    shortTitle:"Resume automation",systemImageName:"play.circle")
     }
 }

@@ -21,6 +21,9 @@ fields; `StatusIntent.swift` exposes them as an App Intents entity and read-only
 The action has optional signed metadata packaging and isolated companion execution
 evidence; production activation remains unqualified. Its latest-status entity re-reads on resolution
 and never authorizes hardware mutations.
+`ControlIntents.swift` exposes bounded pause/resume requests through the existing
+CLI, with capability checks and allowlisted submission outcomes. It does not write
+control files or interpret command acknowledgement as completed reconciliation.
 The app submits controller commands and reads health;
 it does not maintain an independent hardware state machine. CLI execution has bounded time
 and output, so a stalled child does not permanently disable menu actions. `observability.py`,

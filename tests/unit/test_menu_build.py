@@ -22,8 +22,8 @@ class MenuBuild(unittest.TestCase):
                     path=Path(args[args.index('--output')+1])/'Metadata.appintents'
                     path.mkdir()
                     fields=['freshness','controller','arrangement','pauseRequest','recovery','ageSeconds']
-                    data={'actions':{'GetDisplayBridgeStatus':{}},'entities':{'DisplayBridgeStatusResult':{'properties':[{'identifier':v} for v in fields]}},'autoShortcuts':[{}]}
-                    if not metadata_ok:data['actions']={}
+                    data={'actions':{name:{} for name in ['GetDisplayBridgeStatus','PauseDisplayBridge','ResumeDisplayBridge']},'entities':{'DisplayBridgeStatusResult':{'properties':[{'identifier':v} for v in fields]}},'autoShortcuts':[{}]}
+                    if not metadata_ok:del data['actions']['PauseDisplayBridge']
                     (path/'extract.actionsdata').write_text(json.dumps(data))
                 if args[0]=='codesign' and '--sign' in args and fail_sign:
                     raise subprocess.CalledProcessError(1,args)

@@ -11,6 +11,7 @@ MENU_SOURCES = (
     "native/menu/Commands.swift",
     "native/menu/ShortcutStatus.swift",
     "native/menu/StatusIntent.swift",
+    "native/menu/ControlIntents.swift",
     "native/menu/MonitorResults.swift",
     "native/menu/HealthReport.swift",
     "native/menu/EnrollmentReview.swift",

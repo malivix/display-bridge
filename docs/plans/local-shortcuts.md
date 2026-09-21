@@ -124,3 +124,21 @@ Earlier pending integration entries above describe the sequence of work; this is
 the current result. Installed production activation, first notification permission
 and distribution coverage remain unqualified. Bounded pause/resume is the next
 source feature; it must reuse controller command validation.
+
+## Bounded pause/resume slice
+
+Expose separate timed-pause and resume intents. Pause accepts integer minutes in
+1–1440, matching the controller. Demo and invalid requests invoke no process.
+Check the controller's capabilities before sending one canonical CLI command.
+Return a typed saved-request outcome only for a coherent JSON acknowledgement;
+a timeout, nonzero exit or malformed response after dispatch is outcome unknown,
+never proof of cancellation or completed reconciliation. Return no raw CLI output.
+Use the existing mutation/control locks; add no direct state-file writer or hardware
+path. Run blocking process work outside the UI thread. Ordinary checks inject a
+stub runner. Rollback is the prior compatible bundle, with no persistence migration.
+
+The bounded source slice is implemented and passes native/package checks; see
+[the delivery evidence](../log/shortcuts-control-actions.md). Next, exercise real
+Shortcuts pause/resume against the private companion with a recording command
+stub. Keep the installed controller outside that test and verify rejection before
+dispatch as well as typed saved/unknown outcomes after dispatch.

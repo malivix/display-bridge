@@ -48,6 +48,8 @@ use the arrow keys to navigate and Escape to dismiss without choosing an action.
 Opening the menu does not execute a command. These shortcuts change no settings, ignore held-key
 repeats, and do not intercept keys in other apps or modal dialogs. No global keyboard
 monitoring or Accessibility permission is added.
+Choose **Keyboard shortcuts…** in More controls for an in-app reference that follows
+your selected interface text size. This help remains available when saved controls are unreadable.
 
 ## Display snapshots
 

@@ -628,6 +628,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
         if !progress.isEmpty {add(compact,progress)}
         compact.addItem(.separator())
         add(compact,"Open Display Bridge…",["panel"])
+        add(compact,"Keyboard shortcuts…",["keyboard-help"])
         add(compact,"Setup readiness…",["setup"])
         add(compact,"Last installation…",["installation-status"])
         let paused=automationPaused(control)
@@ -694,6 +695,11 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
     func execute(_ args:[String]) {
         if !controlsAvailable(read("control.json")),!safeWithoutControls(args.first ?? "") {
             message("Saved controls unavailable","Check health and restore valid control settings before changing preferences or starting a preview. Recovery journals were preserved.");return
+        }
+        if args==["keyboard-help"] {
+            let body="⌘1–⌘5: Switch tabs\n⌘R: Refresh current view\n⌘⇧P: More controls\nTab / ⇧Tab: Move focus\nEscape: Dismiss a menu or dialog\n\nCommand shortcuts apply only to the main window. Refresh may read display settings; it does not change them."
+            _=ListeningDialog(title:"Keyboard shortcuts",body:body,buttons:["Done"],fontSize:CGFloat([16,20,24][textSizeIndex()])).run()
+            return
         }
         if args==["audio-test-prompt"] {
             guard !busy else{return}

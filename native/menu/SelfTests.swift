@@ -449,6 +449,7 @@ func runMenuSelfTests() {
     precondition(setupSummary("{\"read_only\":true,\"checks\":[]}").contains("unavailable"))
     precondition(HealthReport("{\"status\":\"ok\",\"read_only\":true,\"checks\":[]}")==nil)
     precondition(safeWithoutControls("setup"))
+    precondition(safeWithoutControls("keyboard-help"))
     print("PASS setup readiness marks missing enrollment information unknown")
     precondition(panelShortcut("3",.command,false) == .tab("displays"))
     precondition(panelShortcut("R",[.command,.capsLock],false) == .refresh)

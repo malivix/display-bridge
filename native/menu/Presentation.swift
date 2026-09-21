@@ -8,7 +8,7 @@ let detailReportChoices=[("status","Live status"),("setup","Setup readiness"),("
 
 func controlsAvailable(_ control:[String:Any])->Bool {control["_read_unavailable"] as? Bool != true}
 func safeWithoutControls(_ action:String)->Bool {
-    ["panel","quit","status","installation-status","doctor","setup","enrollment-review","capture-review","brightness-list","diagnostics","support-summary","history","ddc-history","display-info","monitor-settings","notifications","preview-revert","preview-repair"].contains(action)
+    ["panel","quit","keyboard-help","status","installation-status","doctor","setup","enrollment-review","capture-review","brightness-list","diagnostics","support-summary","history","ddc-history","display-info","monitor-settings","notifications","preview-revert","preview-repair"].contains(action)
 }
 func automationPaused(_ control:[String:Any],_ now:Double=Date().timeIntervalSince1970)->Bool {
     let until=control["pause_until"] as? Double ?? 0

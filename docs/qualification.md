@@ -27,6 +27,12 @@ physical outcomes, and unresolved cases without publishing serials, UUIDs, local
   An isolated SIGKILL test before/after release-pointer replacement verifies retry and
   snapshot restoration at that single boundary. It does not qualify abrupt termination
   across the full installer or power-loss durability.
+  A separate full-entry-point SIGINT test now interrupts after release/launcher
+  activation and before configuration inspection. With external commands stubbed,
+  it verifies coordinated snapshot restoration before the old-service restart,
+  removal of new helper links, released locks and an interrupted recovery report.
+  This covers caught Ctrl+C at that boundary, not SIGKILL, menu replacement,
+  service readiness, every commit phase or physical recovery.
 - Menu commands have a 45-second deadline and a 1 MiB output cap. New preset commands
   first use a separate capability probe capped at five seconds and 16 KiB. Terminating the CLI does
   not cancel work already queued in the daemon; inspect status before retrying.

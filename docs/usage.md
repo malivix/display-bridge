@@ -179,7 +179,10 @@ external headset; **Preserve output for 30 minutes** suspends automatic routing 
 use a manual selection. Resume automatic audio when wanted. Selection readback alone does
 not establish audible sound—listen to verify a repair.
 
-Pause temporarily stops automatic reconciliation; timed pause is also available in Advanced.
+**Pause…** in the main window offers 15, 30 or 60 minutes, or **Pause until resumed**.
+Timed pauses expire automatically; **Resume** ends either kind immediately. These controls
+stop automatic reconciliation without changing the current display layout. The compact
+menu labels its indefinite action **Pause until resumed**; Advanced retains the 15-minute action.
 The Overview recovery section distinguishes pending, paused, ownership-held and exhausted
 work. It shows the trigger, last error and retry eligibility without showing a current
 countdown from stale status. Normal switching does not offer repeated repair.

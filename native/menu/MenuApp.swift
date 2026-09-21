@@ -280,7 +280,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
             NSLayoutConstraint.activate([footer.leadingAnchor.constraint(equalTo:content.leadingAnchor,constant:20),footer.trailingAnchor.constraint(equalTo:content.trailingAnchor,constant:-20),footer.bottomAnchor.constraint(equalTo:content.bottomAnchor,constant:-16),tabs.leadingAnchor.constraint(equalTo:content.leadingAnchor,constant:20),tabs.trailingAnchor.constraint(equalTo:content.trailingAnchor,constant:-20),tabs.topAnchor.constraint(equalTo:content.topAnchor,constant:16),tabs.bottomAnchor.constraint(equalTo:footer.topAnchor,constant:-16)])
             let sizes=NSSegmentedControl(labels:["Standard","Large","Largest"],trackingMode:.selectOne,target:self,action:#selector(changeTextSize(_:)))
             sizes.selectedSegment=textSizeIndex();sizes.setAccessibilityLabel("Interface size")
-            let pause=NSButton(title:"Pause",target:self,action:#selector(togglePause(_:)));pauseButton=pause
+            let pause=NSButton(title:"Pause…",target:self,action:#selector(togglePause(_:)));pauseButton=pause
             let sizeRow=NSStackView(views:[sizes,pause]);sizeRow.spacing=16;footer.addArrangedSubview(sizeRow)
             scalableControls.append(contentsOf:[sizes,pause])
             let previewRow=NSStackView();previewRow.spacing=12;footer.addArrangedSubview(previewRow);previewConfirmationRow=previewRow
@@ -430,7 +430,19 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
         guard let profile=sender.identifier?.rawValue,let speaker=sender.selectedItem?.representedObject as? String else{return}
         execute(["speaker","--profile",profile,"--speaker",speaker])
     }
-    @objc func togglePause(_ sender:NSButton) {execute([automationPaused(read("control.json")) ? "resume":"pause"])}
+    @objc func togglePause(_ sender:NSButton) {
+        let control=read("control.json")
+        guard !busy,controlsAvailable(control) else{return}
+        if automationPaused(control) {execute(["resume"]);return}
+        let menu=NSMenu();menu.delegate=self
+        menu.font = .systemFont(ofSize:CGFloat([16,20,24][textSizeIndex()]))
+        for minutes in [15,30,60] {
+            add(menu,"Pause for \(minutes) minutes",["pause-for","--minutes",String(minutes)])
+        }
+        menu.addItem(.separator())
+        add(menu,"Pause until resumed",["pause"])
+        menu.popUp(positioning:nil,at:NSPoint(x:0,y:sender.bounds.height),in:sender)
+    }
     @objc func changeTextSize(_ sender:NSSegmentedControl) {
         let index=min(2,max(0,sender.selectedSegment))
         if !demo {UserDefaults.standard.set(index,forKey:"statusTextSize")}
@@ -521,7 +533,8 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
         recoveryButton?.isHidden=presentedRecoveryAction==nil
         recoveryButton?.title=presentedRecoveryAction?.title ?? "Check health"
         recoveryButton?.isEnabled = !busy && presentedRecoveryAction != nil
-        pauseButton?.title=automationPaused(control) ? "Resume":"Pause"
+        pauseButton?.title=automationPaused(control) ? "Resume":"Pause…"
+        pauseButton?.toolTip=automationPaused(control) ? "Resume automatic reconciliation now.":"Choose a timed pause or pause until resumed."
         pauseButton?.isEnabled = !busy && controlsUsable
         var detail=dashboard(health,control)
         if !tracked.isEmpty {detail=tracked+"\n\n"+detail}
@@ -616,7 +629,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
         add(compact,"Setup readiness…",["setup"])
         add(compact,"Last installation…",["installation-status"])
         let paused=automationPaused(control)
-        add(compact,paused ? "Resume automation":"Pause automation",[paused ? "resume":"pause"])
+        add(compact,paused ? "Resume automation":"Pause until resumed",[paused ? "resume":"pause"])
         if fresh,let token=previewToken,preview["state"] as? String == "needs-repair" {
             add(compact,"Retry size restoration",["preview-repair","--token",token])
         }

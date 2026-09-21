@@ -603,12 +603,15 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
         let override=AudioOverridePresentation(control)
         audioOverrideButton?.title=override.title
         audioOverrideButton?.identifier=NSUserInterfaceItemIdentifier(override.action)
-        var audioDescription=prefix+"Selected output: \(selectedOutput["name"] as? String ?? "Not reported")\n\(override.summary)\nExternal headsets remain under your control."
+        var audioDescription=prefix+"Selected output: \(selectedOutput["name"] as? String ?? "Not reported")\n\(audioPreferenceSummary(health,control))\n\(override.summary)"
         if !controlsUsable {audioDescription="Saved controls are unreadable. Check health before changing audio preferences.\n\n"+audioDescription}
         audioInfo?.stringValue=audioDescription
         let reason=audioRepairReason(health,control,busy)
         audioRepair?.isEnabled=reason==nil
-        audioReason?.stringValue=(reason ?? "Repair uses the existing recovery policy. Listen afterward to confirm sound.")+(listeningResponse.isEmpty ? "":"\n\n"+listeningResponse)
+        audioRepair?.toolTip=reason ?? "Uses the existing recovery policy and preserves external headsets. Listen afterward to confirm sound."
+        audioRepair?.setAccessibilityHelp(audioRepair?.toolTip)
+        audioReason?.stringValue=[reason ?? "",listeningResponse].filter{!$0.isEmpty}.joined(separator:"\n\n")
+        audioReason?.isHidden=reason==nil && listeningResponse.isEmpty
 
         let preview=health["preview"] as? [String:Any] ?? [:]
         previewToken=preview["token"] as? String

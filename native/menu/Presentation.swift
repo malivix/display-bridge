@@ -153,6 +153,25 @@ struct AudioOverridePresentation {
     }
 }
 
+// Saved policy is distinct from the observed selected output and successful routing.
+func audioPreferenceSummary(_ health:[String:Any],_ control:[String:Any],_ now:Double=Date().timeIntervalSince1970)->String {
+    guard controlsAvailable(control) else {return "Saved speaker preference unavailable."}
+    let labels=["extended":"Both monitors here","pg":"Only PG here","benq":"Only BenQ here","away":"Both monitors away"]
+    guard let profile=health["profile"] as? String,let label=labels[profile] else {
+        return "Current monitor arrangement is unconfirmed; no active preference is inferred."
+    }
+    let fallback=profile=="away" ? "fallback":profile=="benq" ? "benq":"pg"
+    let preferences=control["speaker_preferences"] as? [String:String]
+    guard control["speaker_preferences"]==nil || preferences != nil,
+          let speaker=speakerChoices(profile).first(where:{$0.0==(preferences?[profile] ?? fallback)})?.1 else {
+        return "Saved preference for \(label.lowercased()) is unavailable."
+    }
+    let current=statusFresh(health,now) && health["status"] as? String == "ready"
+    var result="\(current ? "Preference":"Last-known arrangement preference") · \(label): \(speaker)"
+    if automationPaused(control,now) {result += "\nAutomation is paused; this preference is not being applied."}
+    return result
+}
+
 func audioRepairReason(_ health:[String:Any],_ control:[String:Any],_ busy:Bool,_ now:Double=Date().timeIntervalSince1970)->String? {
     if !controlsAvailable(control) {return "Saved controls are unreadable. Check health; setting changes are disabled."}
     if busy {return "Wait for the current command to finish."}

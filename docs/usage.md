@@ -377,3 +377,10 @@ Controls places **Set percentage…** immediately after **Read brightness and vo
 Availability guidance appears when adjustment is blocked; enabled controls retain the
 same ownership checks. Displays uses one empty-state instruction. Refresh's tooltip
 and accessibility help explain that it reads a snapshot without changing settings.
+
+Audio shows the saved speaker preference for the reported monitor arrangement beside
+the observed selected output. These may differ: preference is policy, not proof of
+routing or sound. Stale arrangements are labeled last-known; unknown arrangements and
+unreadable preferences remain unavailable. Pause and temporary preservation are shown
+separately. Routine repair guidance is in the button's tooltip/accessibility help;
+blocking reasons and listening-check responses remain visible on the page.

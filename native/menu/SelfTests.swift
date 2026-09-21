@@ -346,6 +346,17 @@ func runMenuSelfTests() {
     precondition(!speakerChoices("benq").contains{$0.0=="pg"})
     precondition(audioRepairReason([:],[:],false) != nil)
     let audioHealth:[String:Any]=["updated_at":Date().timeIntervalSince1970,"status":"ready","profile":"extended"]
+    for (profile,speaker) in [("extended","PG42UQ"),("pg","PG42UQ"),("benq","BenQ"),("away","Built-in speakers")] {
+        let h:[String:Any]=["updated_at":100.0,"status":"ready","profile":profile]
+        precondition(audioPreferenceSummary(h,[:],101).hasSuffix(speaker))
+        precondition(audioPreferenceSummary(h,[:],120).contains("Last-known"))
+        precondition(audioPreferenceSummary(h,["paused":true],101).contains("not being applied"))
+        precondition(audioPreferenceSummary(h,["_read_unavailable":true],101)=="Saved speaker preference unavailable.")
+        precondition(audioPreferenceSummary(h,["speaker_preferences":[profile:"preserve"]],101).contains("Preserve current output"))
+    }
+    precondition(audioPreferenceSummary(["profile":"unknown"],[:],101).contains("unconfirmed"))
+    precondition(audioPreferenceSummary(["profile":"away"],["speaker_preferences":["away":"pg"]],101).contains("unavailable"))
+    precondition(audioPreferenceSummary(["profile":"pg"],["speaker_preferences":42],101).contains("unavailable"))
     precondition(audioRepairReason(audioHealth,[:],false)==nil)
     precondition(audioRepairReason(audioHealth,["paused":true],false) != nil)
     precondition(audioRepairReason(audioHealth,[:],true) != nil)

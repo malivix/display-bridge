@@ -227,3 +227,13 @@ Current-build Largest/minimum inspection confirmed the placement, stale blocking
 message and disabled controls, and synthetic display refresh. Native checks passed.
 See [validation](../log/controls-display-cleanup.md). Contextual Audio preferences and
 percentage screen-reader feedback remain the next parts of this order.
+
+
+### Contextual audio preference delivered
+
+Audio now summarizes the saved preference for the reported arrangement near the selected
+output. Unknown/malformed preferences are not inferred; stale arrangement and pause are
+explicit. Routine repair guidance moved to accessible help, while blocking reasons and
+listening responses remain inline. Largest/minimum ready and manual-preservation demos
+were inspected and native verification passed. See [validation](../log/audio-profile-context.md).
+Order 3's remaining work is percentage-entry accessibility feedback and its qualification.

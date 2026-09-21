@@ -382,6 +382,12 @@ func runMenuSelfTests() {
     print("PASS contextual recovery actions, stale clicks, busy state and changed preview tokens")
     let comparisonCurrent:[String:Any]=["modes":["pg":["width":1920,"height":1080,"pixelWidth":3840,"pixelHeight":2160]]]
     let comparisonLarger:[String:Any]=["modes":["pg":["width":1536,"height":864,"pixelWidth":3072,"pixelHeight":1728]]]
+    let groupedChoices:[[String:Any]]=[["size":"current"],["size":"match-benq"],["size":"match-pg-larger"],["size":"match-benq-smaller"],["size":"match-benq","preset":"Custom"],["label":"Match PG size to BenQ"]]
+    precondition(matchingChoiceIndices(groupedChoices,reference:nil)==[0,1,2,3,4,5])
+    precondition(matchingChoiceIndices(groupedChoices,reference:"benq")==[1,3])
+    precondition(matchingChoiceIndices(groupedChoices,reference:"pg")==[2])
+    precondition(matchingChoiceIndices(groupedChoices,reference:"unknown").isEmpty)
+    precondition(matchingChoiceIndices([],reference:"pg").isEmpty)
     precondition(sizeComparison(["physical_size_percent":154.3],["physical_size_percent":98.5]).contains("PG about 98% of BenQ"))
     precondition(sizeComparison(["physical_size_percent":true],["physical_size_percent":Double.infinity]).contains("Current: unavailable"))
     precondition(sizeComparison(comparisonCurrent,comparisonLarger).contains("25% larger"))

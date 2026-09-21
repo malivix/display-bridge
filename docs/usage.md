@@ -131,6 +131,11 @@ Changed enrollment, missing modes and damaged preset data are reported; the orig
 is preserved. Ordinary relative-size previews remain available when only the preset store
 is unreadable. Named presets remain unavailable until valid data is restored.
 
+In the size chooser, use **Keep BenQ size · adjust PG** or **Keep PG size · adjust BenQ**
+to narrow the list to matching proposals that preserve your reference monitor's size.
+**All qualified sizes** restores the full list, including named presets. If no matching
+choice was offered for a reference, Preview is disabled; no settings have changed.
+
 ## Brightness and monitor volume
 
 In **Controls**, select PG or BenQ, then read its brightness and volume or use the explicit

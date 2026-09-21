@@ -45,18 +45,35 @@ func previewDurations(_ report:[String:Any])->[Int] {
     return values.map{$0.intValue}.sorted()
 }
 
+// Filter only known matching intents. Never infer a reference from a display label.
+func matchingChoiceIndices(_ choices:[[String:Any]],reference:String?)->[Int] {
+    guard let reference=reference else{return Array(choices.indices)}
+    guard ["pg","benq"].contains(reference) else{return []}
+    let keys:Set<String>=["match-"+reference,"match-"+reference+"-larger","match-"+reference+"-smaller"]
+    return choices.indices.filter { index in
+        guard choices[index]["preset"]==nil,let key=choices[index]["size"] as? String else{return false}
+        return keys.contains(key)
+    }
+}
+
 final class SizeChooser: NSObject, NSWindowDelegate {
     let choices:[[String:Any]]
     let current:[String:Any]
     let notes:String
     let window:NSPanel
     let selector=NSPopUpButton()
+    let referenceSelector=NSPopUpButton()
+    var visibleIndices:[Int]=[]
+    var previewButton:NSButton?
     let comparison=NSTextView()
     let durationSelector=NSPopUpButton()
     let durations:[Int]
     var previewSeconds:Int {durations[max(0,min(durations.count-1,durationSelector.indexOfSelectedItem))]}
     var result = -1
-    var selectedIndex:Int {selector.indexOfSelectedItem}
+    var selectedIndex:Int {
+        let index=selector.indexOfSelectedItem
+        return visibleIndices.indices.contains(index) ? visibleIndices[index]:-1
+    }
     init(choices:[[String:Any]],current:[String:Any],notes:String,orientation:String,fontSize:CGFloat,canSave:Bool,canRemove:Bool,durations:[Int]=[20]) {
         self.choices=choices;self.current=current;self.notes=notes
         self.durations=previewDurations(["preview_seconds":durations])
@@ -71,7 +88,12 @@ final class SizeChooser: NSObject, NSWindowDelegate {
         intro.font=NSFont.systemFont(ofSize:fontSize);stack.addArrangedSubview(intro)
         intro.widthAnchor.constraint(equalTo:stack.widthAnchor).isActive=true
         selector.font=intro.font;selector.setAccessibilityLabel("Size choice to preview")
-        for choice in choices {selector.addItem(withTitle:choice["label"] as? String ?? "Size")}
+        referenceSelector.font=intro.font
+        referenceSelector.addItems(withTitles:["All qualified sizes","Keep BenQ size · adjust PG","Keep PG size · adjust BenQ"])
+        referenceSelector.setAccessibilityLabel("Reference display to keep unchanged")
+        referenceSelector.target=self;referenceSelector.action=#selector(referenceChanged)
+        stack.addArrangedSubview(referenceSelector)
+        referenceSelector.widthAnchor.constraint(equalTo:stack.widthAnchor).isActive=true
         selector.target=self;selector.action=#selector(selectionChanged(_:));stack.addArrangedSubview(selector)
         selector.widthAnchor.constraint(equalTo:stack.widthAnchor).isActive=true
         durationSelector.font=intro.font
@@ -90,20 +112,32 @@ final class SizeChooser: NSObject, NSWindowDelegate {
         for (index,title) in ["Preview selected size","Save current as preset…","Remove a saved preset…","Cancel"].enumerated() {
             let button=NSButton(title:title,target:self,action:#selector(finish(_:)));button.tag=index;button.font=intro.font
             button.setContentHuggingPriority(.required,for:.vertical)
-            if index==0 {button.keyEquivalent="\r"}
+            if index==0 {button.keyEquivalent="\r";previewButton=button}
             if index==1 {button.isEnabled=canSave}
             if index==2 {button.isEnabled=canRemove}
             if index==3 {button.keyEquivalent="\u{1b}"}
             stack.addArrangedSubview(button)
         }
-        window.initialFirstResponder=selector;selectionChanged(selector)
+        window.initialFirstResponder=referenceSelector;referenceChanged()
+    }
+    @objc func referenceChanged() {
+        let reference=referenceSelector.indexOfSelectedItem==1 ? "benq":referenceSelector.indexOfSelectedItem==2 ? "pg":nil
+        visibleIndices=matchingChoiceIndices(choices,reference:reference)
+        selector.removeAllItems()
+        for index in visibleIndices {selector.addItem(withTitle:choices[index]["label"] as? String ?? "Size")}
+        selector.isEnabled = !visibleIndices.isEmpty
+        previewButton?.isEnabled = !visibleIndices.isEmpty
+        selectionChanged(selector)
     }
     @objc func selectionChanged(_ sender:NSPopUpButton) {
-        guard selectedIndex>=0,selectedIndex<choices.count else{return}
+        guard selectedIndex>=0,selectedIndex<choices.count else {
+            comparison.string="No matching choice was offered for this reference. Choose All qualified sizes to inspect other options. No display setting has changed."
+            return
+        }
         comparison.string=sizeComparison(current,choices[selectedIndex])+(notes.isEmpty ? "":"\n\n"+notes)
         comparison.scrollRangeToVisible(NSRange(location:0,length:0))
     }
-    @objc func finish(_ sender:NSButton) {result=sender.tag;NSApp.stopModal()}
+    @objc func finish(_ sender:NSButton) {if sender.tag==0 && selectedIndex<0 {return};result=sender.tag;NSApp.stopModal()}
     func windowShouldClose(_ sender:NSWindow)->Bool {result = -1;NSApp.stopModal();return true}
     func run()->Int {
         window.center();window.recalculateKeyViewLoop();window.makeKeyAndOrderFront(nil);NSApp.runModal(for:window);window.orderOut(nil)

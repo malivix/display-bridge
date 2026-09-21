@@ -127,6 +127,27 @@ No login credentials, cloud service, or administrator access are needed at runti
 Test ordinary input changes, both-away, and both return orders. Listen to the selected output;
 a software readback cannot prove that sound works. Mac B qualification is still pending.
 
+## Optional native Shortcuts build (integration qualification pending)
+
+The standard build remains ad-hoc signed and does not package native Shortcuts
+metadata. The optional path requires full Xcode, its App Intents metadata tools,
+and an existing suitable local code-signing identity. It does not obtain a
+certificate or change keychain permissions. Keep identity values and signed
+development bundles private.
+
+For the CLI installer, explicitly set `DISPLAY_BRIDGE_MENU_SIGN_IDENTITY` to the
+chosen local identity in your environment, then run the same preflight and install
+commands above. Preflight checks the optional build tools; signature validation
+happens during the build. Empty or ad-hoc identity selections fail instead of
+silently producing an unusable action. Unset the variable to use the standard path.
+The graphical setup has no signing-identity selector.
+
+The package records whether Shortcuts metadata is included. Packaging and isolated
+bundle rollback have passed locally, but execution through the actual companion
+process is still being qualified. Only the separate signed synthetic app has
+passed Shortcuts execution so far. This optional build is not a claim of distributed
+release readiness. See the [implementation plan](plans/local-shortcuts.md).
+
 ## Calibrate BenQ rotation
 
 After installation, keep both monitors on the current host. Physically orient BenQ in landscape,

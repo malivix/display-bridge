@@ -18,8 +18,8 @@ panel keyboard routing.
 `SelfTests.swift` holds isolated checks; `main.swift` selects test entry points or starts the app.
 `ShortcutStatus.swift` projects bounded local observations into allowlisted status
 fields; `StatusIntent.swift` exposes them as an App Intents entity and read-only action.
-The action is source-implemented; signing-aware metadata packaging and companion-app
-execution qualification remain pending. Its latest-status entity re-reads on resolution
+The action has optional signed metadata packaging; companion-app execution qualification
+remains pending. Its latest-status entity re-reads on resolution
 and never authorizes hardware mutations.
 The app submits controller commands and reads health;
 it does not maintain an independent hardware state machine. CLI execution has bounded time
@@ -45,6 +45,11 @@ before mutation; a failed post-restore check restores the pre-rollback snapshot.
 `release_manifest.py` defines the version and installed inventory used by installation and health checks.
 The checkout is independent from the running installed release. `install_progress.py` records the latest attempt under the installer lock and provides a
 bounded, read-only status projection for both the checkout and installed controller. It never authorizes, resumes or retries installation.
+
+`menu_build.py` builds and validates a complete companion bundle without activation.
+`setup_menu.py` owns activation and its rollback. Optional signed Shortcuts builds
+extract and validate metadata before signing and require a signature team identity;
+default ad-hoc builds do not package Shortcuts metadata. Backups cover the full bundle.
 
 Stored display keys and audio UIDs belong only in per-machine runtime configuration.
 Model vendor/product identifiers in source select supported panel specifications; they are

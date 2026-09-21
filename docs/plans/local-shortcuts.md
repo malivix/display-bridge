@@ -1,7 +1,8 @@
 # Native macOS Shortcuts integration
 
 Status: signed synthetic integration qualified on the development Mac;
-real status projection and action source implemented; production feature not yet delivered.
+real status projection, action source and optional signed packaging implemented;
+companion-process execution remains unqualified and no live installation has occurred.
 This extends the [current product plan](ui-feature-priority-review-2026-09-21.md).
 
 ## Intended user outcome
@@ -85,9 +86,11 @@ The real source action now exposes six allowlisted fields via the bounded regula
 reader. Freshness shares the menu's 15-second threshold. Timestamp/boolean types are
 checked strictly; missing recovery information stays unknown. Requested pause is
 distinct from reported controller state. The latest-status entity re-reads when
-resolved; it is not a persistent historical snapshot. The current installer does not
-yet package its App Intents metadata or qualified signing identity. Do not advertise
-it as an available installed action until that integration passes.
+resolved; it is not a persistent historical snapshot. The installer can now optionally
+package its metadata using an explicitly selected local signing identity, while
+preserving the default ad-hoc build. Private production-bundle construction and
+isolated metadata/signature rollback have passed. Companion-process execution remains
+unqualified; do not advertise it as an available installed action until that passes.
 
 Timed pause/resume follows read-only status. Validate bounded inputs and route
 through the existing CLI/controller boundary. Distinguish request acceptance,

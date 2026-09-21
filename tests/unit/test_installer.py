@@ -79,6 +79,20 @@ class InstallerEntryTests(unittest.TestCase):
             self.assertEqual(set(home.iterdir()),before)
             self.assertNotIn(str(home),out.getvalue())
 
+    def test_optional_shortcuts_preflight_does_not_sign_or_echo_identity(self):
+        module=self.load()
+        with tempfile.TemporaryDirectory() as directory,patch('platform.system',return_value='Darwin'),patch('platform.machine',return_value='arm64'),patch('platform.mac_ver',return_value=('13.0','','')):
+            for identity in ['synthetic-local-identity','-','']:
+                with patch.dict(module.os.environ,{'DISPLAY_BRIDGE_MENU_SIGN_IDENTITY':identity}),patch('menu_build.shortcuts_tools',return_value=()) as inspect:
+                    # Ordinary tool inspection fails safely; optional inspection is separate.
+                    with patch.object(module,'run',side_effect=OSError('No build tools')):
+                        report=module.preflight(Path(directory),Path(directory))
+                    check=next(c for c in report['checks'] if c['name']=='Native Shortcuts build')
+                    self.assertEqual(check['status'],'ok' if identity=='synthetic-local-identity' else 'error')
+                    self.assertEqual(inspect.call_count,int(identity=='synthetic-local-identity'))
+                    self.assertNotIn('synthetic-local-identity',str(report))
+                    self.assertEqual(list(Path(directory).iterdir()),[])
+
     def test_preflight_failure_and_capture_conflict_do_not_install(self):
         module=self.load()
         with tempfile.TemporaryDirectory() as directory,patch('pathlib.Path.home',return_value=Path(directory)),patch('platform.system',return_value='Linux'),patch.object(module,'run',side_effect=AssertionError('No subprocess on unsupported platform')):

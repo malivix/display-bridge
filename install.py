@@ -45,7 +45,7 @@ def preflight(package, home):
         major=0
     add('macOS version',compatible and major>=13,'macOS 13 or newer is required.')
     add('Python',sys.version_info>=(3,10),'Python 3.10 or newer is required.')
-    sources=(*RUNTIME_MODULES,'setup_menu.py','scripts/test','native/display-layout.swift',
+    sources=(*RUNTIME_MODULES,'setup_menu.py','menu_build.py','scripts/test','native/display-layout.swift',
              'native/display-audio.m','native/display-rotate.m','native/display-mode-info.m',
              *MENU_SOURCES,'vendor/m1ddc/Makefile','tests/native/test_ddc.m')
     missing=[name for name in sources if not (package/name).is_file()]
@@ -62,6 +62,19 @@ def preflight(package, home):
         except (OSError,subprocess.SubprocessError):
             toolchain=False
     add('Build tools',toolchain,'SDK, Swift, Clang and make are available.' if toolchain else 'Install or select Xcode Command Line Tools, then rerun preflight on the supported Mac.')
+    if 'DISPLAY_BRIDGE_MENU_SIGN_IDENTITY' in os.environ:
+        optional_tools=False
+        identity=os.environ['DISPLAY_BRIDGE_MENU_SIGN_IDENTITY'].strip()
+        if compatible and identity and identity!='-':
+            try:
+                from menu_build import shortcuts_tools
+                shortcuts_tools(run)
+                optional_tools=True
+            except (ImportError,OSError,ValueError,IndexError,RuntimeError,subprocess.SubprocessError):
+                pass
+        add('Native Shortcuts build',optional_tools,
+            'Optional metadata tools are available; signing identity is checked during build.' if optional_tools
+            else 'Optional Shortcuts requires full Xcode and an explicit non-ad-hoc local signing identity.')
     try:
         require_service_namespace(home,'io.github.display-bridge')
         add('Service namespace',True,'No conflicting known Display Bridge service namespace found.')

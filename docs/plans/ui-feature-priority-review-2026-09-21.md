@@ -15,8 +15,8 @@ the product choices and primary sources.
 
 | Priority | Next result | Status and acceptance |
 | --- | --- | --- |
-| First | Qualify accessible operation of existing UI | Compact size comparison, ownership/speaker summary, precise controls and contextual audio preferences are implemented. Recovery focus and top alignment defects are fixed. Finish keyboard traversal, long-name layouts, high contrast and VoiceOver speech; fix observed failures individually. |
-| Next feature | Local Shortcuts for status, then timed pause/resume | Not implemented. Use the existing command boundary, typed results, bounded arguments and current guards. Read-only status must work before adding mutations. Named size-preset preview follows separately with Keep/Revert. |
+| First | Finish accessibility qualification of existing UI | Compact size comparison, ownership/speaker summary, precise controls and contextual audio preferences are implemented. Recovery focus, top alignment and hidden keyboard focus are fixed. Long-name Overview/Audio and selected keyboard paths passed; high contrast, VoiceOver speech and the remaining dialog matrix are open. |
+| Active feature | Qualify local Shortcuts status, then add timed pause/resume | Bounded typed status and optional signed packaging are implemented. Private signed build and bundle rollback passed; actual companion-process execution and ownership-lock interaction remain open. Verify running/stopped behavior before adding mutations through the existing command boundary. Named size-preset preview follows separately with Keep/Revert. |
 | Reliability | Explain and reduce measured rotation delays | Timing reports exist; exact-revision physical samples remain pending. Separate sensor observation, confirmation, layout and readback. Optimize the measured slow phase, not guessed polling intervals. |
 | Release | Finish installer interruption and hardware qualification | Full installer commit-phase interruption, Mac B, concurrent controllers and headset transitions remain open. Keep source tests, package checks and physical outcomes separate. |
 | Research only | BenQ comfort-settings inspector | Establish narrow firmware/transport-bound protocol evidence before exposing controls. Unreadable or multiplexed values cannot be presented as confirmed settings. Retain OSD guidance if reliable inspection is unavailable. |
@@ -348,3 +348,12 @@ also passed. [Validation and limits](../log/shortcuts-status-projection.md).
 The feature remains unavailable through the standard installer until signing-aware
 packaging and companion-process execution are qualified. Those are the next slice;
 do not substitute synthetic execution evidence for the real app's integration.
+
+### Optional signed menu packaging implemented
+
+The installer now uses an isolated bundle builder. Default ad-hoc installation
+remains supported; explicitly signed builds validate status metadata and team
+signature before activation. Private production-bundle construction, 305 unit tests,
+native checks and isolated metadata/signature rollback passed.
+[Evidence and limits](../log/shortcuts-menu-packaging.md). Actual companion-process
+execution and ownership-lock interaction are next; no live installation occurred.

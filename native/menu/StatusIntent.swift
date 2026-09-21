@@ -60,6 +60,10 @@ struct DisplayBridgeStatusResult:AppEntity {
         pauseRequest=snapshot.pauseRequest;recovery=snapshot.recovery;ageSeconds=snapshot.ageSeconds
     }
     static func readLatest()->Self {
+        // A signed demo can also be discovered by Shortcuts; it must not read real state.
+        if Bundle.main.object(forInfoDictionaryKey:"DisplayBridgeDemo") as? Bool == true {
+            return Self(snapshot:ShortcutStatusSnapshot(health:nil,control:nil,now:Date().timeIntervalSince1970))
+        }
         let root=FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".config/display-auto")
         return Self(snapshot:ShortcutStatusSnapshot.read(root:root))
     }

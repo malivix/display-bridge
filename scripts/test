@@ -19,6 +19,9 @@ with tempfile.TemporaryDirectory(prefix="display-bridge-test-home-") as test_hom
     environment = dict(
         os.environ, HOME=test_home, PYTHONPATH=str(ROOT), PYTHONDONTWRITEBYTECODE="1"
     )
+    # Test cases opt into synthetic signing settings explicitly, never inherit keys.
+    environment.pop("DISPLAY_BRIDGE_MENU_SIGN_IDENTITY", None)
+    environment.pop("DISPLAY_BRIDGE_PROBE_SIGN_IDENTITY", None)
     result = subprocess.run(
         [
             sys.executable,

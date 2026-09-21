@@ -4,7 +4,7 @@
 import os, plistlib, shutil, subprocess, tempfile, time, json, re
 from pathlib import Path
 from deployment import require_service_namespace
-from release_manifest import VERSION, MENU_BUILD, MENU_SOURCES, source_fingerprint
+from menu_build import build_menu
 
 
 def activate_menu(staged, app, agent, service, run, health_path, version):
@@ -98,51 +98,12 @@ def install_menu(package):
     service = f"gui/{os.getuid()}/io.github.display-bridge.menu"
 
     def run(args, **kw):
-        return subprocess.run(args, timeout=90, **kw)
+        kw.setdefault("timeout", 90)
+        return subprocess.run(args, **kw)
 
-    sdk = run(
-        ["xcrun", "--sdk", "macosx", "--show-sdk-path"],
-        check=True,
-        capture_output=True,
-        text=True,
-    ).stdout.strip()
     with tempfile.TemporaryDirectory(dir=apps, prefix=".display-menu-") as temp:
         staged = Path(temp) / app.name
-        contents = staged / "Contents"
-        fingerprint = source_fingerprint(package)
-        binary = contents / "MacOS/display-menu"
-        binary.parent.mkdir(parents=True)
-        run(
-            [
-                "swiftc",
-                "-sdk",
-                sdk,
-                "-target",
-                "arm64-apple-macos13.0",
-                "-O",
-                *(str(package / source) for source in MENU_SOURCES),
-                "-o",
-                str(binary),
-            ],
-            check=True,
-        )
-        run([str(binary), "--self-test"], check=True)
-        if source_fingerprint(package) != fingerprint:
-            raise RuntimeError("Sources changed during menu compilation; retry from a stable checkout")
-        info = {
-            "DisplayBridgeSourceFingerprint": fingerprint,
-            "CFBundleIdentifier": "io.github.display-bridge.menu",
-            "CFBundleName": "Display Auto",
-            "CFBundleExecutable": "display-menu",
-            "CFBundlePackageType": "APPL",
-            "CFBundleShortVersionString": VERSION,
-            "CFBundleVersion": MENU_BUILD,
-            "LSMinimumSystemVersion": "13.0",
-            "LSUIElement": True,
-            "NSHighResolutionCapable": True,
-        }
-        (contents / "Info.plist").write_bytes(plistlib.dumps(info))
-        run(["codesign", "--force", "--sign", "-", str(staged)], check=True)
+        info = build_menu(package, staged, run, os.environ.get("DISPLAY_BRIDGE_MENU_SIGN_IDENTITY"))
         activate_menu(
             staged,
             app,

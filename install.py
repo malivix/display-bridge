@@ -270,10 +270,12 @@ def run_install(argv, resources):
         running = (
             run(["launchctl", "print", service], capture_output=True).returncode == 0
         )
-        if running:
-            run(["launchctl", "bootout", service], check=True)
         activated = False
         try:
+            # A failed/timed-out stop may already have taken effect. Keep it
+            # inside recovery so the prior service is restarted on this path.
+            if running:
+                run(["launchctl", "bootout", service], check=True)
             stop_deadline = time.monotonic() + 8
             while True:
                 try:

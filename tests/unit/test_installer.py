@@ -155,12 +155,22 @@ class InstallerEntryTests(unittest.TestCase):
             module.require_idle_preview(root)
             self.assertEqual(preview.path.read_bytes(),before)
 
-    def exercise_service_failure(self, lock_error):
+    def exercise_service_failure(self, lock_error, stop_error=None):
         import subprocess
         module=self.load()
         with tempfile.TemporaryDirectory() as directory:
             home=Path(directory);root=home/'.config/display-auto';root.mkdir(parents=True)
             (root/'config.json').write_text('original configuration')
+            prior=root/'releases/prior'
+            if stop_error is not None:
+                prior.mkdir(parents=True)
+                (prior/'display-auto.py').write_text('synthetic prior controller')
+                (root/'current').symlink_to(prior)
+                launcher=home/'Library/LaunchAgents/io.github.display-bridge.plist'
+                launcher.parent.mkdir(parents=True)
+                import plistlib
+                launcher.write_bytes(plistlib.dumps({'Label':'io.github.display-bridge','ProgramArguments':['python3',str(prior/'display-auto.py')]}))
+                launcher_before=launcher.read_bytes()
             events=[]
             def run(args,**kwargs):
                 if args[0]=='/usr/bin/xcrun':return subprocess.CompletedProcess(args,0,directory,'')
@@ -170,10 +180,14 @@ class InstallerEntryTests(unittest.TestCase):
                     (Path(args[args.index('-C')+1])/'m1ddc').write_text('synthetic ddc')
                 elif args[0]=='launchctl':
                     events.append(args[1])
+                    if args[1]=='bootout' and events.count('bootout')==1 and stop_error is not None:
+                        raise stop_error
                     if args[1]=='bootstrap':
                         self.assertTrue(kwargs.get('check'))
                         self.assertEqual(kwargs.get('timeout'),10)
-                        raise subprocess.CalledProcessError(5,args)
+                        if stop_error is None:raise subprocess.CalledProcessError(5,args)
+                        self.assertEqual(args[-1],str(launcher))
+                        self.assertEqual(launcher.read_bytes(),launcher_before)
                 elif not (str(args[0]).endswith('/test-ddc') or len(args)>1 and str(args[1]).endswith('/scripts/test')):
                     self.fail('Unexpected subprocess')
                 return subprocess.CompletedProcess(args,0,'','')
@@ -182,13 +196,18 @@ class InstallerEntryTests(unittest.TestCase):
                 if lock_error and path==root/'controller.lock':raise PermissionError('injected controller lock open failure')
                 return original_open(path,*args,**kwargs)
             with patch('pathlib.Path.home',return_value=home),patch('platform.system',return_value='Darwin'),patch('platform.machine',return_value='arm64'),patch.object(module,'run',side_effect=run),patch.object(Path,'open',opened),patch.object(module,'atomic_link',side_effect=RuntimeError('injected activation failure')),contextlib.redirect_stderr(io.StringIO()):
-                expected=PermissionError if lock_error else subprocess.CalledProcessError
+                expected=type(stop_error) if stop_error is not None else PermissionError if lock_error else subprocess.CalledProcessError
                 with self.assertRaises(expected) as caught:
                     module.main(['A'])
             self.assertEqual((root/'config.json').read_text(),'original configuration')
             if lock_error:self.assertEqual(events,[])
             else:
-                self.assertEqual(caught.exception.cmd[1],'bootstrap')
+                if stop_error is not None:
+                    self.assertIs(caught.exception,stop_error)
+                    self.assertEqual((root/'current').readlink(),prior)
+                    self.assertEqual((prior/'display-auto.py').read_text(),'synthetic prior controller')
+                    self.assertEqual(launcher.read_bytes(),launcher_before)
+                else:self.assertEqual(caught.exception.cmd[1],'bootstrap')
                 self.assertEqual(events,['print','bootout','bootout','bootstrap'])
 
     def test_controller_lock_prepared_before_stopping_service(self):
@@ -196,3 +215,10 @@ class InstallerEntryTests(unittest.TestCase):
 
     def test_failed_rollback_restart_is_reported(self):
         self.exercise_service_failure(lock_error=False)
+
+    def test_failed_or_timed_out_stop_attempts_to_restart_prior_service(self):
+        import subprocess
+        command=['launchctl','bootout','synthetic-service']
+        for error in (subprocess.CalledProcessError(5,command),subprocess.TimeoutExpired(command,10),KeyboardInterrupt()):
+            with self.subTest(error=type(error).__name__):
+                self.exercise_service_failure(lock_error=False,stop_error=error)

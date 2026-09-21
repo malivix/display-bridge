@@ -311,3 +311,13 @@ The failing native regression passes, and current-source UI checks cover first/l
 preferences, reverse traversal and refresh retention. [Evidence and limits](../log/keyboard-focus-scrolling.md).
 Other tabs/dialogs, VoiceOver speech and high contrast remain unqualified; do not
 interpret this slice as completion of the full accessibility matrix.
+
+### Controls, preset dialogs and Details traversal checked
+
+The same current-source Largest/minimum demo now has keyboard evidence for Controls
+scrolling, brightness and size preset entry/cancellation, invalid-name submission
+blocking, focus restoration and Details report traversal/end scrolling. No new defect
+was observed. [Exact paths and limits](../log/controls-preset-keyboard-qualification.md).
+VoiceOver, high contrast and the complete dialog matrix remain open. The next product
+slice is read-only local Shortcuts status; do not hold that independent work behind
+physical qualification, and do not mark the remaining accessibility checks complete.

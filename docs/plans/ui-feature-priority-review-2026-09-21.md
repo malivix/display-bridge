@@ -259,3 +259,15 @@ Still open: VoiceOver speech, full keyboard traversal, high contrast, live appea
 changes, long-name layouts and focus when recovery actions disappear. These are
 qualification gaps, not evidence of a known failure. Keep source delivery separate
 from installed-hardware qualification.
+
+
+### Recovery action focus defect reproduced and fixed
+
+A private, instrumented demo changed recovery to ready two seconds after Repair gained
+keyboard focus. Before the fix, focus fell back to the window when the button vanished;
+after the fix it moved to the visible Overview tab. The app now moves focus before a
+focused recovery action disappears or is replaced. Existing repair authorization remains
+unchanged. [Reproduction and limits](../log/recovery-focus-restoration.md).
+The probe also exposed excess blank space above Overview after sections collapse at
+Standard text; investigate document sizing/scroll position next. This remaining layout
+issue is separate from the fixed keyboard focus loss.

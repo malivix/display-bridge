@@ -531,6 +531,11 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
             progress="\(operationName)… \(elapsed)s in this phase. Phase deadline: \(Int(operationDeadline))s."
         }
         if !controlsUsable {progress += "\nSaved controls are unreadable. Setting changes are disabled; check health."}
+        let nextRecoveryAction=recoveryAction(health,control)
+        let focused=panel?.firstResponder
+        let losingRepairFocus=recoveryButton != nil && focused === recoveryButton && presentedRecoveryAction != nextRecoveryAction
+        let losingHealthFocus=recoveryHealthButton != nil && focused === recoveryHealthButton && nextRecoveryAction?.arguments != ["repair-audio"]
+        if losingRepairFocus || losingHealthFocus {panel?.makeFirstResponder(contentTabs)}
         let sections=statusSections(health,control)
         for (index,fields) in overviewFields.enumerated() where index<sections.count {
             var body=sections[index].body
@@ -541,7 +546,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
             fields.0.superview?.isHidden=body.isEmpty
             if fields.1.stringValue != body {fields.1.stringValue=body;fields.1.setAccessibilityValue(body)}
         }
-        presentedRecoveryAction=recoveryAction(health,control)
+        presentedRecoveryAction=nextRecoveryAction
         recoveryButton?.isHidden=presentedRecoveryAction==nil
         recoveryButton?.title=presentedRecoveryAction?.title ?? "Check health"
         recoveryButton?.isEnabled = !busy && presentedRecoveryAction != nil

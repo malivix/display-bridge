@@ -85,6 +85,22 @@ struct MonitorReadings {
     func observation(for role:String,feature:String)->MonitorObservation? {
         settings[role]?[feature]
     }
+    func compactSummary(for role:String,at now:Date)->String {
+        let rows=[("Brightness","luminance"),("Speaker volume","volume")].map { name,feature in
+            guard let observation=observation(for:role,feature:feature) else {
+                return "\(name): not read"
+            }
+            let seconds=now.timeIntervalSince(observation.date)
+            let age:String
+            if !seconds.isFinite || seconds<0 {age="time unavailable"}
+            else if seconds<60 {age="read <1 min ago"}
+            else if seconds<3600 {age="read \(Int(seconds/60)) min ago"}
+            else if seconds<86400 {age="read \(Int(seconds/3600)) hr ago"}
+            else {age="read ≥1 day ago"}
+            return "\(name): \(observation.setting.percent)% · \(age)"
+        }
+        return "Previous readings · use Read to refresh\n"+rows.joined(separator:"\n")
+    }
     mutating func accept(_ response:MonitorResponse,at date:Date)->String {
         let summary=response.summary(at:date)
         readings[response.role]=summary

@@ -44,6 +44,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
     var monitorButtons:[NSButton]=[]
     var monitorReason:NSTextField?
     var monitorFeedback:NSTextField?
+    var monitorReadingSummary:NSTextField?
     var monitorSupportDetails:NSStackView?
     var speakerPopups:[String:NSPopUpButton]=[:]
     var audioInfo:NSTextField?
@@ -213,6 +214,11 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
             let selector=NSPopUpButton();selector.addItems(withTitles:["PG42UQ","BenQ RD280UG"])
             selector.target=self;selector.action=#selector(selectMonitor(_:));selector.setAccessibilityLabel("Monitor to adjust")
             controlsStack.addArrangedSubview(selector);monitorSelector=selector;scalableControls.append(selector)
+            let readingSummary=NSTextField(wrappingLabelWithString:monitorReadings.compactSummary(for:monitorRole,at:Date()))
+            readingSummary.isSelectable=true;scalableControls.append(readingSummary)
+            controlsStack.addArrangedSubview(readingSummary)
+            readingSummary.widthAnchor.constraint(equalTo:controlsStack.widthAnchor,constant:-32).isActive=true
+            monitorReadingSummary=readingSummary
             let availability=NSTextField(wrappingLabelWithString:"");controlsStack.addArrangedSubview(availability)
             availability.widthAnchor.constraint(equalTo:controlsStack.widthAnchor,constant:-32).isActive=true;monitorReason=availability
             let read=NSButton(title:"Read brightness and volume",target:self,action:#selector(adjustMonitor(_:)))
@@ -345,6 +351,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
         if let role=role,["pg","benq"].contains(role) {
             monitorRole=role;monitorSelector?.selectItem(at:role=="pg" ? 0:1)
         }
+        monitorReadingSummary?.stringValue=monitorReadings.compactSummary(for:monitorRole,at:Date())
         monitorFeedback?.stringValue=text
         contentTabs?.selectTabViewItem(withIdentifier:"monitor-controls")
     }
@@ -375,6 +382,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
     }
     @objc func selectMonitor(_ sender:NSPopUpButton) {
         monitorRole=sender.indexOfSelectedItem==0 ? "pg":"benq"
+        monitorReadingSummary?.stringValue=monitorReadings.compactSummary(for:monitorRole,at:Date())
         monitorFeedback?.stringValue=monitorReadings.previous(for:monitorRole) ?? "No readback for this selection yet. Read settings to inspect it."
         refresh()
     }
@@ -503,8 +511,9 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
         }
         compatibilityLabel?.stringValue=presetCompatibilitySummary(visibleCapabilities,checking:checkingCapabilities)
         compatibilityButton?.isEnabled = !checkingCapabilities && !busy && !demo
+        monitorReadingSummary?.stringValue=monitorReadings.compactSummary(for:monitorRole,at:Date())
         let monitorUnavailable=monitorControlReason(health,control,monitorRole,busy)
-        monitorReason?.stringValue=monitorUnavailable ?? "Adjusting the selected monitor; changes require hardware confirmation."
+        monitorReason?.stringValue=monitorUnavailable ?? "Ready to adjust this monitor."
         for button in monitorButtons {button.isEnabled=monitorUnavailable==nil}
         monitorSelector?.isEnabled = !busy
         for button in panelActions {

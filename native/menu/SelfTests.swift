@@ -212,6 +212,12 @@ func runMenuSelfTests() {
     precondition(readings.observation(for:"benq",feature:"luminance")?.setting.percent==30)
     precondition(readings.observation(for:"pg",feature:"volume")==nil)
     precondition(readings.observation(for:"benq",feature:"volume")?.description.contains("not refreshed")==true)
+    let compact=readings.compactSummary(for:"benq",at:volumeDate.addingTimeInterval(30))
+    precondition(compact.contains("Brightness: 30% · read 1 min ago"))
+    precondition(compact.contains("Speaker volume: 70% · read <1 min ago"))
+    precondition(readings.compactSummary(for:"pg",at:volumeDate).contains("Speaker volume: not read"))
+    precondition(readings.compactSummary(for:"unmanaged",at:volumeDate).contains("Brightness: not read"))
+    precondition(readings.compactSummary(for:"benq",at:readDate.addingTimeInterval(-1)).contains("time unavailable"))
     for (field,value) in [("read_only",1 as Any),("settings",["luminance":setting]),("monitor","pg")] {
         var invalid=snapshot;invalid[field]=value;precondition(monitorResult(invalid,snapshotArgs)==nil)
     }

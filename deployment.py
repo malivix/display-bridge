@@ -3,6 +3,7 @@
 
 import json, os, shutil, plistlib, hashlib, tempfile
 from pathlib import Path
+from contextlib import ExitStack
 from xml.parsers.expat import ExpatError
 
 
@@ -110,32 +111,37 @@ def validate_snapshot(backup):
 def restore(backup):
     backup = Path(backup)
     metadata = validate_snapshot(backup)
-    current = Path(metadata["current"])
-    if metadata["previous_release"] is not None:
-        atomic_link(metadata["previous_release"], current)
-    elif current.is_symlink():
-        current.unlink()
-    for item in metadata["files"]:
-        path = Path(item["path"])
-        if not item["exists"]:
+    with ExitStack() as resources:
+        prepared = []
+        # Complete every copy before changing the pointer or any live destination.
+        # Same-filesystem staging permits rename for files and symlinks afterward.
+        for item in metadata["files"]:
+            path = Path(item["path"])
+            staged = None
+            if item["exists"]:
+                temporary = resources.enter_context(tempfile.TemporaryDirectory(
+                    prefix=".display-bridge-restore-", dir=path.parent))
+                staged = Path(temporary) / "payload"
+                if item["link"] is not None:
+                    staged.symlink_to(item["link"])
+                elif item.get("directory", False):
+                    shutil.copytree(backup / str(item["index"]), staged, symlinks=True)
+                else:
+                    shutil.copy2(backup / str(item["index"]), staged)
+            prepared.append((path, staged))
+
+        current = Path(metadata["current"])
+        if metadata["previous_release"] is not None:
+            atomic_link(metadata["previous_release"], current)
+        elif current.is_symlink():
+            current.unlink()
+        for path, staged in prepared:
             if path.is_dir() and not path.is_symlink():
                 shutil.rmtree(path)
-            elif path.exists() or path.is_symlink():
+            elif staged is None and (path.exists() or path.is_symlink()):
                 path.unlink()
-            continue
-        # Copy first on the destination filesystem. A failed copy must not destroy
-        # the current file or bundle, and partial payloads must never become live.
-        with tempfile.TemporaryDirectory(prefix=".display-bridge-restore-", dir=path.parent) as temporary:
-            staged = Path(temporary) / "payload"
-            if item["link"] is not None:
-                staged.symlink_to(item["link"])
-            elif item.get("directory", False):
-                shutil.copytree(backup / str(item["index"]), staged, symlinks=True)
-            else:
-                shutil.copy2(backup / str(item["index"]), staged)
-            if path.is_dir() and not path.is_symlink():
-                shutil.rmtree(path)
-            staged.replace(path)
+            if staged is not None:
+                staged.replace(path)
 
 
 def require_service_namespace(home, label):

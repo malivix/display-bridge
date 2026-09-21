@@ -224,3 +224,37 @@ atomic_link(root / 'new-release', root / 'current')
                 self.assertEqual(list(root.glob(".display-bridge-restore-*")), [])
                 restore(root / "backup")
                 self.assertEqual(content.read_text(), "backup contents")
+
+    def test_late_copy_failure_preserves_all_live_paths_and_release_pointer(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            old, new = root / "old-release", root / "new-release"
+            old.mkdir();new.mkdir()
+            current = root / "current"
+            atomic_link(old, current)
+            first, second, removed = (root / name for name in ("first", "second", "removed"))
+            first.write_text("old first");second.write_text("old second")
+            snapshot([removed, first, second], root / "backup", current)
+            atomic_link(new, current)
+            first.write_text("new first");second.write_text("new second")
+            removed.write_text("keep until copying succeeds")
+            import shutil
+            copy = shutil.copy2
+            def fail_second(source, target, **kwargs):
+                if Path(source).name == "2":
+                    Path(target).write_text("partial")
+                    raise OSError("injected later copy failure")
+                return copy(source, target, **kwargs)
+            with patch("deployment.shutil.copy2", side_effect=fail_second):
+                with self.assertRaisesRegex(OSError, "injected later"):
+                    restore(root / "backup")
+            self.assertEqual(current.readlink(), new)
+            self.assertEqual(first.read_text(), "new first")
+            self.assertEqual(second.read_text(), "new second")
+            self.assertEqual(removed.read_text(), "keep until copying succeeds")
+            self.assertEqual(list(root.glob(".display-bridge-restore-*")), [])
+            restore(root / "backup")
+            self.assertEqual(current.readlink(), old)
+            self.assertEqual(first.read_text(), "old first")
+            self.assertEqual(second.read_text(), "old second")
+            self.assertFalse(removed.exists())

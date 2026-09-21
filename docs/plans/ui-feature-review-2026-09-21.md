@@ -2,7 +2,7 @@
 
 Reviewed 2026-09-21 against source `8971f96` plus the existing uncommitted enrollment-review
 UI. The findings below preserve that review baseline; implementation status is updated through
-`f70c9b7`. This is the single current delivery order; older plans and logs remain historical.
+`f70c9b7`. This is the original delivery order; the [current follow-up review](ui-feature-follow-up-2026-09-21.md) supersedes its remaining priorities.
 The review inspected source and the isolated synthetic app in dark appearance with Largest
 text, including Overview, Displays, Audio, Controls and exhausted recovery. No physical
 monitor, audio route, installed controller or service was changed. A demo observation is
@@ -28,7 +28,7 @@ First-party comparison and product judgments: [current research](../research/dis
 | Brightness/volume and brightness presets | Implemented, with typed result validation | Continuous adjustment and physical pacing remain unqualified. |
 | Enlarged interface, window shortcuts, contextual repair | Implemented | Partial keyboard/visual checks; no complete VoiceOver, appearance or state matrix. |
 | Failure notifications, history, diagnostics, reviewed copy | Implemented | Notification delivery and incident lifecycle need installed-session qualification; raw diagnostics remain private. |
-| Setup readiness and prospective enrollment | Read-only CLI implemented; native host-choice review implemented | Mutable graphical setup is not implemented. Source implementation does not establish installed qualification. |
+| Setup readiness and prospective enrollment | Read-only CLI implemented; native host-choice review implemented | Independent graphical setup is implemented at `6ea21e4`, with signed-bundle cache protection at `1f30912`. Activation and interruption qualification remain open. |
 
 See [qualification](../qualification.md) for exact historical deployment evidence. A source
 build, an installed heartbeat and a physically usable/audible outcome are different results.

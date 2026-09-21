@@ -359,3 +359,10 @@ observation without exposing process IDs or raw errors. Refresh fetches another 
 does not install or retry anything. Missing process information leaves the outcome unknown.
 A reported completion still needs current health and physical checks. Older controllers require
 a coordinated update before they can provide this report.
+
+The size chooser leads with each monitor's current → selected logical dimensions and
+larger/smaller/unchanged interface effect. **Show technical details and unavailable
+presets** reveals framebuffer sizes and reasons saved choices cannot be offered.
+Tab to this checkbox and press Space to toggle it. Physical matching is labeled as an
+estimate; it does not measure sharpness or viewing distance. Preview and Cancel stay
+beside each other; saving the current pair and removing a preset remain separate actions.

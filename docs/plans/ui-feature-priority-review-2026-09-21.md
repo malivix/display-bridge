@@ -165,7 +165,7 @@ features already exist; the next milestone improves daily decisions and verifies
 
 | Order | Deliverable / boundary | Completion evidence |
 | --- | --- | --- |
-| 1 — active next slice | Compact two-monitor size decision; `SizeChooser.swift`, presentation tests | Both current/proposed monitor effects and Preview visible at Largest/minimum; technical detail expandable; preset estimate preserved; ordinary/reference/preset/empty/unknown choices; keyboard/Escape and stale-context rejection. Reuse existing preview journal, no new persistence. |
+| 1 — source implemented; broader qualification pending | Compact two-monitor size decision; `SizeChooser.swift`, presentation tests | Both current/proposed monitor effects and Preview visible at Largest/minimum; technical detail expandable; preset estimate preserved; ordinary/reference/preset/empty/unknown choices; keyboard/Escape and stale-context rejection. Reuse existing preview journal, no new persistence. |
 | 2 | At-a-glance Overview and consistent recovery actions; status presenter and menu orchestration | Both ownership summaries and selected speaker visible in healthy state; active recovery remains first; Health/Repair wording matches action; stale/unknown/away/paused/manual/preview states, freshness and click-time revalidation. No hardware polling added. |
 | 3 | Focused Controls/Audio/Displays cleanup | Single empty-state instruction; precise adjustment near readings; active audio profile near selected output; Largest/minimum and long-name checks; invalid/unknown percentage speech qualified; no cross-monitor or feature value leakage. |
 | 4 | Accessibility and release qualification of the completed flows | Exact-build keyboard traversal, focus retention during refresh, modal cancellation, VoiceOver speech, light/dark and supported text sizes; record individual failures. Extract demo fixtures only to resolve the observed consistency risk; update all native builders. |
@@ -192,3 +192,15 @@ fixed 120 Hz, HDR off and the accepted saved sizes. Unknown monitors remain unma
 One slice is active at a time. The first implementation is the compact size decision
 (U1), followed by its isolated UI verification; this document is the plan, not a claim
 that those presentation changes are already implemented.
+
+
+### Compact size decision delivered
+
+The first slice now presents both monitor effects before physical estimates, with
+technical detail/preset availability behind a keyboard-accessible checkbox. Preview
+and Cancel share a row; preset management is separate. Current-build synthetic UI
+inspection confirmed both monitor summaries at Largest/minimum, reference-preserving
+comparison, detail disclosure by Tab/Space and Escape cancellation. Native verification
+passed. This does not qualify VoiceOver, physical preview or deployment. See the
+[delivery log](../log/compact-size-decision.md). The next source slice is Overview and
+recovery clarity; preserve the outstanding qualification matrix.

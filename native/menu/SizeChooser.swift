@@ -2,7 +2,7 @@
 import AppKit
 import CoreFoundation
 
-func sizeComparison(_ current:[String:Any],_ selected:[String:Any])->String {
+func sizeComparison(_ current:[String:Any],_ selected:[String:Any],details:Bool=false)->String {
     let before=current["modes"] as? [String:[String:Any]] ?? [:]
     let after=selected["modes"] as? [String:[String:Any]] ?? [:]
     func dimension(_ mode:[String:Any],_ key:String)->Double? {
@@ -15,26 +15,29 @@ func sizeComparison(_ current:[String:Any],_ selected:[String:Any])->String {
         guard let width=dimension(mode,a),let height=dimension(mode,b) else{return "unavailable"}
         return "\(Int(width)) × \(Int(height))"
     }
-    var lines=[selected["label"] as? String ?? "Selected size"]
+    var lines:[String]=[]
     for (role,label) in [("pg","PG42UQ"),("benq","BenQ RD280UG")] {
         let old=before[role] ?? [:],new=after[role] ?? [:]
-        var section="\(label)\nCurrent: \(dimensions(old,"width","height"))\nSelected: \(dimensions(new,"width","height"))"
+        var section="\(label)"
         if let oldWidth=dimension(old,"width"),let newWidth=dimension(new,"width") {
             let delta=(oldWidth/newWidth-1)*100
-            section += abs(delta)<0.5 ? "\nInterface size: unchanged":"\nInterface size: about \(String(format:"%.0f",abs(delta)))% \(delta>0 ? "larger":"smaller")"
-        } else {section += "\nInterface size estimate unavailable"}
-        section += "\nFramebuffer: \(dimensions(old,"pixelWidth","pixelHeight")) → \(dimensions(new,"pixelWidth","pixelHeight"))"
+            section += abs(delta)<0.5 ? " · unchanged":" · about \(String(format:"%.0f",abs(delta)))% \(delta>0 ? "larger":"smaller")"
+        } else {section += " · size estimate unavailable"}
+        section += "\n\(dimensions(old,"width","height")) → \(dimensions(new,"width","height"))"
+        if details {section += "\nFramebuffer: \(dimensions(old,"pixelWidth","pixelHeight")) → \(dimensions(new,"pixelWidth","pixelHeight"))"}
         lines.append(section)
     }
     func physicalEstimate(_ option:[String:Any])->String {
         guard let n=option["physical_size_percent"] as? NSNumber,CFGetTypeID(n) != CFBooleanGetTypeID(),
               n.doubleValue.isFinite,n.doubleValue>0,n.doubleValue<=10000 else{return "unavailable"}
-        return "PG about \(String(format:"%.0f",n.doubleValue))% of BenQ"
+        let delta=n.doubleValue-100
+        if abs(delta)<0.5 {return "PG and BenQ about the same size"}
+        return "PG about \(String(format:"%.0f",abs(delta)))% \(delta>0 ? "larger":"smaller") than BenQ"
     }
     if current["physical_size_percent"] != nil || selected["physical_size_percent"] != nil {
-        lines.insert("Estimated physical UI size\nCurrent: \(physicalEstimate(current))\nSelected: \(physicalEstimate(selected))\n100% means similar physical size. Model-based estimate; viewing distance and optical sharpness are not measured.",at:1)
+        lines.append("Estimated physical UI size\nCurrent: \(physicalEstimate(current))\nSelected: \(physicalEstimate(selected))")
     }
-    lines.append("Size estimates compare each monitor with itself in the same orientation. The separate physical estimate is approximate and does not prove native pixel sharpness.")
+    lines.append("Size estimates are approximate; sharpness and viewing distance are not measured.")
     return lines.joined(separator:"\n\n")
 }
 
@@ -77,6 +80,7 @@ final class SizeChooser: NSObject, NSWindowDelegate {
     var visibleIndices:[Int]=[]
     var previewButton:NSButton?
     let comparison=NSTextView()
+    let detailsToggle=NSButton(checkboxWithTitle:"Show technical details and unavailable presets",target:nil,action:nil)
     let durationSelector=NSPopUpButton()
     let durations:[Int]
     var previewSeconds:Int {durations[max(0,min(durations.count-1,durationSelector.indexOfSelectedItem))]}
@@ -92,10 +96,10 @@ final class SizeChooser: NSObject, NSWindowDelegate {
         super.init()
         window.title="Compare display sizes";window.minSize=NSSize(width:600,height:620);window.delegate=self
         window.isReleasedWhenClosed=false
-        let stack=NSStackView();stack.orientation = .vertical;stack.alignment = .leading;stack.spacing=12
+        let stack=NSStackView();stack.orientation = .vertical;stack.alignment = .leading;stack.spacing=8
         stack.translatesAutoresizingMaskIntoConstraints=false;window.contentView!.addSubview(stack)
         NSLayoutConstraint.activate([stack.leadingAnchor.constraint(equalTo:window.contentView!.leadingAnchor,constant:20),stack.trailingAnchor.constraint(equalTo:window.contentView!.trailingAnchor,constant:-20),stack.topAnchor.constraint(equalTo:window.contentView!.topAnchor,constant:20),stack.bottomAnchor.constraint(equalTo:window.contentView!.bottomAnchor,constant:-20)])
-        let intro=NSTextField(wrappingLabelWithString:"\(orientation) · Fixed 120 Hz · 2× HiDPI · HDR off\nPreview reverts unless you Keep it. Time starts after the new size is verified.")
+        let intro=NSTextField(wrappingLabelWithString:"\(orientation) · Fixed 120 Hz · 2× HiDPI · HDR off\nCurrent → selected. Preview reverts unless you Keep it.")
         intro.font=NSFont.systemFont(ofSize:fontSize);stack.addArrangedSubview(intro)
         intro.widthAnchor.constraint(equalTo:stack.widthAnchor).isActive=true
         selector.font=intro.font;selector.setAccessibilityLabel("Size choice to preview")
@@ -120,8 +124,13 @@ final class SizeChooser: NSObject, NSWindowDelegate {
         scroll.documentView=comparison;stack.addArrangedSubview(scroll)
         scroll.widthAnchor.constraint(equalTo:stack.widthAnchor).isActive=true
         scroll.heightAnchor.constraint(greaterThanOrEqualToConstant:140).isActive=true
+        detailsToggle.font=intro.font;detailsToggle.target=self;detailsToggle.action=#selector(selectionChanged(_:))
+        stack.addArrangedSubview(detailsToggle)
         availabilityLabel.font=intro.font;stack.addArrangedSubview(availabilityLabel)
         availabilityLabel.widthAnchor.constraint(equalTo:stack.widthAnchor).isActive=true
+        let primaryRow=NSStackView(),presetRow=NSStackView()
+        primaryRow.spacing=12;presetRow.spacing=12
+        stack.addArrangedSubview(primaryRow);stack.addArrangedSubview(presetRow)
         for (index,title) in ["Preview selected size","Save current as preset…","Remove a saved preset…","Cancel"].enumerated() {
             let button=NSButton(title:title,target:self,action:#selector(finish(_:)));button.tag=index;button.font=intro.font
             button.setContentHuggingPriority(.required,for:.vertical)
@@ -129,7 +138,7 @@ final class SizeChooser: NSObject, NSWindowDelegate {
             if index==1 {button.isEnabled=canSave}
             if index==2 {button.isEnabled=canRemove}
             if index==3 {button.keyEquivalent="\u{1b}"}
-            stack.addArrangedSubview(button)
+            (index==0 || index==3 ? primaryRow:presetRow).addArrangedSubview(button)
         }
         window.initialFirstResponder=referenceSelector;referenceChanged()
     }
@@ -142,12 +151,13 @@ final class SizeChooser: NSObject, NSWindowDelegate {
         checkAvailability()
         selectionChanged(selector)
     }
-    @objc func selectionChanged(_ sender:NSPopUpButton) {
+    @objc func selectionChanged(_ sender:NSControl) {
         guard selectedIndex>=0,selectedIndex<choices.count else {
             comparison.string="No matching choice was offered for this reference. Choose All qualified sizes to inspect other options. No display setting has changed."
             return
         }
-        comparison.string=sizeComparison(current,choices[selectedIndex])+(notes.isEmpty ? "":"\n\n"+notes)
+        let details=detailsToggle.state == .on
+        comparison.string=sizeComparison(current,choices[selectedIndex],details:details)+(details && !notes.isEmpty ? "\n\n"+notes:"")
         comparison.scrollRangeToVisible(NSRange(location:0,length:0))
     }
     @objc func checkAvailability() {

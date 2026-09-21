@@ -401,7 +401,9 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
         guard [0,1,2].contains(action) else{return}
         if action != 2,let reason=monitorControlReason(read("health.json"),read("control.json"),role,busy) {message("Brightness action unavailable",reason);return}
         if action==1 {
-            let dialog=PresetDialog(fontSize:CGFloat([16,20,24][textSizeIndex()]),brightnessMonitor:role)
+            let dialog=PresetDialog(fontSize:CGFloat([16,20,24][textSizeIndex()]),brightnessMonitor:role,availability:{ [unowned self] in
+                monitorControlReason(self.read("health.json"),self.read("control.json"),role,self.busy)
+            })
             if let arguments=dialog.run() {execute(arguments)}
         } else if let entry=chooser.selected {
             execute([action==0 ? "brightness-apply":"brightness-remove","--monitor",role,"--preset",entry.name,"--fingerprint",entry.revision])
@@ -834,12 +836,14 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
         if let reason=sizePresetSaveReason(read("health.json"),read("control.json"),busy,visibleCapabilities) {
             message("Save size unavailable",reason);return
         }
-        let dialog=PresetDialog(fontSize:CGFloat([16,20,24][textSizeIndex()]))
+        let dialog=PresetDialog(fontSize:CGFloat([16,20,24][textSizeIndex()]),availability:{ [unowned self] in
+            sizePresetSaveReason(self.read("health.json"),self.read("control.json"),self.busy,self.visibleCapabilities)
+        })
         if let arguments=dialog.run() {execute(arguments)}
     }
     func removePresetPrompt(_ presets:[[String:Any]]) {
         guard !presets.isEmpty else{return}
-        let dialog=PresetDialog(fontSize:CGFloat([16,20,24][textSizeIndex()]),presets:presets)
+        let dialog=PresetDialog(fontSize:CGFloat([16,20,24][textSizeIndex()]),presets:presets,availability:{nil})
         if let arguments=dialog.run() {execute(arguments)}
     }
     func chooseSize(_ json:String){

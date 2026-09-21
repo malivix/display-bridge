@@ -19,14 +19,16 @@ final class PresetDialog: NSObject, NSWindowDelegate, NSTextFieldDelegate {
     let window:NSPanel
     let presets:[[String:Any]]?
     let brightnessMonitor:String?
+    let availability:()->String?
+    private var unavailableReason:String?
     let name=NSTextField()
     let submit=NSButton()
     let replace=NSButton(checkboxWithTitle:"Replace existing preset",target:nil,action:nil)
     let selector=NSPopUpButton()
     let errorLabel=NSTextField(wrappingLabelWithString:"")
     var arguments:[String]?
-    init(fontSize:CGFloat,presets:[[String:Any]]?=nil,brightnessMonitor:String?=nil) {
-        self.presets=presets;self.brightnessMonitor=brightnessMonitor
+    init(fontSize:CGFloat,presets:[[String:Any]]?=nil,brightnessMonitor:String?=nil,availability:@escaping ()->String?) {
+        self.presets=presets;self.brightnessMonitor=brightnessMonitor;self.availability=availability
         window=NSPanel(contentRect:NSRect(x:0,y:0,width:620,height:480),styleMask:[.titled,.closable,.resizable],backing:.buffered,defer:false)
         super.init()
         let saving=presets==nil
@@ -67,15 +69,22 @@ final class PresetDialog: NSObject, NSWindowDelegate, NSTextFieldDelegate {
     func controlTextDidChange(_ notification:Notification) {validateName(announce:true)}
     private func validateName(announce:Bool) {
         guard presets==nil else{return}
+        if unavailableReason==nil {unavailableReason=availability()}
         let error=presetNameError(name.stringValue)
-        let message=name.stringValue.isEmpty ? "Enter a name for this preset.":error ?? ""
+        let context=unavailableReason.map{$0+" Cancel and reopen when ready."}
+        let message=context ?? (name.stringValue.isEmpty ? "Enter a name for this preset.":error ?? "")
         let changed=errorLabel.stringValue != message
         errorLabel.stringValue=message
-        errorLabel.textColor=name.stringValue.isEmpty ? .secondaryLabelColor:.systemRed
-        submit.isEnabled=error==nil
+        errorLabel.textColor=context==nil && name.stringValue.isEmpty ? .secondaryLabelColor:.systemRed
+        submit.isEnabled=error==nil && unavailableReason==nil
         if announce && changed {NSAccessibility.post(element:errorLabel,notification:.valueChanged)}
     }
+    @objc private func checkAvailability() {validateName(announce:true)}
     @objc func confirm(_ sender:NSButton) {
+        if presets==nil {
+            validateName(announce:true)
+            guard unavailableReason==nil else{return}
+        }
         if let presets=presets {
             let index=selector.indexOfSelectedItem
             guard index>=0,index<presets.count,let label=presets[index]["name"] as? String,let rotation=presets[index]["rotation"] as? Int,[0,90].contains(rotation),let revision=presets[index]["revision"] as? String,!revision.isEmpty else {
@@ -95,7 +104,11 @@ final class PresetDialog: NSObject, NSWindowDelegate, NSTextFieldDelegate {
     @objc func cancel(_ sender:NSButton) {arguments=nil;NSApp.stopModal()}
     func windowShouldClose(_ sender:NSWindow)->Bool {arguments=nil;NSApp.stopModal();return true}
     func run()->[String]? {
-        window.center();window.recalculateKeyViewLoop();window.makeKeyAndOrderFront(nil);NSApp.runModal(for:window);window.orderOut(nil)
+        let timer=Timer(timeInterval:1,target:self,selector:#selector(checkAvailability),userInfo:nil,repeats:true)
+        RunLoop.main.add(timer,forMode:.modalPanel)
+        defer {timer.invalidate();window.orderOut(nil)}
+        checkAvailability()
+        window.center();window.recalculateKeyViewLoop();window.makeKeyAndOrderFront(nil);NSApp.runModal(for:window)
         return arguments
     }
 }

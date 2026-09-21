@@ -262,3 +262,23 @@ class InstallerEntryTests(unittest.TestCase):
                 self.assertEqual(conflict.exception.code,2)
             self.assertEqual(path.read_bytes(),before)
             self.assertEqual(list(root.iterdir()),[path])
+
+    def test_recorded_interpreter_is_not_pinned_to_one_patch_release(self):
+        module = self.load()
+        with tempfile.TemporaryDirectory() as directory:
+            cellar = Path(directory) / "Cellar/python/1.2.3/bin/python3"
+            cellar.parent.mkdir(parents=True)
+            cellar.write_text("#!/bin/sh\n")
+            cellar.chmod(0o755)
+            stable = Path(directory) / "opt/python/bin/python3"
+            stable.parent.mkdir(parents=True)
+            stable.symlink_to(cellar)
+            with patch.object(module.sys, "executable", str(stable)):
+                self.assertEqual(module.interpreter_path(), str(stable))
+
+    def test_unusable_interpreter_is_rejected(self):
+        module = self.load()
+        for value in ("", "python3", "/nonexistent/python3"):
+            with patch.object(module.sys, "executable", value):
+                with self.assertRaises(SystemExit):
+                    module.interpreter_path()

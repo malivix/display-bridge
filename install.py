@@ -84,6 +84,19 @@ def preflight(package, home):
             'checks':checks,'limits':'Software prerequisites only. No build, monitor read, service change or installation was performed. Display ownership, saved configuration, pending recovery, permissions and hardware behavior are not qualified. The installer rechecks its live requirements.'}
 
 
+def interpreter_path():
+    """Absolute interpreter recorded in the installed services and wrapper.
+
+    Resolving symlinks pins the services to one patch release of a package-managed
+    Python; upgrading it deletes that path and the services stop starting. Keep the
+    stable path the running interpreter reports instead.
+    """
+    python = sys.executable
+    if not python or not os.path.isabs(python) or not os.access(python, os.X_OK):
+        raise SystemExit("Run the installer with an absolute, executable python3 interpreter")
+    return python
+
+
 def main(argv=None):
     with ExitStack() as resources:
         return run_install(argv, resources)
@@ -122,7 +135,7 @@ def run_install(argv, resources):
     role = args.host
     package = Path(__file__).resolve().parent
     home = Path.home()
-    python = str(Path(sys.executable).resolve())
+    python = interpreter_path()
     label = "io.github.display-bridge"
     service = f"gui/{os.getuid()}/{label}"
     plist = home / "Library/LaunchAgents" / (label + ".plist")

@@ -6,6 +6,9 @@ Source changes only; installed production activation of the optional Shortcuts
 build remains unqualified. See the [usage guide](docs/shortcuts.md) and
 [qualification limits](docs/qualification.md).
 
+- Record the stable interpreter path in the installed services instead of a resolved
+  one, so a Python patch upgrade no longer leaves them unable to start. Reject a
+  relative or missing interpreter at entry.
 - Accept the product code each enrolled panel publishes on the input a host uses, so
   capture identifies the BenQ on both Mac A and Mac B. Ambiguous and unknown panels
   are still rejected.

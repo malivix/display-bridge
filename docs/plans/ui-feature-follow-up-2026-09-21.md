@@ -1,5 +1,8 @@
 # UI and feature follow-up
 
+Historical review: several slices below have since shipped in source. Use the
+[current priority review](ui-feature-priority-review-2026-09-21.md) for remaining work.
+
 Reviewed source `1f30912` on 2026-09-21. This is the current delivery order, superseding
 the remaining priorities in the [earlier review](ui-feature-review-2026-09-21.md).
 This turn is research, UI inspection and planning; it does not activate new software.

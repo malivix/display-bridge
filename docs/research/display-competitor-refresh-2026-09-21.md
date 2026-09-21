@@ -1,5 +1,9 @@
 # Display product comparison refresh
 
+Historical comparison: the [newer research](display-feature-priorities-2026-09-21.md)
+corrects the Lunar licensing/buildability and version-dependent adjustment-limit claims
+below and accounts for features since added to Display Bridge.
+
 Primary sources checked 2026-09-21. Local baseline: `1f30912`, including the working
 README, usage guide, implementation entry points and feature logs. No competitor was
 installed, no hardware command was issued, and this research does not qualify a release.

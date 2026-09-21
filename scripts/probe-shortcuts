@@ -1,0 +1,73 @@
+#!/usr/bin/env python3
+"""Build a private synthetic App Intents probe. Does not install or open apps."""
+import json
+import plistlib
+import subprocess
+import tempfile
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def run(arguments):
+    return subprocess.run(arguments, check=True, capture_output=True, text=True, timeout=120).stdout.strip()
+
+
+def main():
+    sdk = run(["xcrun", "--sdk", "macosx", "--show-sdk-path"])
+    swift = Path(run(["xcrun", "--find", "swiftc"]))
+    processor = run(["xcrun", "--find", "appintentsmetadataprocessor"])
+    toolchain = swift.parents[2]
+    version = run(["xcodebuild", "-version"]).splitlines()
+    build = next(line.removeprefix("Build version ") for line in version if line.startswith("Build version "))
+    protocols = json.loads((toolchain / "usr/share/swift/SwiftConstantValues/AppIntents.json").read_text())
+    if not isinstance(protocols, dict) or not isinstance(protocols.get("constValueProtocols"), list):
+        raise RuntimeError("Unsupported Xcode constant-value protocol manifest")
+    private = ROOT / ".local-only"
+    private.mkdir(exist_ok=True)
+    probe = Path(tempfile.mkdtemp(prefix="shortcuts-probe-", dir=private))
+    app = probe / "Bridge Shortcuts Probe.app"
+    contents = app / "Contents"
+    binary = contents / "MacOS/probe"
+    binary.parent.mkdir(parents=True)
+    resources = contents / "Resources"
+    resources.mkdir()
+    source = ROOT / "tests/native/shortcuts_probe.swift"
+    const = probe / "probe.swiftconstvalues"
+    protocol_file = probe / "protocols.json"
+    protocol_file.write_text(json.dumps(protocols["constValueProtocols"]))
+    run([str(swift), "-sdk", sdk, "-target", "arm64-apple-macos13.0",
+         "-module-name", "BridgeShortcutsProbe", "-Xfrontend", "-emit-const-values-path",
+         "-Xfrontend", str(const), "-Xfrontend", "-const-gather-protocols-file",
+         "-Xfrontend", str(protocol_file), str(source), "-o", str(binary)])
+    if not const.is_file():
+        raise RuntimeError("Compiler did not emit App Intents constant values")
+    (probe / "sources.txt").write_text(str(source) + "\n")
+    (probe / "const-list.txt").write_text(str(const) + "\n")
+    run([processor, "--output", str(resources), "--toolchain-dir", str(toolchain),
+         "--module-name", "BridgeShortcutsProbe", "--sdk-root", sdk,
+         "--xcode-version", build, "--platform-family", "macOS", "--deployment-target", "13.0",
+         "--target-triple", "arm64-apple-macos13.0", "--source-file-list", str(probe / "sources.txt"),
+         "--swift-const-vals-list", str(probe / "const-list.txt")])
+    metadata = json.loads((resources / "Metadata.appintents/extract.actionsdata").read_text())
+    if ("BridgeProbeStatus" not in metadata.get("actions", {})
+            or "BridgeProbeResult" not in metadata.get("entities", {})
+            or not metadata.get("autoShortcuts")):
+        raise RuntimeError("Missing action, typed result, or shortcut metadata")
+    (contents / "Info.plist").write_bytes(plistlib.dumps({
+        "CFBundleIdentifier": "io.github.display-bridge.shortcuts-probe",
+        "CFBundleName": "Bridge Shortcuts Probe", "CFBundleExecutable": "probe",
+        "CFBundlePackageType": "APPL", "CFBundleVersion": "1",
+        "LSUIElement": True, "LSMinimumSystemVersion": "13.0",
+    }))
+    run(["codesign", "--force", "--sign", "-", str(app)])
+    run(["codesign", "--verify", "--deep", "--strict", str(app)])
+    result = subprocess.run([str(binary), "--self-test"], check=True, capture_output=True, text=True, timeout=15)
+    print(result.stdout.strip())
+    print("PASS App Intents metadata extraction and ad-hoc bundle signature")
+    print("Private probe: " + str(app.relative_to(ROOT)))
+    print("Shortcuts discovery and execution are NOT qualified by this check.")
+
+
+if __name__ == "__main__":
+    main()

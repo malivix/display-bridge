@@ -73,6 +73,14 @@ for countdown/rollback behavior; the demo cannot prove hardware or persistence o
 Menu state reads accept regular JSON files only, with a 1 MiB limit and no symlink following.
 Native self-tests cover malformed/oversized state and FIFO rejection without hardware access.
 
+## Optional Shortcuts integration probe
+
+For the in-progress native Shortcuts integration, `./scripts/probe-shortcuts` builds
+and directly tests a private synthetic App Intents app using full Xcode. It performs
+no installation or hardware access and does not open Shortcuts. This opt-in probe
+does not qualify action discovery or execution inside Shortcuts; see the
+[implementation plan](plans/local-shortcuts.md). Keep its generated bundle private.
+
 ## Optional pasteboard integration check
 
 A compiled menu executable accepts `--test-private-pasteboard`. It exercises the actual

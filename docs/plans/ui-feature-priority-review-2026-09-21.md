@@ -321,3 +321,11 @@ was observed. [Exact paths and limits](../log/controls-preset-keyboard-qualifica
 VoiceOver, high contrast and the complete dialog matrix remain open. The next product
 slice is read-only local Shortcuts status; do not hold that independent work behind
 physical qualification, and do not mark the remaining accessibility checks complete.
+
+### Native Shortcuts build seam established
+
+An opt-in synthetic App Intents probe now compiles, emits action/entity/shortcut
+metadata, passes its typed-result self-test and verifies its ad-hoc signature.
+This is an integration dependency, not a shipped status action. Discovery and
+execution inside Shortcuts remain open, as do production state projection and
+packaging. Follow the [concrete implementation and rollback plan](local-shortcuts.md).

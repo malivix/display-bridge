@@ -31,11 +31,23 @@ class ControllerTests(unittest.TestCase):
         with patch.object(c,'audio_inventory',return_value=[selected]),patch.object(c,'read_inputs',return_value={'pg':18,'benq':19}),patch.object(c,'command') as run:
             with self.assertRaisesRegex(RuntimeError,'other Mac'):c.listening_check(config)
             run.assert_not_called()
-        with patch.object(c,'audio_inventory',side_effect=[[selected],[dict(selected,uid='other')]]),patch.object(c,'read_inputs',return_value={'pg':17,'benq':19}),patch.object(c,'command',return_value='') as run:
+        with patch.object(c,'audio_inventory',side_effect=[[selected],[selected],[dict(selected,uid='other')]]),patch.object(c,'read_inputs',return_value={'pg':17,'benq':19}),patch.object(c,'command',return_value='') as run:
             with self.assertRaisesRegex(RuntimeError,'inconclusive'):c.listening_check(config)
             self.assertEqual(run.call_count,1)
         with patch.object(c,'audio_inventory',return_value=[selected]),patch.object(c,'read_inputs',return_value={'pg':17,'benq':19}),patch.object(c,'command',side_effect=c.subprocess.TimeoutExpired('afplay',3)) as run:
             with self.assertRaises(c.subprocess.TimeoutExpired):c.listening_check(config)
+            self.assertEqual(run.call_count,1)
+
+    def test_listening_check_rechecks_before_playback_and_marks_postcheck_failure(self):
+        config={'host':'A','audio':{'enabled':True,'pg':'p'}}
+        selected={'uid':'p','alive':True,'default':True}
+        local={'pg':17,'benq':19};remote={'pg':18,'benq':19}
+        for reads,plays in [([local,remote],0),([local,local,remote],1)]:
+            with patch.object(c,'audio_inventory',return_value=[selected]),patch.object(c,'read_inputs',side_effect=reads),patch.object(c,'command',return_value='') as run:
+                with self.assertRaisesRegex(RuntimeError,'no sample|inconclusive'):c.listening_check(config)
+                self.assertEqual(run.call_count,plays)
+        with patch.object(c,'audio_inventory',side_effect=[[selected],[selected],RuntimeError('missing output')]),patch.object(c,'read_inputs',return_value=local),patch.object(c,'command',return_value='') as run:
+            with self.assertRaisesRegex(RuntimeError,'returned.*inconclusive'):c.listening_check(config)
             self.assertEqual(run.call_count,1)
 
     def test_listening_check_requires_live_unambiguous_output(self):

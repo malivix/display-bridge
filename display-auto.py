@@ -74,9 +74,15 @@ def listening_check(config):
     category=next((role for role in ('pg','benq','fallback') if audio.get(role)==before['uid']),'external')
     if category in ('pg','benq') and inputs[category]!=INPUTS[config['host']][category]:
         raise RuntimeError('Selected monitor is showing the other Mac; choose an audible output before testing')
+    def unchanged():
+        return read_inputs(config)==inputs and selected()['uid']==before['uid']
+    if not unchanged():raise RuntimeError('Output or monitor inputs changed before playback; no sample was played')
     command(['/usr/bin/afplay','-v','0.1','/System/Library/Sounds/Glass.aiff'],timeout=3)
-    after=selected()
-    if read_inputs(config)!=inputs or after['uid']!=before['uid']:
+    try:
+        stable=unchanged()
+    except (RuntimeError,OSError,subprocess.TimeoutExpired,ValueError) as error:
+        raise RuntimeError('Playback returned but its output could not be rechecked; listening check is inconclusive') from error
+    if not stable:
         raise RuntimeError('Output or monitor inputs changed during playback; listening check is inconclusive')
     return {'playback_completed':True,'audibility':'unconfirmed','output':category,
             'limits':'Playback completion does not prove sound. Confirm by listening. Transient route changes between checks cannot be excluded.'}

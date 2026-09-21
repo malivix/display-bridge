@@ -50,6 +50,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
     var monitorSupportDetails:NSStackView?
     var speakerPopups:[String:NSPopUpButton]=[:]
     var audioInfo:NSTextField?
+    var audioOverrideButton:NSButton?
     var listeningResponse=""
     var audioRepair:NSButton?
     var audioReason:NSTextField?
@@ -190,12 +191,13 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
             audioStack.topAnchor.constraint(equalTo:audioScroll.contentView.topAnchor).isActive=true
             let info=NSTextField(wrappingLabelWithString:"Speaker preferences apply to each monitor profile. External headsets remain under your control.")
             audioStack.addArrangedSubview(info);info.widthAnchor.constraint(equalTo:audioStack.widthAnchor,constant:-32).isActive=true;audioInfo=info
-            for (title,action) in [("Repair audio","repair-audio"),("Test selected output…","audio-test-prompt"),("Preserve output for 30 minutes","audio-manual"),("Resume automatic audio","audio-auto")] {
+            for (title,action) in [("Preserve output for 30 minutes","audio-manual"),("Repair audio","repair-audio"),("Test selected output…","audio-test-prompt")] {
                 let button=NSButton(title:title,target:self,action:#selector(panelAction(_:)));button.identifier=NSUserInterfaceItemIdentifier(action)
                 audioStack.addArrangedSubview(button);scalableControls.append(button)
+                if action=="audio-manual" {audioOverrideButton=button}
                 if action=="repair-audio" {audioRepair=button} else {panelActions.append(button)}
             }
-            let reason=NSTextField(wrappingLabelWithString:"");audioStack.insertArrangedSubview(reason,at:2)
+            let reason=NSTextField(wrappingLabelWithString:"");audioStack.insertArrangedSubview(reason,at:3)
             reason.widthAnchor.constraint(equalTo:audioStack.widthAnchor,constant:-32).isActive=true;audioReason=reason
             for (profile,label) in [("extended","Both monitors here"),("pg","Only PG here"),("benq","Only BenQ here"),("away","Both monitors away")] {
                 let title=NSTextField(wrappingLabelWithString:label);scalableControls.append(title)
@@ -276,7 +278,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
                 previewActions.append(button);scalableControls.append(button)
             }
             if demo {
-                let scenarios=NSPopUpButton();scenarios.addItems(withTitles:["ready","pg-only","benq-only","stale","paused","away","unknown-input","preview","recovery","recovery-wait","presets-error","controls-error","brightness-empty","older-controller","display-refresh-failed","monitor-response-error"])
+                let scenarios=NSPopUpButton();scenarios.addItems(withTitles:["ready","pg-only","benq-only","stale","paused","away","unknown-input","preview","recovery","recovery-wait","presets-error","controls-error","brightness-empty","older-controller","display-refresh-failed","monitor-response-error","audio-manual"])
                 scenarios.target=self;scenarios.action=#selector(changeDemoScenario(_:));scenarios.setAccessibilityLabel("Synthetic scenario")
                 let compact=NSButton(title:"Minimum window",target:self,action:#selector(compactDemo))
                 let row=NSStackView(views:[scenarios,compact]);row.spacing=12;footer.addArrangedSubview(row)
@@ -548,10 +550,10 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
         }
         let currentAudio=health["audio"] as? [String:Any] ?? [:]
         let selectedOutput=currentAudio["selected"] as? [String:Any] ?? [:]
-        var audioDescription=prefix+"Selected output: \(selectedOutput["name"] as? String ?? "Not reported")\nSpeaker preferences apply to each profile. External headsets remain under your control."
-        if let until=control["audio_manual_until"] as? Double,until>Date().timeIntervalSince1970 {
-            audioDescription += "\nManual preservation ends at \(Date(timeIntervalSince1970:until).formatted(date:.omitted,time:.shortened))."
-        }
+        let override=AudioOverridePresentation(control)
+        audioOverrideButton?.title=override.title
+        audioOverrideButton?.identifier=NSUserInterfaceItemIdentifier(override.action)
+        var audioDescription=prefix+"Selected output: \(selectedOutput["name"] as? String ?? "Not reported")\n\(override.summary)\nExternal headsets remain under your control."
         if !controlsUsable {audioDescription="Saved controls are unreadable. Check health before changing audio preferences.\n\n"+audioDescription}
         audioInfo?.stringValue=audioDescription
         let reason=audioRepairReason(health,control,busy)

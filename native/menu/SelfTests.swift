@@ -172,6 +172,12 @@ func runMenuSelfTests() {
     precondition(percentageSupportReason([],checking:false)?.contains("does not support")==true)
     precondition(percentageSupportReason(["monitor-set"],checking:false)==nil)
     precondition(percentageSupportReason(["monitor-adjust"],checking:false) != nil)
+    let manualAudio=AudioOverridePresentation(["audio_manual_until":2000.0],now:1000)
+    precondition(manualAudio.action=="audio-auto" && manualAudio.summary.contains("until"))
+    precondition(AudioOverridePresentation(["audio_manual_until":1000.0],now:1000).action=="audio-manual")
+    precondition(AudioOverridePresentation([:],now:1000).summary.contains("No temporary"))
+    precondition(AudioOverridePresentation(["_read_unavailable":true],now:1000).summary.contains("unavailable"))
+    precondition(AudioOverridePresentation(["audio_manual_until":Double.infinity],now:1000).action=="audio-manual")
     var percentCalls:[[String]]=[]
     let unsupportedPercent=runCompatibleMenuCommand(percentArgs) { args,_,_ in
         percentCalls.append(args);return CommandResult(output:"{}",code:0)

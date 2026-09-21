@@ -112,6 +112,23 @@ func monitorControlReason(_ health:[String:Any],_ control:[String:Any],_ role:St
     let expected=role=="pg" ? (host=="A" ? 17:18):(host=="A" ? 19:15)
     return inputs[role]==expected ? nil:"This monitor is not showing this Mac. No setting changes are available."
 }
+struct AudioOverridePresentation {
+    let summary:String
+    let action:String
+    let title:String
+    init(_ control:[String:Any],now:Double=Date().timeIntervalSince1970) {
+        let until=control["audio_manual_until"] as? Double ?? 0
+        let preserved=until.isFinite && until>now
+        action=preserved ? "audio-auto":"audio-manual"
+        title=preserved ? "Resume automatic audio":"Preserve output for 30 minutes"
+        if !controlsAvailable(control) {summary="Audio preference unavailable. Check health."}
+        else if preserved {
+            summary="Output preservation until \(Date(timeIntervalSince1970:until).formatted(date:.omitted,time:.shortened))."
+        } else {summary="No temporary output preservation."}
+        // This describes saved intent, not successful routing or an audible output.
+    }
+}
+
 func audioRepairReason(_ health:[String:Any],_ control:[String:Any],_ busy:Bool,_ now:Double=Date().timeIntervalSince1970)->String? {
     if !controlsAvailable(control) {return "Saved controls are unreadable. Check health; setting changes are disabled."}
     if busy {return "Wait for the current command to finish."}
@@ -515,6 +532,7 @@ struct FailureAlerts {
 }
 // Synthetic states never read or mutate the installed controller.
 func demoState(_ scenario:String,_ name:String,_ now:Double)->[String:Any] {
+    if name=="control.json",scenario=="audio-manual" {return ["audio_manual_until":now+900]}
     if name=="control.json" {return scenario=="controls-error" ? ["_read_unavailable":true]:scenario=="paused" ? ["paused":true]:[:]}
     guard name=="health.json" else {return [:]}
     var health:[String:Any] = ["host":"A","version":"Demo","updated_at":now,

@@ -208,9 +208,13 @@ final class BrightnessChooser: NSObject, NSWindowDelegate {
 enum PanelShortcut: Equatable {
     case tab(String)
     case refresh
+    case controls
 }
 func panelShortcut(_ key:String,_ modifiers:NSEvent.ModifierFlags,_ repeating:Bool)->PanelShortcut? {
-    guard !repeating,modifiers.intersection([.command,.option,.control,.shift]) == .command else{return nil}
+    guard !repeating else{return nil}
+    let chord=modifiers.intersection([.command,.option,.control,.shift])
+    if key.lowercased()=="p",chord == [.command,.shift] {return .controls}
+    guard chord == .command else{return nil}
     let tabs=["1":"overview","2":"details","3":"displays","4":"audio","5":"monitor-controls"]
     if let tab=tabs[key] {return .tab(tab)}
     return key.lowercased()=="r" ? .refresh:nil

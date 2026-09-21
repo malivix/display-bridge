@@ -111,7 +111,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
             let tabs=NSTabView(frame:NSRect(x:20,y:138,width:600,height:440))
             tabs.autoresizingMask=[.width,.height];contentTabs=tabs
             tabs.toolTip="⌘1–5 selects a tab. ⌘R refreshes the current view."
-            tabs.setAccessibilityHelp("Command 1 through 5 selects a tab. Command R refreshes the current view.")
+            tabs.setAccessibilityHelp("Command 1 through 5 selects a tab. Command R refreshes the current view. Command Shift P opens More controls.")
             let overview=NSTabViewItem(identifier:"overview");overview.label="Overview"
             let overviewScroll=NSScrollView();overviewScroll.hasVerticalScroller=true;overviewScroll.autohidesScrollers=true
             let stack=NSStackView();stack.orientation = .vertical;stack.alignment = .leading;stack.spacing=18
@@ -305,6 +305,8 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
         case .tab(let identifier):
             contentTabs?.selectTabViewItem(withIdentifier:identifier)
             panel?.makeFirstResponder(contentTabs)
+        case .controls:
+            if let anchor=pauseButton {openControls(anchor)}
         case .refresh:
             guard !busy else{return}
             let tab=contentTabs?.selectedTabViewItem?.identifier as? String ?? "overview"

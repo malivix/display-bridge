@@ -43,7 +43,9 @@ native system sizing.
 With the main window focused, **⌘1–⌘5** select Overview, Details, Displays, Audio and
 Controls. **⌘R** refreshes the selected view: Details reruns its selected report, Displays
 reads modes, Controls reads the selected local monitor's brightness/volume, and
-Overview/Audio reread controller state. These shortcuts change no settings, ignore held-key
+Overview/Audio reread controller state. **⌘⇧P** opens More controls from any main-window tab;
+use the arrow keys to navigate and Escape to dismiss without choosing an action.
+Opening the menu does not execute a command. These shortcuts change no settings, ignore held-key
 repeats, and do not intercept keys in other apps or modal dialogs. No global keyboard
 monitoring or Accessibility permission is added.
 

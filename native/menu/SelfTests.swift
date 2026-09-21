@@ -455,6 +455,12 @@ func runMenuSelfTests() {
     for modifiers:NSEvent.ModifierFlags in [[],.control,[.command,.shift],[.command,.option]] {
         precondition(panelShortcut("1",modifiers,false)==nil)
     }
+    precondition(panelShortcut("p",[.command,.shift],false) == .controls)
+    precondition(panelShortcut("P",[.command,.shift,.capsLock],false) == .controls)
+    precondition(panelShortcut("p",[.command,.shift],true)==nil)
+    for modifiers:NSEvent.ModifierFlags in [[],.command,.shift,[.command,.shift,.option],[.command,.shift,.control]] {
+        precondition(panelShortcut("p",modifiers,false)==nil)
+    }
     precondition(panelShortcut("r",.command,true)==nil)
     precondition(panelShortcut("6",.command,false)==nil)
     for report in detailReportChoices where report.0 != "status" {

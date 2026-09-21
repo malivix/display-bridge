@@ -4,7 +4,7 @@ import AppKit
 final class PercentChooser:NSObject,NSWindowDelegate,NSTextFieldDelegate {
     let window=NSPanel(contentRect:NSRect(x:0,y:0,width:600,height:600),styleMask:[.titled,.closable],backing:.buffered,defer:false)
     let feature=NSPopUpButton(),slider=NSSlider(value:50,minValue:0,maxValue:100,target:nil,action:nil)
-    let requested=NSTextField(labelWithString:""),reason=NSTextField(wrappingLabelWithString:""),applyButton=NSButton()
+    let requested=NSTextField(wrappingLabelWithString:""),reason=NSTextField(wrappingLabelWithString:""),applyButton=NSButton()
     let role:String,availability:()->String?
     let readings:MonitorReadings
     let history=NSTextView()
@@ -29,6 +29,7 @@ final class PercentChooser:NSObject,NSWindowDelegate,NSTextFieldDelegate {
         percentage.widthAnchor.constraint(equalToConstant:110).isActive=true
         stack.addArrangedSubview(entryRow)
         requested.font=intro.font;stack.addArrangedSubview(requested)
+        requested.widthAnchor.constraint(equalTo:stack.widthAnchor).isActive=true
         let scroll=NSScrollView();scroll.hasVerticalScroller=true
         history.isEditable=false;history.isSelectable=true;history.font=intro.font
         history.isVerticallyResizable=true;history.isHorizontallyResizable=false;history.textContainer?.widthTracksTextView=true;history.autoresizingMask=[.width]
@@ -56,7 +57,11 @@ final class PercentChooser:NSObject,NSWindowDelegate,NSTextFieldDelegate {
         updateProposal()
     }
     func updateProposal() {
-        requested.stringValue=proposal.map{"Requested: \($0)% · not applied"} ?? "Enter a whole number from 0 to 100 · not applied"
+        let feedback=percentageFeedback(percentage.stringValue)
+        requested.stringValue=feedback
+        slider.setAccessibilityLabel(proposal==nil ? "Percentage slider — no valid request":"Requested percentage")
+        slider.setAccessibilityValueDescription(feedback)
+        percentage.setAccessibilityHelp(feedback+". Apply is required to send a setting.")
         checkAvailability()
     }
     @objc func checkAvailability() {let unavailable=availability();if unavailable != nil {invalidated=true};reason.stringValue=invalidated ? "Availability changed. Cancel and reopen after the monitor is ready.":"Confirmed settings will appear in Controls after Apply.";applyButton.isEnabled = !invalidated && proposal != nil}
@@ -79,4 +84,10 @@ func requestedPercentage(_ text:String)->Int? {
           text.utf8.allSatisfy({$0>=48 && $0<=57}),
           let value=Int(text),(0...100).contains(value) else{return nil}
     return value
+}
+
+// Keep invalid or absent intent distinct from the slider's retained position.
+func percentageFeedback(_ text:String)->String {
+    if let value=requestedPercentage(text) {return "Requested: \(value)% · not applied"}
+    return text.isEmpty ? "No percentage chosen · not applied":"Invalid percentage · enter a whole number from 0 to 100"
 }

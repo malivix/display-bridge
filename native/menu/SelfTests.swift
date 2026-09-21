@@ -219,6 +219,13 @@ func runMenuSelfTests() {
     for text in ["", " ", "-1", "+1", "1.5", "101", "1e2", "25%", "１２", "1\n", "0000"] {
         precondition(requestedPercentage(text)==nil)
     }
+    precondition(percentageFeedback("")=="No percentage chosen · not applied")
+    for invalid in ["101","-1","5.5","text"," ","５"] {
+        precondition(percentageFeedback(invalid).hasPrefix("Invalid percentage"))
+    }
+    for value in ["0","55","100"] {
+        precondition(percentageFeedback(value)=="Requested: \(value)% · not applied")
+    }
     for value in [0,1,50,99,100] {precondition(requestedPercentage(String(value))==value)}
     var readings=MonitorReadings()
     let readDate=Date(timeIntervalSince1970:1000)

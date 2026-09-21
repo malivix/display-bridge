@@ -237,3 +237,13 @@ explicit. Routine repair guidance moved to accessible help, while blocking reaso
 listening responses remain inline. Largest/minimum ready and manual-preservation demos
 were inspected and native verification passed. See [validation](../log/audio-profile-context.md).
 Order 3's remaining work is percentage-entry accessibility feedback and its qualification.
+
+
+### Percentage feedback delivered
+
+The final source item in order 3 now distinguishes absent, invalid and valid requests
+in visible feedback and accessibility value descriptions. Largest-text editing,
+invalid-to-valid correction, feature-change clearing and Escape were inspected in the
+current demo; native verification passed. See [validation](../log/percentage-intent-feedback.md).
+VoiceOver speech and the broader light/dark/focus matrix remain order 4 work; source
+completion is not full accessibility or physical qualification.

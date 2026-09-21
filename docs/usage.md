@@ -384,3 +384,9 @@ routing or sound. Stale arrangements are labeled last-known; unknown arrangement
 unreadable preferences remain unavailable. Pause and temporary preservation are shown
 separately. Routine repair guidance is in the button's tooltip/accessibility help;
 blocking reasons and listening-check responses remain visible on the page.
+
+The percentage chooser distinguishes **No percentage chosen**, **Invalid percentage**,
+and a valid **Requested** value. Its slider exposes the same accessible value
+description; a retained slider position is not an accepted request or hardware reading.
+Invalid input keeps Apply disabled. Changing brightness/volume refreshes this feedback
+from that feature's own observation, and Escape closes without applying.

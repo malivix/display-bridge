@@ -1,7 +1,8 @@
 # Current UI review and implementation plan
 
 Reviewed 2026-09-21 against source `8971f96` plus the existing uncommitted enrollment-review
-UI. This is the single current delivery order; older plans and logs remain historical.
+UI. The findings below preserve that review baseline; implementation status is updated through
+`f70c9b7`. This is the single current delivery order; older plans and logs remain historical.
 The review inspected source and the isolated synthetic app in dark appearance with Largest
 text, including Overview, Displays, Audio, Controls and exhausted recovery. No physical
 monitor, audio route, installed controller or service was changed. A demo observation is
@@ -23,7 +24,7 @@ First-party comparison and product judgments: [current research](../research/dis
 | Ownership-aware extended/mirrored desktops | Implemented with identity and input guards | Earlier physical return-order tests passed on one setup; new-source and simultaneous Mac B qualification remain separate. |
 | Speaker preferences, manual preservation, bounded repair | Implemented | Earlier monitor listening tests passed; headset transitions and the complete latest release need qualification. Selection/readback cannot prove sound. |
 | BenQ sensor rotation | Implemented, with calibrated orientation profiles and an accelerated stable-input path | End-to-end sensor latency is not fully measured; no fixed-latency promise. |
-| Size previews and named orientation presets | Implemented, with 20/40-second confirmation and recovery journals | Native sharpness at arbitrary scale is impossible to promise; physical cross-monitor matching is not implemented. |
+| Size previews and named orientation presets | Implemented, with 20/40-second confirmation and recovery journals | Native sharpness at arbitrary scale is impossible to promise; bidirectional model-estimated matching is implemented; visual calibration and optical qualification remain open. |
 | Brightness/volume and brightness presets | Implemented, with typed result validation | Continuous adjustment and physical pacing remain unqualified. |
 | Enlarged interface, window shortcuts, contextual repair | Implemented | Partial keyboard/visual checks; no complete VoiceOver, appearance or state matrix. |
 | Failure notifications, history, diagnostics, reviewed copy | Implemented | Notification delivery and incident lifecycle need installed-session qualification; raw diagnostics remain private. |
@@ -32,7 +33,7 @@ First-party comparison and product judgments: [current research](../research/dis
 See [qualification](../qualification.md) for exact historical deployment evidence. A source
 build, an installed heartbeat and a physically usable/audible outcome are different results.
 
-## Findings to fix first
+## Original findings and remaining work
 
 | Priority | Reproduced or source evidence | Required fix |
 | --- | --- | --- |
@@ -43,6 +44,12 @@ build, an installed heartbeat and a physically usable/audible outcome are differ
 | Medium | Native window is branded Display Bridge, but launcher and notification guidance still refer to Display Auto. `docs/usage.md` and `MenuApp.execute`. | Align visible names and explain the legacy installed app name. A bundle/LaunchAgent migration is a coordinated deployment change, not a cosmetic rename or new duplicate service. |
 | Medium | Feature support, reports and results still use several command-specific dispatch branches. Some reports already have typed decoders. | Deepen the affected response boundary as each workflow changes. Keep invalid values unknown; move shared demo state into one fixture provider. Avoid a speculative rewrite of the whole controller. |
 | High release gate | Current-source features outpace installed qualification; full accessibility and Mac B tests are absent. | Show app/controller compatibility and deployment readiness together. Do not label compiled source activated or all features verified. |
+
+Recovery placement, Audio action ordering, scenario snapshots and setup entry are now fixed
+in source. Reported app/controller source agreement is implemented and requires a valid
+menu heartbeat; this is metadata agreement, not binary attestation or physical qualification.
+Naming migration, the complete accessibility matrix and coordinated activation remain open.
+The table records the original evidence rather than asserting every finding remains unfixed.
 
 These are usability/review priorities, not severity claims about a security exploit. Screenshots
 contain synthetic data and remain local; the evidence above records the scenario and source seam.
@@ -69,8 +76,8 @@ new incident. No new mutation endpoint or journal schema. Rollback is the coordi
 The [scenario snapshot correction](../log/demo-snapshot-consistency.md) is implemented and
 checked in the isolated app; demo fixtures remain hardware-free. Finish and review
 the existing enrollment-review work without treating its report as authorization. The [setup entry](../log/setup-entry.md) now links the top-level menu, readiness report and
-explicit host choice. App/controller compatibility and activation still need a consolidated
-workflow. After the read-only flow is verified, separately implement guided capture and
+explicit host choice. Health now reports app/controller source-fingerprint agreement, with missing, stale and
+mismatched evidence distinguished. Guided activation still needs a consolidated workflow. After the read-only flow is verified, separately implement guided capture and
 activation using existing installer backups and fresh checks.
 
 Acceptance: no role preselected, unsupported controller dispatch blocked, wrong-host/malformed
@@ -81,7 +88,7 @@ Mac A identifiers to Mac B. Compatibility does not substitute for physical Mac B
 
 ### 3. Calibrated physical-size matching — model estimate implemented
 
-[Model-estimated matching](../log/physical-size-match.md) now offers a PG-to-BenQ choice
+[Model-estimated matching](../log/physical-size-match.md) now offers either monitor as the reference
 through the preview flow. Visual calibration remains to implement. Compare physical length per logical point,
 using orientation-correct panel dimensions only when trustworthy. Let the user visually compare
 a ruler or sample panel and adjust the estimate. Show the predicted size difference between

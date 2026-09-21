@@ -258,3 +258,37 @@ atomic_link(root / 'new-release', root / 'current')
             self.assertEqual(first.read_text(), "old first")
             self.assertEqual(second.read_text(), "old second")
             self.assertFalse(removed.exists())
+
+    def test_staged_restore_preserves_modes_and_relative_symlink_targets(self):
+        import stat
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            helper, app = root / "helper", root / "Menu.app"
+            helper.write_text("original helper");helper.chmod(0o751)
+            app.mkdir(mode=0o750)
+            binary = app / "binary"
+            binary.write_text("original menu");binary.chmod(0o555)
+            internal = app / "relative-link"
+            internal.symlink_to("binary")
+            entry, dangling = root / "entry", root / "dangling"
+            entry.symlink_to("helper")
+            dangling.symlink_to("missing-relative-target")
+            snapshot([helper, app, entry, dangling], root / "backup", root / "current")
+            helper.write_text("replacement helper");helper.chmod(0o600)
+            binary.chmod(0o600);binary.write_text("replacement menu")
+            app.chmod(0o700)
+            internal.unlink();internal.symlink_to("wrong-target")
+            entry.unlink();entry.write_text("replacement entry")
+            dangling.unlink();dangling.write_text("replacement dangling link")
+            restore(root / "backup")
+            self.assertEqual(stat.S_IMODE(helper.stat().st_mode), 0o751)
+            self.assertEqual(stat.S_IMODE(app.stat().st_mode), 0o750)
+            self.assertEqual(stat.S_IMODE(binary.stat().st_mode), 0o555)
+            self.assertEqual(entry.readlink(), Path("helper"))
+            self.assertEqual(entry.read_text(), "original helper")
+            self.assertEqual(internal.readlink(), Path("binary"))
+            self.assertEqual(internal.read_text(), "original menu")
+            self.assertTrue(dangling.is_symlink())
+            self.assertEqual(dangling.readlink(), Path("missing-relative-target"))
+            self.assertFalse(dangling.exists())
+            self.assertEqual(list(root.glob(".display-bridge-restore-*")), [])

@@ -163,6 +163,16 @@ func runMenuSelfTests() {
     }
     precondition(monitorResult(validMonitor)?.role=="pg")
     precondition(monitorResult(validMonitor,nil,1)==nil)
+    let percentArgs=["monitor-set","--monitor","pg","--feature","luminance","--percent","30"]
+    precondition(monitorResult(validMonitor,percentArgs) != nil)
+    precondition(monitorResult(validMonitor,Array(percentArgs.dropLast())+["31"])==nil)
+    precondition(monitorResult(validMonitor,Array(percentArgs.dropLast(2)))==nil)
+    var percentCalls:[[String]]=[]
+    let unsupportedPercent=runCompatibleMenuCommand(percentArgs) { args,_,_ in
+        percentCalls.append(args);return CommandResult(output:"{}",code:0)
+    }
+    precondition(unsupportedPercent.code==78 && percentCalls==[["capabilities"]])
+
     precondition(monitorResult(validMonitor,["brightness-apply","--monitor","pg"]) != nil)
     for field in ["monitor","feature","before","value","maximum","percent","changed"] {
         var missing=validMonitor;missing.removeValue(forKey:field)

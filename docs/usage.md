@@ -61,6 +61,18 @@ controller status and refresh failures. Failed or malformed refreshes retain the
 reading and explicitly mark it as old. Even matching inputs do not prove unchanged size,
 rotation or other settings; refresh after changing them.
 
+## Precise brightness and volume
+
+In Controls, choose a monitor and **Set percentage…**. Select brightness or monitor
+speaker volume, move the slider, then choose **Apply requested percentage**. Dragging
+never sends writes. The proposed value starts at 50%, not at a claimed current setting;
+any previous reading is shown separately. Cancel/Escape discards the proposal.
+
+Hardware ranges may round the request: 75% on a 0–50 scale becomes 38/50, reported as 76%.
+Read the confirmed result after applying. If availability changes while the dialog is
+open, cancel and reopen it once the monitor is ready. An older controller is checked
+before dispatch and rejects this unsupported command. The existing ±5 controls remain.
+
 ## Display size and named presets
 
 **Displays → Compare readability…** opens two identical sample windows. Place one on

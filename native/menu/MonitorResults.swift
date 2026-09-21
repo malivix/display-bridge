@@ -31,7 +31,7 @@ enum MonitorResponse {
     case snapshot(role:String,brightness:MonitorSetting,volume:MonitorSetting)
     case adjustment(role:String,feature:String,setting:MonitorSetting)
 
-    static let commands:Set<String>=["monitor-settings","monitor-adjust","brightness-apply"]
+    static let commands:Set<String>=["monitor-settings","monitor-adjust","monitor-set","brightness-apply"]
     static func decode(_ response:CommandResult,arguments:[String])->MonitorResponse? {
         func option(_ name:String)->String? {
             let positions=arguments.indices.filter{arguments[$0]==name}
@@ -56,6 +56,10 @@ enum MonitorResponse {
               let setting=MonitorSetting(report),
               let before=monitorInteger(report["before"],0...setting.maximum),
               let changed=monitorBoolean(report["changed"]),changed==(before != setting.value) else{return nil}
+        if action=="monitor-set" {
+            guard let raw=option("--percent"),let percent=Int(raw),(0...100).contains(percent),
+                  setting.value==(setting.maximum*percent+50)/100 else{return nil}
+        }
         return .adjustment(role:role,feature:feature,setting:setting)
     }
     var role:String {

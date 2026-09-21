@@ -227,6 +227,8 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
                 }
                 controlsStack.addArrangedSubview(row)
             }
+            let precise=NSButton(title:"Set percentage…",target:self,action:#selector(setMonitorPercentage))
+            controlsStack.addArrangedSubview(precise);monitorButtons.append(precise);scalableControls.append(precise)
             let feedback=NSTextField(wrappingLabelWithString:"No confirmed settings yet. Read brightness and volume to inspect this monitor.")
             controlsStack.addArrangedSubview(feedback);feedback.widthAnchor.constraint(equalTo:controlsStack.widthAnchor,constant:-32).isActive=true;monitorFeedback=feedback
             let presetsButton=NSButton(title:"Brightness presets…",target:self,action:#selector(openBrightnessPresets))
@@ -345,6 +347,15 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
         }
         monitorFeedback?.stringValue=text
         contentTabs?.selectTabViewItem(withIdentifier:"monitor-controls")
+    }
+    @objc func setMonitorPercentage() {
+        let role=monitorRole
+        let available={ [unowned self] in monitorControlReason(self.read("health.json"),self.read("control.json"),role,self.busy) }
+        guard available()==nil else{return}
+        let chooser=PercentChooser(role:role,previous:monitorReadings.previous(for:role),fontSize:CGFloat([16,20,24][textSizeIndex()]),availability:available)
+        guard let arguments=chooser.run() else{return}
+        if let reason=available() {message("Monitor setting unavailable",reason);return}
+        execute(arguments)
     }
     @objc func toggleMonitorSupport(_ sender:NSButton) {monitorSupportDetails?.isHidden=sender.state != .on}
     @objc func openBrightnessPresets() {execute(["brightness-list","--monitor",monitorRole])}

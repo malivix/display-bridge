@@ -112,8 +112,8 @@ func presetCompatibilitySummary(_ commands:Set<String>?,checking:Bool)->String {
 
 // Probe only newer commands; preserve legacy inspection and recovery access.
 func runCompatibleMenuCommand(_ arguments:[String],onPhase:(String,Double)->Void={_,_ in},runner:([String],Double,Int)->CommandResult)->CommandResult {
-    if let action=arguments.first,(PresetCommands.all.contains(action) || ["capture-review","audio-test","installation-status"].contains(action)) {
-        onPhase(action=="installation-status" ? "Checking installation report support":action=="capture-review" ? "Checking enrollment review support":action=="audio-test" ? "Checking listening test support":"Checking preset support",5)
+    if let action=arguments.first,(PresetCommands.all.contains(action) || ["capture-review","audio-test","installation-status","monitor-set"].contains(action)) {
+        onPhase(action=="monitor-set" ? "Checking percentage control support":action=="installation-status" ? "Checking installation report support":action=="capture-review" ? "Checking enrollment review support":action=="audio-test" ? "Checking listening test support":"Checking preset support",5)
         let probe=runner(["capabilities"],5,16_384)
         let supported=menuCapabilities(probe)?.contains(action)==true
         guard supported else {return CommandResult(output:"This command requires a compatible controller. Update the menu and controller together from the same trusted source. The requested action was not sent; status and recovery remain available.",code:78)}
@@ -125,7 +125,7 @@ func runCompatibleMenuCommand(_ arguments:[String],onPhase:(String,Double)->Void
 func operationTitle(_ action:String)->String {
     let names=["installation-status":"Reading last installation","audio-test":"Playing quiet sample","capture-review":"Reviewing prospective enrollment","preset-remove":"Removing saved size preset","preset-save":"Saving named size preset","display-info":"Inspecting display modes","doctor":"Checking health","diagnostics":"Saving diagnostics","support-summary":"Preparing support summary","history":"Reading transition history",
         "ddc-history":"Reading monitor history","preview-options":"Inspecting size choices","monitor-settings":"Reading monitor settings",
-        "monitor-adjust":"Adjusting monitor settings","preview-start":"Requesting size preview","preview-keep":"Requesting saved size",
+        "monitor-adjust":"Adjusting monitor settings","monitor-set":"Applying requested percentage","preview-start":"Requesting size preview","preview-keep":"Requesting saved size",
         "brightness-list":"Reading saved brightness presets","brightness-save":"Saving current brightness","brightness-apply":"Applying saved brightness","brightness-remove":"Removing brightness preset",
         "preview-revert":"Requesting size restoration","preview-repair":"Requesting restoration retry",
         "repair-audio":"Requesting audio repair","pause":"Requesting pause","pause-for":"Requesting timed pause",

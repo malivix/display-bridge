@@ -263,7 +263,8 @@ before state confirmation.
 
 ## Explicit speaker listening check
 
-In Audio, choose **Test selected output…**, then **Play sample**. A quiet, short system sound
+In Audio, choose **Test selected output…**, then **Play sample**. Both dialogs use the
+selected interface text size; Cancel is the initial playback choice and Escape closes safely. A quiet, short system sound
 plays through the current output. The check never selects an output, unmutes it, changes its
 volume or resets its format. A selected enrolled monitor must show this Mac, and enrollment
 and input reads must be valid. Other selected outputs, such as headsets, remain selected.

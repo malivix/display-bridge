@@ -588,11 +588,12 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
         }
         if args==["audio-test-prompt"] {
             guard !busy else{return}
-            if demo {message("Hardware-free demo","Listening tests are disabled here. No sample was played.");return}
-            let alert=NSAlert();alert.messageText="Play a quiet test sound?"
-            alert.informativeText="A short sample plays through the currently selected output. Its volume and selection will not be changed. You will be asked whether you heard it."
-            alert.addButton(withTitle:"Play sample");alert.addButton(withTitle:"Cancel")
-            if alert.runModal() == .alertFirstButtonReturn {listeningResponse="";execute(["audio-test"])}
+            let body=demo ? "Demo only: no sound will play. Continue to inspect the listening-response dialog.":"A short, quiet sample plays through the currently selected output. Its volume and selection will not be changed. You will be asked whether you heard it."
+            let dialog=ListeningDialog(title:"Test selected output",body:body,buttons:["Cancel",demo ? "Continue demo":"Play sample"],fontSize:CGFloat([16,20,24][textSizeIndex()]))
+            if dialog.run()==1 {
+                listeningResponse=""
+                if demo {presentListeningResponse("Synthetic output")} else {execute(["audio-test"])}
+            }
             return
         }
         if args==["panel"]{showPanel();return}
@@ -692,13 +693,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
                 else if code != 0 {self.message("Action could not complete",result)}
                 else if args.first=="audio-test" {
                     guard let output=listeningOutput(result) else {self.message("Listening check unavailable","The result could not be validated. No audible result was recorded.");return}
-                    let alert=NSAlert();alert.messageText="Did you hear the sample?"
-                    alert.informativeText="Output: \(output). Playback completed, but only your response can confirm whether it was audible."
-                    for title in ["Not sure","Heard it","No sound"] {alert.addButton(withTitle:title)}
-                    let answer=alert.runModal()
-                    let label=answer == .alertSecondButtonReturn ? "heard":answer == .alertThirdButtonReturn ? "not heard":"uncertain"
-                    self.listeningResponse="Last listening check: \(output) · \(label) (your response). This is a past observation, not a current audio check."
-                    self.refresh()
+                    self.presentListeningResponse(output)
                 }
                 else if args.first=="capture-review" {self.showReport("enrollment-review",enrollmentReviewSummary(result,args.last ?? ""))}
                 else if args.first=="diagnostics" {NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath:result.trimmingCharacters(in:.whitespacesAndNewlines))])}
@@ -723,6 +718,13 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
                 self.refresh()
             }
         }
+    }
+    func presentListeningResponse(_ output:String) {
+        let body=demo ? "Demo response only: no audio was played. Choose an answer to inspect how a past observation is displayed.":"Output: \(output). Playback completed, but only your response can confirm whether it was audible."
+        let dialog=ListeningDialog(title:"Did you hear the sample?",body:body,buttons:["Not sure","Heard it","No sound"],fontSize:CGFloat([16,20,24][textSizeIndex()]))
+        let label=listeningAnswerLabel(dialog.run())
+        listeningResponse=(demo ? "Synthetic listening response: ":"Last listening check: ")+"\(output) · \(label) (your response). This is a past observation, not a current audio check."
+        refresh()
     }
     func message(_ title:String,_ body:String){
         NSApp.activate(ignoringOtherApps:true);let alert=NSAlert();alert.messageText=title

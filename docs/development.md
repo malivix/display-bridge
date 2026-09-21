@@ -85,3 +85,7 @@ self-tests. It does not qualify permissions or behavior of every user's general 
 Demo display snapshots derive their input ownership from the selected scenario. Switching
 scenarios leaves an earlier snapshot intact until Refresh, so changed-input and failed-refresh
 notices can be inspected deliberately. Away and unknown states do not invent a mirror layout.
+
+The listening-check demo opens the same enlarged confirmation and response panels with
+explicit synthetic wording. It never dispatches playback; any response shown afterward is
+labeled synthetic. Cancel/Escape cannot imply that a sound was heard.

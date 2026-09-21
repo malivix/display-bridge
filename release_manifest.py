@@ -11,6 +11,7 @@ MENU_SOURCES = (
     "native/menu/MonitorResults.swift",
     "native/menu/HealthReport.swift",
     "native/menu/EnrollmentReview.swift",
+    "native/menu/ListeningCheck.swift",
     "native/menu/Presentation.swift",
     "native/menu/PresetWindows.swift",
     "native/menu/MenuApp.swift",

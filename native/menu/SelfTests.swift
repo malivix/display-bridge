@@ -4,6 +4,7 @@ import UserNotifications
 import Darwin
 
 func runMenuSelfTests() {
+    precondition(listeningAnswerLabel(nil)=="uncertain" && listeningAnswerLabel(0)=="uncertain" && listeningAnswerLabel(1)=="heard" && listeningAnswerLabel(2)=="not heard" && listeningAnswerLabel(9)=="uncertain")
     precondition(listeningOutput(#"{"playback_completed":true,"audibility":"unconfirmed","output":"pg"}"#)=="PG42UQ")
     for json in [#"{"playback_completed":1,"audibility":"unconfirmed","output":"pg"}"#,#"{"playback_completed":true,"audibility":"confirmed","output":"pg"}"#,#"{"playback_completed":true,"audibility":"unconfirmed","output":"unknown"}"#] {precondition(listeningOutput(json)==nil)}
 

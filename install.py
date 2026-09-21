@@ -459,7 +459,9 @@ def run_install(argv, resources):
                 str(p.relative_to(package)): hashlib.sha256(p.read_bytes()).hexdigest()
                 for p in sorted(source_files)
             }
+            from release_manifest import source_fingerprint
             manifest = {
+                "source_fingerprint": source_fingerprint(package),
                 "version": VERSION,
                 "host": role,
                 "source_sha256": hashes,

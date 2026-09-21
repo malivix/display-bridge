@@ -49,3 +49,12 @@ HELPER_HASH_FIELDS = {
     "display-mode-info": "mode_info_sha256",
 }
 INSTALLED_FILES = (*RUNTIME_MODULES, *HELPER_HASH_FIELDS)
+
+
+def source_fingerprint(package):
+    """Portable controller/menu source identity, not a binary signature."""
+    import hashlib
+    import json
+    files = sorted(set(RUNTIME_MODULES + MENU_SOURCES))
+    hashes = {name: hashlib.sha256((package / name).read_bytes()).hexdigest() for name in files}
+    return hashlib.sha256(json.dumps(hashes, sort_keys=True, separators=(',', ':')).encode()).hexdigest()

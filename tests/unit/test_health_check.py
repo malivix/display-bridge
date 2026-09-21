@@ -116,6 +116,19 @@ assert result['status']=='error' and result['read_only'] is True
             inputs=next(x for x in result['checks'] if x['name']=='Monitor inputs')
             self.assertEqual(inputs['status'],'warning')
             self.assertIn('not guessed',inputs['action'])
+    def test_reported_source_agreement_is_distinct_from_version_and_liveness(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root=Path(temp);(root/'config.json').write_text('{}')
+            for controller,menu,status in [('a'*64,'a'*64,'ok'),('a'*64,'b'*64,'warning'),('bad','bad','warning'),(None,'a'*64,'info'),('a'*64,None,'info')]:
+                (root/'manifest.json').write_text(json.dumps({'source_fingerprint':controller} if controller else {}))
+                heartbeat={'pid':os.getpid(),'updated_at':c.time.time(),'app_version':c.VERSION}
+                if menu:heartbeat['source_fingerprint']=menu
+                (root/'menu-health.json').write_text(json.dumps(heartbeat))
+                result=report(root,root,c.VERSION,lambda cfg:None,lambda cfg:{'pg':17,'benq':19})
+                check=next(x for x in result['checks'] if x['name']=='Reported build agreement')
+                self.assertEqual(check['status'],status)
+                if status=='ok':self.assertIn('metadata, not binary',check['detail'])
+
     def test_menu_health_distinguishes_current_stale_and_mismatched(self):
         with tempfile.TemporaryDirectory() as temp:
             root=Path(temp)

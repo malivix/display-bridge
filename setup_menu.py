@@ -4,7 +4,7 @@
 import os, plistlib, shutil, subprocess, tempfile, time, json, re
 from pathlib import Path
 from deployment import require_service_namespace
-from release_manifest import VERSION, MENU_BUILD, MENU_SOURCES
+from release_manifest import VERSION, MENU_BUILD, MENU_SOURCES, source_fingerprint
 
 
 def activate_menu(staged, app, agent, service, run, health_path, version):
@@ -109,6 +109,7 @@ def install_menu(package):
     with tempfile.TemporaryDirectory(dir=apps, prefix=".display-menu-") as temp:
         staged = Path(temp) / app.name
         contents = staged / "Contents"
+        fingerprint = source_fingerprint(package)
         binary = contents / "MacOS/display-menu"
         binary.parent.mkdir(parents=True)
         run(
@@ -126,7 +127,10 @@ def install_menu(package):
             check=True,
         )
         run([str(binary), "--self-test"], check=True)
+        if source_fingerprint(package) != fingerprint:
+            raise RuntimeError("Sources changed during menu compilation; retry from a stable checkout")
         info = {
+            "DisplayBridgeSourceFingerprint": fingerprint,
             "CFBundleIdentifier": "io.github.display-bridge.menu",
             "CFBundleName": "Display Auto",
             "CFBundleExecutable": "display-menu",

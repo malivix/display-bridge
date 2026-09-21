@@ -278,3 +278,9 @@ excluded. Playback completion alone never establishes audible sound.
 The terminal equivalent is `~/.local/bin/display-auto.sh audio-test`; it plays a sound and
 reports playback completion with audibility unconfirmed. The menu checks controller support
 before dispatch. Ordinary verification and the isolated demo never play the sample.
+
+Setup readiness and Health include **Reported build agreement** when a menu heartbeat exists.
+New installations compare controller/menu source fingerprints even when version numbers are
+the same. Older installations report fingerprints unavailable. Agreement compares metadata,
+not binary signatures, current heartbeat freshness or physical behavior; those checks remain
+separate. Mismatches call for a coordinated menu/controller update.

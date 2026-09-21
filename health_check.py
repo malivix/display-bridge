@@ -182,6 +182,19 @@ def report(root, bin_dir, version, validate_config, read_inputs, inspect_modes=N
             add('Menu app','warning',str(error),'Open the installed Display Bridge menu app or reinstall the matching app/controller pair. Do not start extra controller processes.')
     elif not (root/'menu-health.json').exists():
         add('Menu app','info','No menu heartbeat is available. The controller can run while the menu is closed.','Open the installed menu app if window controls are wanted.')
+    if menu:
+        controller_build=manifest.get('source_fingerprint') if isinstance(manifest,dict) else None
+        menu_build=menu.get('source_fingerprint')
+        def fingerprint(value):
+            return isinstance(value,str) and len(value)==64 and all(ch in '0123456789abcdef' for ch in value)
+        if controller_build is None or menu_build is None:
+            add('Reported build agreement','info','Source fingerprints are unavailable for one or both components. Matching version numbers do not establish matching source builds.','Use a coordinated installation to record both fingerprints.')
+        elif not fingerprint(controller_build) or not fingerprint(menu_build):
+            add('Reported build agreement','warning','Source fingerprint metadata is malformed. Build agreement is unknown.','Reinstall the menu and controller together from a trusted checkout.')
+        elif controller_build!=menu_build:
+            add('Reported build agreement','warning','Menu and controller report different source fingerprints.','Reinstall the menu and controller together from the same checkout.')
+        else:
+            add('Reported build agreement','ok','Menu and installation report source fingerprint '+controller_build[:12]+'. This compares metadata, not binary signatures or physical behavior.')
     if menu and menu.get('notification_authorization')==1:
 
         add('Failure notifications','info','macOS notifications are disabled for Display Auto.','Enable them in System Settings → Notifications if wanted; the menu still shows failures.')

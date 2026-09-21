@@ -4,9 +4,11 @@ import CryptoKit
 import CoreFoundation
 import UserNotifications
 
+let detailReportChoices=[("status","Live status"),("setup","Setup readiness"),("installation-status","Last installation"),("enrollment-review","Review enrollment…"),("doctor","Health check"),("history","Transition timing"),("ddc-history","Monitor communication"),("support-summary","Support summary")]
+
 func controlsAvailable(_ control:[String:Any])->Bool {control["_read_unavailable"] as? Bool != true}
 func safeWithoutControls(_ action:String)->Bool {
-    ["panel","quit","status","doctor","setup","enrollment-review","capture-review","brightness-list","diagnostics","support-summary","history","ddc-history","display-info","monitor-settings","notifications","preview-revert","preview-repair"].contains(action)
+    ["panel","quit","status","installation-status","doctor","setup","enrollment-review","capture-review","brightness-list","diagnostics","support-summary","history","ddc-history","display-info","monitor-settings","notifications","preview-revert","preview-repair"].contains(action)
 }
 func automationPaused(_ control:[String:Any],_ now:Double=Date().timeIntervalSince1970)->Bool {
     let until=control["pause_until"] as? Double ?? 0

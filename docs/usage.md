@@ -12,7 +12,7 @@ or rotation calibration, use the [installation guide](install.md).
 | Location | What you can do |
 | --- | --- |
 | Overview | See monitor ownership, selected speaker and recovery; use the relevant repair action when available. |
-| Details | Select Live status, Setup readiness, Review enrollment…, Health check, Transition timing, Monitor communication or Support summary. Choose Refresh for a new report. |
+| Details | Select Live status, Setup readiness, Last installation, Review enrollment…, Health check, Transition timing, Monitor communication or Support summary. Choose Refresh for a new report. |
 | Displays | Refresh the logical-layout schematic and current/saved display modes. |
 | Audio | Set speaker preferences for all four profiles, preserve a manual output, resume automatic audio or request repair. |
 | Controls | Choose a monitor, read or adjust brightness/volume, manage brightness presets and check preset-command support. |
@@ -295,3 +295,10 @@ Each reading has its own age; a fresh heartbeat does not refresh either observat
 explains waits for local ownership, sensor confirmation, setup, preview restoration or recovery.
 A stale/missing sensor timestamp cannot establish current confirmation. Older controllers show
 reading age unavailable. Sensor and software angles do not prove physical rotation latency.
+
+Choose **Last installation…** from the menu, or **Details → Last installation**, to inspect
+the latest installer record. It shows the recorded host, phase, outcome, report age and recovery
+observation without exposing process IDs or raw errors. Refresh fetches another snapshot; it
+does not install or retry anything. Missing process information leaves the outcome unknown.
+A reported completion still needs current health and physical checks. Older controllers require
+a coordinated update before they can provide this report.

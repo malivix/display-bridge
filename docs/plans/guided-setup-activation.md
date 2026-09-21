@@ -32,3 +32,16 @@ commands are labeled completed-unverified, not physically qualified. A missing p
 stored running attempt means only that its process was not found; never fabricate success or
 resume it. SIGKILL/power loss can leave the last phase recorded. Read-only `--status` must not
 create state or run hardware commands and must reject malformed/wrong-host reports.
+
+## Read-only graphical outcome inspection
+
+Expose `installation-status` before configuration loading and hardware/maintenance locks. It
+reads the latest attempt on this Mac and labels the recorded host; it does not infer ownership
+or authorize a new install. Keep explicit host filtering for the checkout CLI. Ship the reader
+in the runtime inventory and capability-probe the new command before menu dispatch.
+
+Add Last installation to Details and the menu. Use an allowlisted, typed formatter, showing
+phase/outcome/recovery separately and hiding raw IDs/errors/extra fields. Missing or malformed
+reports stay unavailable; a stored running record with a missing PID stays outcome unknown.
+Cancellation of the view cannot cancel the installer. Rollback is a coordinated release; old
+controllers must decline the new command gracefully.

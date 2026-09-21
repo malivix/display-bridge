@@ -4,6 +4,30 @@ import UserNotifications
 import Darwin
 
 func runMenuSelfTests() {
+    func installationJSON(_ report:[String:Any])->String {String(decoding:try! JSONSerialization.data(withJSONObject:report),as:UTF8.self)}
+    let installed=demoInstallationReport("ready",200)
+    precondition(installationSummary(installationJSON(installed),200).contains("Reported outcome: Completed"))
+    let stoppedInstallation=installationSummary(installationJSON(demoInstallationReport("stale",200)),200)
+    precondition(stoppedInstallation.contains("process was not found"))
+    precondition(stoppedInstallation.components(separatedBy:"\n\n")[1]=="Outcome unknown · recorded process not found")
+    precondition(installationSummary(installationJSON(demoInstallationReport("recovery",200)),200).contains("Recovery completion is unconfirmed"))
+    precondition(installationSummary(installationJSON(demoInstallationReport("recovery-wait",200)),200).contains("does not verify its identity"))
+    for (key,value) in [("read_only",1 as Any),("schema",true as Any),("updated_at",true as Any),("updated_at",201.0 as Any),("started_at",199.0 as Any),("phase","private error" as Any),("host","unknown" as Any),("recovery","pending" as Any)] {
+        var report=installed;report[key]=value
+        precondition(installationSummary(installationJSON(report),200).hasPrefix("No valid installation report"))
+    }
+    var recovered=installed;recovered["status"]="failed";recovered["phase"]="recovery-finished";recovered["recovery"]="completed-unverified"
+    recovered["unexpected"]="private machine data"
+    let recoveryText=installationSummary(installationJSON(recovered),200)
+    precondition(recoveryText.contains("Recovery commands completed") && !recoveryText.contains("private machine data"))
+    precondition(installationSummary("{}",200).contains("No valid"))
+    var installationCalls:[[String]]=[]
+    let oldInstaller=runCompatibleMenuCommand(["installation-status"]) { args,_,_ in
+        installationCalls.append(args);return CommandResult(output:"{}",code:0)
+    }
+    precondition(oldInstaller.code==78 && installationCalls==[["capabilities"]])
+    precondition(safeWithoutControls("installation-status"))
+
     let rotationHealth:[String:Any]=["updated_at":100.0,"status":"ready","profile":"extended","rotation":["enabled":true,"state":"tracking","confirmed":true,"sensor_degrees":90,"sensor_observed_at":99.0,"macos_degrees":0,"macos_observed_at":80.0]]
     let rotationText=rotationSummary(rotationHealth,[:],100)
     precondition(rotationText.contains("sensor confirmed") && rotationText.contains("Last sensor: 90° · read 1 second ago"))
@@ -310,6 +334,10 @@ func runMenuSelfTests() {
     }
     precondition(panelShortcut("r",.command,true)==nil)
     precondition(panelShortcut("6",.command,false)==nil)
+    for report in detailReportChoices where report.0 != "status" {
+        precondition(panelRefreshArguments("details",report.0,"pg")==[report.0])
+    }
+    precondition(panelRefreshArguments("details","installation-status","pg")==["installation-status"])
     precondition(panelRefreshArguments("details","setup","pg")==["setup"])
     precondition(panelRefreshArguments("details","status","pg")==nil)
     precondition(panelRefreshArguments("details","repair-audio","pg")==nil)

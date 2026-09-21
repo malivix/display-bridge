@@ -45,7 +45,7 @@ def preflight(package, home):
         major=0
     add('macOS version',compatible and major>=13,'macOS 13 or newer is required.')
     add('Python',sys.version_info>=(3,10),'Python 3.10 or newer is required.')
-    sources=(*RUNTIME_MODULES,'install_progress.py','setup_menu.py','scripts/test','native/display-layout.swift',
+    sources=(*RUNTIME_MODULES,'setup_menu.py','scripts/test','native/display-layout.swift',
              'native/display-audio.m','native/display-rotate.m','native/display-mode-info.m',
              *MENU_SOURCES,'vendor/m1ddc/Makefile','tests/native/test_ddc.m')
     missing=[name for name in sources if not (package/name).is_file()]

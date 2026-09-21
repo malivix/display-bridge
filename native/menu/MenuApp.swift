@@ -12,7 +12,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
     var timer:Timer?
     var panel:NSWindow?
     var scalableControls:[NSControl]=[]
-    let detailReports=[("status","Live status"),("setup","Setup readiness"),("enrollment-review","Review enrollment…"),("doctor","Health check"),("history","Transition timing"),("ddc-history","Monitor communication"),("support-summary","Support summary")]
+    let detailReports=detailReportChoices
     var detailReport="status"
     var reportSelector:NSPopUpButton?
     var reportStatus:NSTextField?
@@ -522,6 +522,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
         compact.addItem(.separator())
         add(compact,"Open Display Bridge…",["panel"])
         add(compact,"Setup readiness…",["setup"])
+        add(compact,"Last installation…",["installation-status"])
         let paused=automationPaused(control)
         add(compact,paused ? "Resume automation":"Pause automation",[paused ? "resume":"pause"])
         if fresh,let token=previewToken,preview["state"] as? String == "needs-repair" {
@@ -603,6 +604,11 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
             guard !busy else{return}
             let chooser=EnrollmentReviewDialog(fontSize:CGFloat([16,20,24][textSizeIndex()]))
             if let host=chooser.run() {execute(["capture-review","--host",host])}
+            return
+        }
+        if demo,args==["installation-status"] {
+            let report=demoInstallationReport(demoScenario,Date().timeIntervalSince1970)
+            if let data=try? JSONSerialization.data(withJSONObject:report),let json=String(data:data,encoding:.utf8) {showReport("installation-status","Synthetic installation report; no installer was run.\n\n"+installationSummary(json))}
             return
         }
         if demo,args.first=="capture-review",let host=args.last {
@@ -696,6 +702,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
                     guard let output=listeningOutput(result) else {self.message("Listening check unavailable","The result could not be validated. No audible result was recorded.");return}
                     self.presentListeningResponse(output)
                 }
+                else if args.first=="installation-status" {self.showReport("installation-status",installationSummary(result))}
                 else if args.first=="capture-review" {self.showReport("enrollment-review",enrollmentReviewSummary(result,args.last ?? ""))}
                 else if args.first=="diagnostics" {NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath:result.trimmingCharacters(in:.whitespacesAndNewlines))])}
                 else if args.first=="support-summary" {self.showReport("support-summary","Review before sharing. This report is not uploaded automatically.\n\n"+result)}

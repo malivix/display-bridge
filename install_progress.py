@@ -85,18 +85,19 @@ class InstallProgress:
         return False
 
 
-def read_progress(root, host):
+def read_progress(root, host=None):
     from observability import read_json
     try:
         data = read_json(Path(root) / 'install-progress.json')
     except RecursionError:
         data = None
     unavailable = dict(read_only=True, available=False, limits=LIMITS)
-    if host not in ('A', 'B') or not isinstance(data, dict):
+    if host not in (None, 'A', 'B') or not isinstance(data, dict):
         return unavailable
     def stamp(value):
         return type(value) in (int, float) and 0 <= value <= time.time() and math.isfinite(value)
-    if (type(data.get('schema')) is not int or data['schema'] != 1 or data.get('host') != host or
+    if (type(data.get('schema')) is not int or data['schema'] != 1 or data.get('host') not in ('A','B') or
+        (host is not None and data.get('host') != host) or
         type(data.get('pid')) is not int or not 0 < data['pid'] <= 2**31-1 or
         data.get('status') not in ('running', 'completed', 'failed', 'incomplete') or
         data.get('phase') not in PHASES or

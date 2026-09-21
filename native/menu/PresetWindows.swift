@@ -271,7 +271,7 @@ func panelShortcut(_ key:String,_ modifiers:NSEvent.ModifierFlags,_ repeating:Bo
 }
 func panelRefreshArguments(_ tab:String,_ report:String,_ monitor:String)->[String]? {
     switch tab {
-    case "details":return ["setup","enrollment-review","doctor","history","ddc-history","support-summary"].contains(report) ? [report]:nil
+    case "details":return report != "status" && detailReportChoices.contains(where:{$0.0==report}) ? [report]:nil
     case "displays":return ["display-info"]
     case "monitor-controls":return ["pg","benq"].contains(monitor) ? ["monitor-settings","--monitor",monitor]:nil
     default:return nil // Overview, live status and Audio reread local controller state.

@@ -5,6 +5,20 @@ import observability as o
 from audio_policy import route,preference
 spec=importlib.util.spec_from_file_location('c',(Path(__file__).resolve().parents[2]/'display-auto.py'));c=importlib.util.module_from_spec(spec);spec.loader.exec_module(c)
 class Features(unittest.TestCase):
+    def test_installation_status_works_without_valid_config_or_hardware(self):
+        from install_progress import InstallProgress
+        import contextlib,io
+        with tempfile.TemporaryDirectory() as temp:
+            root=Path(temp);(root/'config.json').write_text('invalid; preserve')
+            with InstallProgress(root,'B') as progress:progress.succeed()
+            before={p.name:p.read_bytes() for p in root.iterdir()}
+            output=io.StringIO()
+            with patch.object(c,'ROOT',root),patch.object(c.sys,'argv',['display-auto.py','installation-status']),patch.object(c,'command',side_effect=AssertionError('No helpers')),contextlib.redirect_stdout(output):
+                c.main()
+            report=json.loads(output.getvalue())
+            self.assertEqual(report['host'],'B');self.assertEqual(report['status'],'completed')
+            self.assertEqual({p.name:p.read_bytes() for p in root.iterdir()},before)
+
     def test_sensor_reading_has_its_own_timestamp_and_clears_failed_confirmation(self):
         cfg={'rotation':{'enabled':True}}
         with patch.object(c.time,'time',return_value=100),patch.object(c,'read_rotation',return_value=90):

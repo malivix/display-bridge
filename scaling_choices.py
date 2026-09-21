@@ -71,9 +71,13 @@ def paired_sizes(report):
             pair[role]=copy.deepcopy(choice)
         if len(pair)==2 and abs(pair['pg']['interface_percent']-pair['benq']['interface_percent'])<=6:
             proposals.append({'label':label,'target_interface_percent':target,'modes':pair})
+    seen={tuple(pair['modes'][role]['modeID'] for role in ('pg','benq')) for pair in proposals}
     for reference,percent,_ in MATCH_TARGETS.values():
         match = physical_match(report, reference, percent)
-        if match is not None:proposals.append(match)
+        if match is None:continue
+        identity=tuple(match['modes'][role]['modeID'] for role in ('pg','benq'))
+        if identity not in seen:
+            proposals.append(match);seen.add(identity)
     return proposals
 
 

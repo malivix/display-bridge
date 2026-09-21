@@ -114,6 +114,17 @@ class ScalingChoices(unittest.TestCase):
         for invalid in (True,0,89,111,100.0,'110'):
             with self.assertRaises(ValueError):physical_match(report,'pg',invalid)
 
+    def test_adjacent_physical_targets_do_not_duplicate_a_mode_pair(self):
+        a,b,k=self.fixture()
+        a[0]['modes'].append(dict(a[0]['modes'][0],modeID=9,width=2822,height=1587,pixelWidth=5644,pixelHeight=3174))
+        b['displays'][0]['modes'].append({'modeID':9,'variableRefresh':False,'proMotion':False})
+        report=candidates(a,b,k)
+        self.assertEqual(physical_match(report,'benq',100)['modes'],physical_match(report,'benq',110)['modes'])
+        pairs=paired_sizes(report)
+        identities=[tuple(pair['modes'][role]['modeID'] for role in ('pg','benq')) for pair in pairs]
+        self.assertEqual(len(identities),len(set(identities)))
+        self.assertIn('Match PG size to BenQ',[pair['label'] for pair in pairs])
+
     def test_rounded_zero_physical_ratio_is_unavailable(self):
         report={'displays':{role:{'current':{'width':width,'height':width,'pixelWidth':2*width,'pixelHeight':2*width},'choices':[]} for role,width in [('pg',32768),('benq',1)]}}
         self.assertIsNone(physical_match(report,'pg',110))

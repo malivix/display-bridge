@@ -3,6 +3,7 @@ import signal
 import subprocess
 import sys
 from pathlib import Path
+from unittest.mock import patch
 from deployment import atomic_link, snapshot, restore, require_service_namespace
 
 
@@ -143,6 +144,8 @@ class MalformedUnrelatedAgent(unittest.TestCase):
             require_service_namespace(home, "io.github.display-bridge")
             self.assertEqual(path.read_bytes(), content)
 
+
+class DeploymentInterruptionTests(unittest.TestCase):
     def test_process_death_around_pointer_swap_preserves_retry_and_restore(self):
         # Exercise real filesystem replacement and uncatchable process termination,
         # rather than an exception that ordinary installer cleanup could handle.
@@ -189,3 +192,35 @@ atomic_link(root / 'new-release', root / 'current')
                 self.assertEqual(entry.read_text(), "old")
                 self.assertEqual((old / "controller").read_text(), "old")
                 self.assertEqual((new / "controller").read_text(), "new")
+
+    def test_failed_restore_copy_preserves_current_file_or_bundle(self):
+        for directory_payload in (False, True):
+            with self.subTest(directory=directory_payload), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                destination = root / "target"
+                if directory_payload:
+                    destination.mkdir()
+                    content = destination / "binary"
+                else:
+                    content = destination
+                content.write_text("backup contents")
+                snapshot([destination], root / "backup", root / "current")
+                content.write_text("current contents")
+
+                def failed_copy(source, target, **kwargs):
+                    target = Path(target)
+                    if directory_payload:
+                        target.mkdir()
+                        target = target / "partial"
+                    target.write_text("incomplete replacement")
+                    raise OSError("injected destination write failure")
+
+                copier = "copytree" if directory_payload else "copy2"
+                with patch("deployment.shutil." + copier, side_effect=failed_copy):
+                    with self.assertRaisesRegex(OSError, "injected destination"):
+                        restore(root / "backup")
+                self.assertTrue(content.exists(), "Copy failure removed the current payload")
+                self.assertEqual(content.read_text(), "current contents")
+                self.assertEqual(list(root.glob(".display-bridge-restore-*")), [])
+                restore(root / "backup")
+                self.assertEqual(content.read_text(), "backup contents")

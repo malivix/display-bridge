@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: MIT
 """Atomic release pointers and exact file/symlink snapshots for local upgrades."""
 
-import json, os, shutil, plistlib, hashlib
+import json, os, shutil, plistlib, hashlib, tempfile
 from pathlib import Path
 from xml.parsers.expat import ExpatError
 
@@ -117,17 +117,25 @@ def restore(backup):
         current.unlink()
     for item in metadata["files"]:
         path = Path(item["path"])
-        if path.is_dir() and not path.is_symlink():
-            shutil.rmtree(path)
-        elif path.exists() or path.is_symlink():
-            path.unlink()
-        if item["exists"]:
+        if not item["exists"]:
+            if path.is_dir() and not path.is_symlink():
+                shutil.rmtree(path)
+            elif path.exists() or path.is_symlink():
+                path.unlink()
+            continue
+        # Copy first on the destination filesystem. A failed copy must not destroy
+        # the current file or bundle, and partial payloads must never become live.
+        with tempfile.TemporaryDirectory(prefix=".display-bridge-restore-", dir=path.parent) as temporary:
+            staged = Path(temporary) / "payload"
             if item["link"] is not None:
-                path.symlink_to(item["link"])
+                staged.symlink_to(item["link"])
             elif item.get("directory", False):
-                shutil.copytree(backup / str(item["index"]), path, symlinks=True)
+                shutil.copytree(backup / str(item["index"]), staged, symlinks=True)
             else:
-                shutil.copy2(backup / str(item["index"]), path)
+                shutil.copy2(backup / str(item["index"]), staged)
+            if path.is_dir() and not path.is_symlink():
+                shutil.rmtree(path)
+            staged.replace(path)
 
 
 def require_service_namespace(home, label):

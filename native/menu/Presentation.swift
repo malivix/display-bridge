@@ -303,10 +303,6 @@ func dashboard(_ health:[String:Any],_ control:[String:Any],_ now:Double=Date().
     let audio=health["audio"] as? [String:Any] ?? [:],selected=audio["selected"] as? [String:Any] ?? [:]
     lines.append("\(prefix)Selected speaker: \(selected["name"] as? String ?? "Not reported")")
     lines.append("\n"+recoverySummary(health,control,now))
-    if automationPaused(control,now) {
-        if let until=control["pause_until"] as? Double,until>now {lines.append("\nAutomation resumes at \(Date(timeIntervalSince1970:until).formatted(date:.omitted,time:.shortened)).")}
-        else {lines.append("\nAutomation is paused until you resume it from Controls.")}
-    }
     lines.append("\nSettings and recovery details come from the controller. Speaker selection does not prove audible sound.")
     return lines.joined(separator:"\n")
 }

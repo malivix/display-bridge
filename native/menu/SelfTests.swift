@@ -371,6 +371,10 @@ func runMenuSelfTests() {
     precondition(recoverySummary(expiredPauseHealth,["paused":true,"pause_until":103],103).contains("expired"))
     precondition(recoverySummary(expiredPauseHealth,[:],103).contains("Pause is no longer set"))
     precondition(!recoverySummary(expiredPauseHealth,["paused":true,"pause_until":200],120).contains("min remaining"))
+    let stalePausedDetails=dashboard(expiredPauseHealth,["paused":true,"pause_until":200],120)
+    precondition(stalePausedDetails.contains("out of date"))
+    precondition(!stalePausedDetails.contains("resumes at"))
+    precondition(!stalePausedDetails.contains("min remaining"))
     var exhausted=retryHealth;exhausted["recovery"]=["pending":true,"attempts":3]
     precondition(recoverySummary(exhausted,[:],103).contains("stopped after 3"))
     var badRetry=retryHealth;badRetry["retry_in_seconds"]=Double.infinity

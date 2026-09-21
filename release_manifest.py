@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: MIT
 """Canonical installed file inventory, shared by deployment and health checks."""
 
-VERSION = "2.10.2"
-MENU_BUILD = "2102"
+VERSION = "2.11.0"
+MENU_BUILD = "2110"
 
 # One source inventory for menu installation, prerequisite checks and native verification.
 MENU_SOURCES = (

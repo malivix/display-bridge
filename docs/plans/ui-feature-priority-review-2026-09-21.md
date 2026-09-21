@@ -8,23 +8,48 @@ their validation are recorded below; none establishes installed hardware qualifi
 
 ## Current decision
 
-This table is the current work order; older findings and delivery sections below
-preserve evidence rather than represent additional open tasks. The
-[competitor comparison](../research/display-app-comparison-2026-09-21.md) explains
-the product choices and primary sources.
+Refreshed against `17dc95b` on 2026-09-21 after a new current-source demo review.
+The [eight-step review](../ui-feature-review-current.md) supersedes old open-issue
+claims below; the delivery sections remain historical evidence. The
+[research refresh](../research/display-app-review-refresh.md) records current vendor
+features and licensing. Status/pause/resume Shortcuts source has been published;
+production activation is still unqualified. No installation occurred in this review.
 
-| Priority | Next result | Status and acceptance |
+| Order | Result | Acceptance and scope |
 | --- | --- | --- |
-| First | Finish accessibility qualification of existing UI | Compact size comparison, ownership/speaker summary, precise controls and contextual audio preferences are implemented. Recovery focus, top alignment and hidden keyboard focus are fixed. Long-name Overview/Audio and selected keyboard paths passed; high contrast, VoiceOver speech and the remaining dialog matrix are open. |
-| Active delivery | Review and deliver the completed UI/Shortcuts source | Status and pause/resume passed isolated companion execution, typed output and relevant failure paths. The result-dialog wait is fixed. Review the local commit range and publication gates, then qualify coordinated installation when fresh ownership permits it. Production activation remains unqualified. Named size-preset preview follows separately with Keep/Revert. |
-| Reliability | Explain and reduce measured rotation delays | Timing reports exist; exact-revision physical samples remain pending. Separate sensor observation, confirmation, layout and readback. Optimize the measured slow phase, not guessed polling intervals. |
-| Release | Finish installer interruption and hardware qualification | Full installer commit-phase interruption, Mac B, concurrent controllers and headset transitions remain open. Keep source tests, package checks and physical outcomes separate. |
-| Research only | BenQ comfort-settings inspector | Establish narrow firmware/transport-bound protocol evidence before exposing controls. Unreadable or multiplexed values cannot be presented as confirmed settings. Retain OSD guidance if reliable inspection is unavailable. |
+| 1 — next implementation | Validate the size-review contract before extending it | Parse one typed report before showing a chooser. Reject malformed rotation, choices, preset identity or fingerprints with a clear unavailable result. Never invent Landscape or silently close on a missing fingerprint. Preserve damaged preset-file guidance while allowing independently valid ordinary options. Extract this cohesive parsing/presentation boundary from `MenuApp.swift`; no new state machine. |
+| 2 — product feature | Make saved readable sizes directly accessible | Add a Saved sizes entry under Displays/the menu, using the same qualified report and chooser. Show name, orientation, current/proposed effect and unavailable reason. Keep normal Preview/Keep/Revert and explicit replacement/removal. Do not create another preset store. |
+| 3 — automation feature | Review a named size preset from Shortcuts | Reuse order 1 and the canonical CLI. Add explicit read-only named selection semantics and capability negotiation; opening a review must not enqueue a hardware write. Preview remains a deliberate user action; Keep remains separate. Cold/warm launch, app busy, missing/ambiguous name, damaged presets, changed orientation/ownership and timeout each get explicit outcomes. A review request is not an applied preset. |
+| 4 — reliability/UX | Explain the measured rotation delay | First gather exact-revision physical samples using existing observation, confirmation, layout and readback phases. Then show the actual waiting phase and observation age in Overview. Optimize only the measured slow phase; preserve unknown durations and ownership/debounce guards. No additional DDC reads for UI animation. |
+| Cross-cutting acceptance | Complete accessibility qualification | Run each touched flow at Largest/minimum, by keyboard, with actual VoiceOver speech and high contrast. Check focus after refresh, disabled reasons, errors and Escape. Existing screenshots/AX labels cannot close speech or all dialog tests. |
+| Release gate | Qualify installation and physical behavior | Retain the isolated caught-interrupt success and its limited boundary. Remaining installer commit phases, Mac B/concurrent controllers and headset transitions need separate evidence. Mac B remains deferred; sleep testing was declined. Fresh ownership must permit coordinated installation. |
+| Research only | BenQ comfort-settings guidance | Start with a model-specific OSD checklist. A software inspector requires narrow firmware/transport-bound read semantics. Unknown/multiplexed values must not appear confirmed. No broad register sweep or undocumented writes. |
 
-Do not add adaptive brightness, application-triggered color changes, virtual displays
-or HDR boosting to this milestone. They do not address the current accepted desktop
-and would introduce competing behavior or substantially different implementation scope.
-Keep fixed 120 Hz, HDR off and the saved readable sizes.
+Keep one implementation slice active: order 1. Do not block source work on deferred
+physical tests, but do not promote it to installed qualification. Orders 2 and 3
+share one validated preview contract; they must not grow separate launch, selection
+or recovery state machines. `MenuApp.swift` is 976 lines at this review: extract the
+affected cohesive boundary before feature growth, rather than adding scattered cases.
+
+Each slice requires focused failure regressions, `scripts/verify`, native verification
+for Swift, exact-build UI evidence, and a work log. Order 3 additionally needs private
+signed metadata and actual Shortcuts execution; inspect registration to avoid selecting
+a different test build. Tests and demos remain isolated from installed control files,
+hardware, notification delivery and the real clipboard.
+
+Rollback: these slices must not change saved preset/configuration schemas. Before
+activation retain a coordinated controller/menu snapshot; roll back both together.
+New optional capability absence disables the new entry point with an explanation.
+Existing CLI preset/preview/recovery commands remain usable. If persistence changes
+become necessary, stop and add migration, corruption-preservation and rollback tests
+before implementation. Review the index and privacy gates before any publication.
+
+Defer adaptive brightness, automatic per-app color modes, virtual displays, PiP,
+HDR boosting, global media-key interception and a general layout editor. They offer
+less immediate benefit than readable sizes and predictable handoffs, or add competing
+writers/permissions/platform scope. Manual brightness matching can be reconsidered
+if requested; equal percentages do not imply equal luminance. Preserve fixed 120 Hz,
+HDR off, saved sizes, manual headset choices and enrolled-pair-only operation.
 
 ## Evidence
 

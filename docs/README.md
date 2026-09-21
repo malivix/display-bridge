@@ -12,8 +12,8 @@
 | See release changes | [Changelog](../CHANGELOG.md) |
 | Inspect the initial adversarial review | [Code review](code-review.md) |
 | Review UI findings and feature delivery order | [Current review and implementation plan](plans/ui-feature-priority-review-2026-09-21.md) |
-| Inspect current UI evidence | [Nine-step UI audit](ui-audit-2026-09-21.md) |
-| Compare display utilities and source evidence | [Current app comparison](research/display-app-comparison-2026-09-21.md) |
+| Inspect current UI evidence | [Current eight-step UI review](ui-feature-review-current.md) |
+| Compare display utilities and source evidence | [Current app comparison](research/display-app-review-refresh.md) |
 | Understand the repository workflow choices | [Research](repository-research.md) |
 
 Work logs live in `log/`; scoped plans live in `plans/`. Logs describe what was actually

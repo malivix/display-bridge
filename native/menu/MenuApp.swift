@@ -38,7 +38,16 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
         refresh()
     }
     let readabilitySamples=ReadabilitySamples()
-    @objc func compareReadability() {readabilitySamples.show()}
+    @objc func compareReadability() {
+        readabilitySamples.show { [weak self] in
+            guard let self=self else{return}
+            self.showPanel();self.contentTabs?.selectTabViewItem(withIdentifier:"displays")
+            if let reason=sizePreviewReason(self.read("health.json"),self.read("control.json"),self.busy) {
+                self.message("Size preview unavailable",reason);return
+            }
+            self.execute(["preview-options"])
+        }
+    }
     var monitorRole="pg"
     var monitorSelector:NSPopUpButton?
     var monitorButtons:[NSButton]=[]
@@ -565,7 +574,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
         previewConfirmationRow?.isHidden=preview["state"] as? String != "preview"
         for button in previewActions {
             let action=button.identifier?.rawValue
-            if action=="preview-options" {button.isEnabled = !busy && controlsUsable && fresh && state=="ready" && health["profile"] as? String == "extended" && !automationPaused(control)}
+            if action=="preview-options" {button.isEnabled = sizePreviewReason(health,control,busy)==nil}
             else {
                 if action=="preview-keep" {button.title="Keep (\(previewRemaining(health))s)"}
                 button.isHidden = preview["state"] as? String != "preview";button.isEnabled = !busy && (controlsUsable || action=="preview-revert") && fresh && previewToken != nil && preview["state"] as? String == "preview" && previewRemaining(health)>0}

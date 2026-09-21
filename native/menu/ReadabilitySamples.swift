@@ -1,10 +1,13 @@
 // SPDX-License-Identifier: MIT
 import AppKit
 
-// Pure visual references. No display inventory, controller commands or settings.
-final class ReadabilitySamples {
+// Visual references delegate preview navigation to the app; no hardware commands here.
+final class ReadabilitySamples:NSObject {
     private var windows:[NSWindow]=[]
-    func show() {
+    private var onPreview:(()->Void)?
+    @objc private func preview() {onPreview?()}
+    func show(onPreview:@escaping ()->Void) {
+        self.onPreview=onPreview
         if windows.isEmpty {
             windows=(1...2).map { number in
                 let window=NSWindow(contentRect:NSRect(x:0,y:0,width:540,height:570),styleMask:[.titled,.closable,.miniaturizable,.resizable],backing:.buffered,defer:false)
@@ -33,7 +36,10 @@ final class ReadabilitySamples {
                 label("18 pt · Example tab   Settings   Search",18)
                 label("24 pt · Readable text and panels",24)
                 label("18 pt code · Aa0O 1lI {} []",18,monospaced:true)
-                label("Use Displays → Preview size to try a change. Keep/Revert stays in the main window. Close these samples when finished.",18)
+                label("Compare first, then preview a qualified size. Keep/Revert stays in the main window; these samples stay open for comparison.",18)
+                let previewButton=NSButton(title:"Choose a size to preview…",target:self,action:#selector(preview))
+                previewButton.font = .systemFont(ofSize:20)
+                stack.addArrangedSubview(previewButton)
                 window.center();window.setFrameOrigin(NSPoint(x:window.frame.origin.x+CGFloat(number-1)*40,y:window.frame.origin.y-CGFloat(number-1)*40))
                 return window
             }

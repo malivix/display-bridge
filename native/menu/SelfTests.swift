@@ -178,6 +178,14 @@ func runMenuSelfTests() {
     precondition(AudioOverridePresentation([:],now:1000).summary.contains("No temporary"))
     precondition(AudioOverridePresentation(["_read_unavailable":true],now:1000).summary.contains("unavailable"))
     precondition(AudioOverridePresentation(["audio_manual_until":Double.infinity],now:1000).action=="audio-manual")
+    let previewReady=demoState("ready","health.json",Date().timeIntervalSince1970)
+    precondition(sizePreviewReason(previewReady,[:],false)==nil)
+    precondition(sizePreviewReason(previewReady,[:],true) != nil)
+    precondition(sizePreviewReason(previewReady,["paused":true],false) != nil)
+    precondition(sizePreviewReason(previewReady,["_read_unavailable":true],false) != nil)
+    for scenario in ["stale","away","pg-only","benq-only","recovery","unknown-input"] {
+        precondition(sizePreviewReason(demoState(scenario,"health.json",Date().timeIntervalSince1970),[:],false) != nil)
+    }
     var percentCalls:[[String]]=[]
     let unsupportedPercent=runCompatibleMenuCommand(percentArgs) { args,_,_ in
         percentCalls.append(args);return CommandResult(output:"{}",code:0)

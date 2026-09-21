@@ -112,6 +112,16 @@ func monitorControlReason(_ health:[String:Any],_ control:[String:Any],_ role:St
     let expected=role=="pg" ? (host=="A" ? 17:18):(host=="A" ? 19:15)
     return inputs[role]==expected ? nil:"This monitor is not showing this Mac. No setting changes are available."
 }
+func sizePreviewReason(_ health:[String:Any],_ control:[String:Any],_ busy:Bool)->String? {
+    if busy {return "Wait for the current command to finish."}
+    if !controlsAvailable(control) {return "Saved controls are unreadable. Check health first."}
+    if !statusFresh(health) {return "Controller status is unavailable. Check health first."}
+    if automationPaused(control) {return "Resume automation before previewing a size."}
+    if health["status"] as? String != "ready" {return "Wait for switching or recovery to finish."}
+    if health["profile"] as? String != "extended" {return "Both enrolled monitors must show this Mac to preview a size."}
+    return nil
+}
+
 struct AudioOverridePresentation {
     let summary:String
     let action:String

@@ -37,6 +37,8 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
         if displayReading.accept(json) {modeText?.string=displaySummary(json)}
         refresh()
     }
+    let readabilitySamples=ReadabilitySamples()
+    @objc func compareReadability() {readabilitySamples.show()}
     var monitorRole="pg"
     var monitorSelector:NSPopUpButton?
     var monitorButtons:[NSButton]=[]
@@ -167,6 +169,8 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
             let previewSize=NSButton(title:"Preview size…",target:self,action:#selector(panelAction(_:)))
             previewSize.identifier=NSUserInterfaceItemIdentifier("preview-options")
             displayActions.addArrangedSubview(previewSize);previewActions.append(previewSize);scalableControls.append(previewSize)
+            let samples=NSButton(title:"Compare readability…",target:self,action:#selector(compareReadability))
+            displayActions.addArrangedSubview(samples);scalableControls.append(samples)
             let snapshotStatus=NSTextField(wrappingLabelWithString:"");snapshotStatus.isSelectable=true
             snapshotStatus.translatesAutoresizingMaskIntoConstraints=false;modeView.addSubview(snapshotStatus)
             modeStatus=snapshotStatus;scalableControls.append(snapshotStatus)

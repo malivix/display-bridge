@@ -63,6 +63,15 @@ rotation or other settings; refresh after changing them.
 
 ## Display size and named presets
 
+**Displays → Compare readability…** opens two identical sample windows. Place one on
+PG and one on BenQ, then compare the text samples and 200-point rectangle at your usual
+viewing distance. The rectangle measures macOS points, not millimeters. The windows
+change no display settings and may be resized or closed independently. Use Preview size
+in the main window to experiment; Keep/Revert remains there during an active preview.
+Sample font sizes stay fixed so the comparison remains meaningful; changing the main
+app's interface size does not change them. These samples are not a Chrome UI simulation
+or an automatic physical calibration.
+
 When qualified modes exist, the chooser also offers one monitor at about 10% larger
 or smaller physical UI size than the other. The named reference monitor keeps its
 current mode. These are model-based targets, not measured calibration; the comparison

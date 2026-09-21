@@ -241,8 +241,30 @@ def read_rotation(config,profile,deadline=None):
     if angle not in (0,90):raise RuntimeError('BenQ orientation is not calibrated: '+value)
     return angle
 
+def observe_rotation(config, profile, deadline=None):
+    status=config.setdefault('_rotation_status',{})
+    status.update(enabled=True,automatic=True,confirmed=False)
+    status.pop('error',None)
+    try:
+        angle=read_rotation(config,profile,deadline)
+    except (RuntimeError,subprocess.TimeoutExpired,OSError) as error:
+        status.update(state='sensor-unavailable',sensor_degrees=None,sensor_observed_at=None,error=str(error))
+        raise
+    status.update(state='tracking' if angle is not None else 'deferred-until-benq-local',
+                  sensor_degrees=angle,sensor_observed_at=time.time() if angle is not None else None)
+    return angle
+
+
+def rotation_readback(config, angle):
+    config.setdefault('_rotation_status',{}).update(macos_degrees=angle,macos_observed_at=time.time())
+
+
 def stable_state(config, debounce, state, last, profile, deadline=None):
-    if debounce.observe(state):return True
+    status=config.setdefault('_rotation_status',{}) if config.get('rotation',{}).get('enabled') else {}
+    status['confirmed']=False
+    if debounce.observe(state):
+        status['confirmed']=len(state)==3 and state[2] in (0,90)
+        return True
     # Only accelerate a rotation on the already verified input profile. Inputs
     # are still freshly rechecked by apply_rotation before any display write.
     if (not config.get('rotation',{}).get('enabled') or last is None or
@@ -250,12 +272,14 @@ def stable_state(config, debounce, state, last, profile, deadline=None):
         state[2] not in (0,90) or last[2] not in (0,90) or state[2]==last[2]):return False
     time.sleep(remaining(deadline,.25))
     try:
-        confirmed=read_rotation(config,profile,deadline)
+        confirmed=observe_rotation(config,profile,deadline)
     except (RuntimeError,subprocess.TimeoutExpired,OSError):
         debounce.reset();return False
     if confirmed!=state[2]:
         debounce.reset();return False
-    return debounce.observe(state)
+    stable=debounce.observe(state)
+    status['confirmed']=stable
+    return stable
 
 def select_rotation_baseline(config,angle):
     try:saved=rotation_baseline(config,angle)
@@ -270,6 +294,7 @@ def apply_rotation(config,profile,angle,inputs,deadline=None):
     if not config.get('rotation',{}).get('enabled'):return False
     screens=layout(deadline)
     current=next(s for s in screens if s['key']==config['keys']['benq'])['rotation']
+    rotation_readback(config,current)
     select_rotation_baseline(config,current)
     if angle is None or profile not in ('extended','benq') or angle==current:return False
     # Only a confirmed local BenQ may rotate. Release mirroring first.
@@ -282,6 +307,7 @@ def apply_rotation(config,profile,angle,inputs,deadline=None):
         command([ROTATE,config['keys']['pg'],config['keys']['benq'],str(angle)],6,deadline)
     finally:
         actual=next(s for s in layout(deadline) if s['key']==config['keys']['benq'])['rotation']
+        rotation_readback(config,actual)
         select_rotation_baseline(config,actual)
     if actual!=angle:raise RuntimeError('BenQ rotation readback differs')
     LOG.info('BenQ sensor rotation applied: %s degrees; native call/readback %.2fs',angle,time.monotonic()-rotation_started)
@@ -558,13 +584,12 @@ def watch(config, once=False, interrupt=None):
                 profile = desired(config['host'], inputs)
                 angle=None
                 if config.get('rotation',{}).get('enabled') and not control.get('auto_rotate',True):
-                    config['_rotation_status']={'enabled':True,'automatic':False,'state':'manual','sensor_degrees':None}
+                    config.setdefault('_rotation_status',{}).update(enabled=True,automatic=False,state='manual',sensor_degrees=None,sensor_observed_at=None,confirmed=False)
+                    config['_rotation_status'].pop('error',None)
                 elif config.get('rotation',{}).get('enabled'):
                     try:
-                        angle=read_rotation(config,profile,deadline)
-                        config['_rotation_status']={'enabled':True,'automatic':True,'state':'tracking' if angle is not None else 'deferred-until-benq-local','sensor_degrees':angle}
+                        angle=observe_rotation(config,profile,deadline)
                     except (RuntimeError,subprocess.TimeoutExpired,OSError) as error:
-                        config['_rotation_status']={'enabled':True,'state':'sensor-unavailable','error':str(error)}
                         LOG.debug('Rotation sensor unavailable: %s',error)
                 state = (inputs['pg'], inputs['benq'])
                 if config.get('rotation',{}).get('enabled'):state += (angle,)

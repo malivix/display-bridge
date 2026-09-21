@@ -110,8 +110,10 @@ valid input/sensor observation. [Failed attempts now retain completed phase dura
 and identify the interrupted phase.
 [Observed-to-outcome timing](observed-transition-time.md) now includes settling and retry waits
 for the latest uninterrupted candidate; completed aggregates report observed-to-ready.
-Pre-observation delay remains unmeasured. Expose sensor state, requested orientation and measured
-orientation distinctly, then optimize the measured bottleneck.
+Pre-observation delay remains unmeasured. [Sensor freshness and rotation status](rotation-observation-status.md) now distinguish
+the confirmed sensor candidate from dated macOS readback and explain ownership, confirmation,
+setup, preview and recovery waits. Detailed in-flight phase updates and physical latency
+qualification remain open; optimize the measured bottleneck after collecting those samples.
 
 Acceptance: monotonic durations, missing phases remain missing, overlapping aggregates are not
 summed, failed attempts retain useful completed phases. Compare bounded local samples before

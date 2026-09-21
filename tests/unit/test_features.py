@@ -5,6 +5,36 @@ import observability as o
 from audio_policy import route,preference
 spec=importlib.util.spec_from_file_location('c',(Path(__file__).resolve().parents[2]/'display-auto.py'));c=importlib.util.module_from_spec(spec);spec.loader.exec_module(c)
 class Features(unittest.TestCase):
+    def test_sensor_reading_has_its_own_timestamp_and_clears_failed_confirmation(self):
+        cfg={'rotation':{'enabled':True}}
+        with patch.object(c.time,'time',return_value=100),patch.object(c,'read_rotation',return_value=90):
+            self.assertEqual(c.observe_rotation(cfg,'extended'),90)
+        status=cfg['_rotation_status'];status['confirmed']=True
+        with patch.object(c.time,'time',return_value=101):c.rotation_readback(cfg,0)
+        self.assertEqual(status['sensor_observed_at'],100)
+        self.assertEqual(status['macos_observed_at'],101)
+        with patch.object(c,'read_rotation',side_effect=RuntimeError('offline')):
+            with self.assertRaises(RuntimeError):c.observe_rotation(cfg,'extended')
+        self.assertFalse(status['confirmed']);self.assertIsNone(status['sensor_degrees'])
+        self.assertIsNone(status['sensor_observed_at'])
+        self.assertEqual(status['state'],'sensor-unavailable')
+        self.assertEqual(status['error'],'offline')
+        self.assertEqual(status['macos_degrees'],0)
+        self.assertEqual(status['macos_observed_at'],101)
+        with patch.object(c,'read_rotation',return_value=None):c.observe_rotation(cfg,'pg')
+        self.assertEqual(status['state'],'deferred-until-benq-local')
+        self.assertNotIn('error',status)
+        self.assertIsNone(status['sensor_observed_at'])
+
+    def test_accelerated_confirmation_reports_the_latest_sensor_read(self):
+        for angle,confirmed in [(90,True),(0,False)]:
+            cfg={'rotation':{'enabled':True},'_rotation_status':{'sensor_degrees':90,'sensor_observed_at':100}}
+            with patch.object(c,'read_rotation',return_value=angle),patch.object(c.time,'time',return_value=101),patch.object(c.time,'sleep'):
+                self.assertEqual(c.stable_state(cfg,c.Debounce(),(17,19,90),(17,19,0),'extended'),confirmed)
+            self.assertEqual(cfg['_rotation_status']['sensor_degrees'],angle)
+            self.assertEqual(cfg['_rotation_status']['sensor_observed_at'],101)
+            self.assertEqual(cfg['_rotation_status']['confirmed'],confirmed)
+
     def test_fast_sensor_confirmation_rejects_bounce_and_failure(self):
         cfg={'rotation':{'enabled':True}}
         for result in (0,None,RuntimeError('sensor offline')):

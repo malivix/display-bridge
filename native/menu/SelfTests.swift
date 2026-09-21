@@ -4,6 +4,36 @@ import UserNotifications
 import Darwin
 
 func runMenuSelfTests() {
+    let rotationHealth:[String:Any]=["updated_at":100.0,"status":"ready","profile":"extended","rotation":["enabled":true,"state":"tracking","confirmed":true,"sensor_degrees":90,"sensor_observed_at":99.0,"macos_degrees":0,"macos_observed_at":80.0]]
+    let rotationText=rotationSummary(rotationHealth,[:],100)
+    precondition(rotationText.contains("sensor confirmed") && rotationText.contains("Last sensor: 90° · read 1 second ago"))
+    precondition(rotationText.contains("macOS last readback: 0° · read 20 seconds ago"))
+    precondition(rotationSummary(rotationHealth,[:],120).contains("status stale"))
+    precondition(rotationSummary(rotationHealth,["paused":true],100).contains("Rotation paused"))
+    precondition(rotationSummary(rotationHealth,["auto_rotate":false],100).contains("Rotation manual"))
+    for (profile,expected) in [("pg","BenQ to show this Mac"),("away","BenQ to show this Mac"),("unknown","known input ownership")] {
+        var health=rotationHealth;health["profile"]=profile
+        precondition(rotationSummary(health,[:],100).contains(expected))
+    }
+    for invalid in [true as Any,"99",Double.nan,Double.infinity,101.0,1.0] {
+        var health=rotationHealth;var rotation=health["rotation"] as! [String:Any]
+        rotation["sensor_observed_at"]=invalid;health["rotation"]=rotation
+        let text=rotationSummary(health,[:],100)
+        precondition(text.contains("freshness unavailable") && !text.contains("sensor confirmed"))
+    }
+    for (key,value,expected) in [("sensor_degrees",true as Any,"freshness unavailable"),("confirmed",1 as Any,"matching sensor confirmation"),("state","sensor-unavailable" as Any,"calibrated sensor reading")] {
+        var health=rotationHealth;var rotation=health["rotation"] as! [String:Any]
+        rotation[key]=value;health["rotation"]=rotation
+        precondition(rotationSummary(health,[:],100).contains(expected))
+    }
+    precondition(rotationSummary(demoState("stale","health.json",100),[:],100).contains("read 91 seconds ago"))
+    var previewRotation=rotationHealth;previewRotation["status"]="preview-preview"
+    precondition(rotationSummary(previewRotation,[:],100).contains("held during size preview"))
+    var waitingRotation=rotationHealth;waitingRotation["status"]="waiting-for-ddc"
+    precondition(rotationSummary(waitingRotation,[:],100).contains("valid setup and input readings"))
+    var olderRotation=rotationHealth;olderRotation["rotation"]=["enabled":true,"sensor_degrees":90]
+    precondition(rotationSummary(olderRotation,[:],100).contains("reading age unavailable"))
+
     precondition(listeningAnswerLabel(nil)=="uncertain" && listeningAnswerLabel(0)=="uncertain" && listeningAnswerLabel(1)=="heard" && listeningAnswerLabel(2)=="not heard" && listeningAnswerLabel(9)=="uncertain")
     precondition(listeningOutput(#"{"playback_completed":true,"audibility":"unconfirmed","output":"pg"}"#)=="PG42UQ")
     for json in [#"{"playback_completed":1,"audibility":"unconfirmed","output":"pg"}"#,#"{"playback_completed":true,"audibility":"confirmed","output":"pg"}"#,#"{"playback_completed":true,"audibility":"unconfirmed","output":"unknown"}"#] {precondition(listeningOutput(json)==nil)}

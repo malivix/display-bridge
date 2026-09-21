@@ -289,3 +289,9 @@ New installations compare controller/menu source fingerprints even when version 
 the same. Older installations report fingerprints unavailable. Agreement compares metadata,
 not binary signatures, current heartbeat freshness or physical behavior; those checks remain
 separate. Mismatches call for a coordinated menu/controller update.
+
+BenQ rotation status distinguishes sensor confirmation from the last macOS rotation readback.
+Each reading has its own age; a fresh heartbeat does not refresh either observation. The UI
+explains waits for local ownership, sensor confirmation, setup, preview restoration or recovery.
+A stale/missing sensor timestamp cannot establish current confirmation. Older controllers show
+reading age unavailable. Sensor and software angles do not prove physical rotation latency.

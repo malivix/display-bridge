@@ -25,6 +25,51 @@ func statusAge(_ health:[String:Any],_ now:Double=Date().timeIntervalSince1970)-
 func detailPrefix(_ health:[String:Any],_ control:[String:Any],_ now:Double=Date().timeIntervalSince1970)->String {
     statusFresh(health,now) && controlsAvailable(control) && health["status"] as? String == "ready" && !automationPaused(control,now) ? "":"Last known · "
 }
+func rotationSummary(_ health:[String:Any],_ control:[String:Any],_ now:Double=Date().timeIntervalSince1970)->String {
+    let rotation=health["rotation"] as? [String:Any] ?? [:]
+    func angle(_ key:String)->String? {
+        guard let n=rotation[key] as? NSNumber,CFGetTypeID(n) != CFBooleanGetTypeID(),(key=="sensor_degrees" ? [0.0,90]:[0.0,90,180,270]).contains(n.doubleValue) else{return nil}
+        return "\(n.intValue)°"
+    }
+    func age(_ key:String)->Double? {
+        guard let n=rotation[key] as? NSNumber,CFGetTypeID(n) != CFBooleanGetTypeID(),n.doubleValue.isFinite,now.isFinite,n.doubleValue>=0,n.doubleValue<=now else{return nil}
+        return now-n.doubleValue
+    }
+    func reading(_ title:String,_ degrees:String?,_ elapsed:Double?)->String {
+        guard let degrees=degrees else{return "\(title): unavailable"}
+        let freshness=elapsed.map { value -> String in
+            let seconds=Int(min(value,31536000))
+            return "read \(seconds) \(seconds==1 ? "second":"seconds") ago"
+        } ?? "reading age unavailable"
+        return "\(title): \(degrees) · \(freshness)"
+    }
+    let confirmation=rotation["confirmed"] as? NSNumber
+    let confirmed=confirmation.map{CFGetTypeID($0)==CFBooleanGetTypeID() && $0.boolValue} ?? false
+    let sensorAge=age("sensor_observed_at")
+    let sensorFresh=sensorAge.map{$0<15} ?? false
+    let profile=health["profile"] as? String ?? "unknown"
+    let current=statusFresh(health,now)
+    let status=health["status"] as? String ?? "unknown"
+    let reason:String
+    if !controlsAvailable(control) {reason="Rotation controls unavailable"}
+    else if rotation["enabled"] as? Bool != true {reason="Rotation not calibrated"}
+    else if automationPaused(control,now) {reason="Rotation paused"}
+    else if control["auto_rotate"] as? Bool == false {reason="Rotation manual"}
+    else if !current {reason="Rotation status stale; waiting for a fresh controller report"}
+    else if status=="waiting-for-ddc" || status=="inactive-setup" || status=="state-error" {reason="Rotation waiting for valid setup and input readings"}
+    else if status.hasPrefix("preview-") {reason="Rotation held during size preview or restoration"}
+    else if profile=="away" || profile=="pg" {reason="Rotation waiting for BenQ to show this Mac"}
+    else if !["extended","benq"].contains(profile) {reason="Rotation waiting for known input ownership"}
+    else if rotation["state"] as? String == "sensor-unavailable" {reason="Rotation waiting for a calibrated sensor reading"}
+    else if angle("sensor_degrees")==nil || !sensorFresh {reason="Rotation sensor freshness unavailable; waiting for a new reading"}
+    else if !confirmed {reason="Rotation waiting for a matching sensor confirmation"}
+    else if status=="degraded" {reason="Sensor confirmed; recovery needs attention"}
+    else if status=="recovering" {reason="Sensor confirmed; reconciliation or recovery pending"}
+    else if status != "ready" {reason="Sensor confirmed; waiting for controller reconciliation"}
+    else {reason="Automatic rotation · sensor confirmed"}
+    return [reason,reading("Last sensor",angle("sensor_degrees"),sensorAge),reading("macOS last readback",angle("macos_degrees"),age("macos_observed_at"))].joined(separator:"\n")
+}
+
 func commandSummary(_ health:[String:Any],_ control:[String:Any])->String {
     if let error=health["command_tracking_error"] as? String {return error}
     guard let request=control["command_request"] as? [String:Any],let id=request["id"] as? String else{return ""}
@@ -187,10 +232,7 @@ func dashboard(_ health:[String:Any],_ control:[String:Any],_ now:Double=Date().
     let profile=health["profile"] as? String ?? "unknown"
     let profiles=["extended":"Two independent desktops","pg":"PG desktop; hidden BenQ mirrors PG","benq":"BenQ desktop; hidden PG mirrors BenQ","away":"Both away; previous desktop layout preserved"]
     lines.append("\n\(prefix)Desktop: \(profiles[profile] ?? "Not confirmed")")
-    let rotation=health["rotation"] as? [String:Any] ?? [:]
-    let automatic=control["auto_rotate"] as? Bool ?? true
-    let angle=(rotation["sensor_degrees"] as? Int).map{"\($0)°"} ?? "not currently reported"
-    lines.append("\(prefix)BenQ rotation: \(automatic ? "automatic":"manual") · sensor \(angle)")
+    lines.append(rotationSummary(health,control,now))
     let audio=health["audio"] as? [String:Any] ?? [:],selected=audio["selected"] as? [String:Any] ?? [:]
     lines.append("\(prefix)Selected speaker: \(selected["name"] as? String ?? "Not reported")")
     lines.append("\n"+recoverySummary(health,control,now))
@@ -208,7 +250,6 @@ struct StatusSection {
 func statusSections(_ health:[String:Any],_ control:[String:Any])->[StatusSection] {
     let prefix=detailPrefix(health,control)
     let inputs=health["inputs"] as? [String:Int] ?? [:]
-    let rotation=health["rotation"] as? [String:Any] ?? [:]
     let audio=health["audio"] as? [String:Any] ?? [:]
     let selected=audio["selected"] as? [String:Any] ?? [:]
     let headline=dashboard(health,control).components(separatedBy:"\n").first ?? "Status unavailable"
@@ -219,15 +260,13 @@ func statusSections(_ health:[String:Any],_ control:[String:Any])->[StatusSectio
     let profile=health["profile"] as? String ?? "unknown"
     let layouts=["extended":"Two independent desktops","pg":"PG is the desktop; hidden BenQ mirrors PG",
                  "benq":"BenQ is the desktop; hidden PG mirrors BenQ","away":"Both monitors away; layout preserved"]
-    let sensor=(rotation["sensor_degrees"] as? Int).map{"\($0)°"} ?? "unavailable"
     let audioOverride=(control["audio_manual_until"] as? Double ?? 0)>Date().timeIntervalSince1970
-    let rotationMode = !controlsAvailable(control) ? "unavailable":rotation["enabled"] as? Bool != true ? "not calibrated":control["auto_rotate"] as? Bool == false ? "manual":"automatic"
     let routing = !controlsAvailable(control) ? "Saved audio preferences are unavailable":automationPaused(control) ? "Automation is paused":audioOverride ? "Manual output preservation is active":"Automatic routing follows profile preferences"
     return [
         StatusSection(title:"Overview",body:(health["status"] as? String ?? "").hasPrefix("preview-") ? dashboard(health,control):headline+"\n"+statusAge(health)+"\n"+prefix+(layouts[profile] ?? "Desktop not confirmed")+(unknownInputGuidance(health).map{"\n\n"+$0} ?? "")),
         StatusSection(title:"Recovery",body:recoverySummary(health,control)),
         StatusSection(title:"PG42UQ",body:prefix+owner("pg",17,18)),
-        StatusSection(title:"BenQ RD280UG",body:prefix+owner("benq",19,15)+"\n\(prefix)Rotation: \(rotationMode) · sensor \(sensor)"),
+        StatusSection(title:"BenQ RD280UG",body:prefix+owner("benq",19,15)+"\n"+rotationSummary(health,control)),
         StatusSection(title:"Audio",body:prefix+(selected["name"] as? String ?? "Output not reported")+"\n"+routing+"\nSpeaker selection does not prove audible sound.")
     ]
 }
@@ -458,9 +497,13 @@ func demoState(_ scenario:String,_ name:String,_ now:Double)->[String:Any] {
     guard name=="health.json" else {return [:]}
     var health:[String:Any] = ["host":"A","version":"Demo","updated_at":now,
         "status":"ready","profile":"extended","inputs":["pg":17,"benq":19],
-        "rotation":["enabled":true,"sensor_degrees":90],"audio":["selected":["name":"Example monitor speakers"]]]
+        "rotation":["enabled":true,"state":"tracking","confirmed":true,"sensor_degrees":90,"sensor_observed_at":now-1,"macos_degrees":90,"macos_observed_at":now-2],"audio":["selected":["name":"Example monitor speakers"]]]
     switch scenario {
-    case "stale":health["updated_at"]=now-90
+    case "stale":
+        health["updated_at"]=now-90
+        var rotation=health["rotation"] as! [String:Any]
+        rotation["sensor_observed_at"]=now-91;rotation["macos_observed_at"]=now-92
+        health["rotation"]=rotation
     case "paused":health["status"]="paused"
     case "unknown-input":health["status"]="waiting-for-known-input";health["profile"]="unknown";health["inputs"]=["pg":15,"benq":19]
     case "pg-only":health["profile"]="pg";health["inputs"]=["pg":17,"benq":15]

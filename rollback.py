@@ -87,8 +87,10 @@ def main(argv=None):
         undo = None
         try:
             for service, path in reversed(running):
-                run(["launchctl", "bootout", service], check=True)
+                # The stop may take effect even when launchctl fails or times out.
+                # Recovery must include the attempted service in that case too.
                 stopped.insert(0, (service, path))
+                run(["launchctl", "bootout", service], check=True)
             lock_bounded(maintenance)
             lock_bounded(controller)
             journal = root / "audio-refresh.json"

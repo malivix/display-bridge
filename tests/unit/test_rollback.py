@@ -3,6 +3,7 @@
 from pathlib import Path
 from types import SimpleNamespace
 import tempfile
+import subprocess
 import unittest
 from unittest.mock import patch
 from deployment import snapshot
@@ -123,3 +124,56 @@ class CoordinatedRollbackTests(unittest.TestCase):
                 if linked:self.assertTrue(request.is_symlink())
                 else:self.assertEqual(request.read_text(),'preserve malformed pending request')
                 self.assertEqual([p.name for p in (root/'backups').iterdir()],['original'])
+
+    def test_stop_error_after_service_exit_restarts_attempted_services(self):
+        for failed_stop in (1, 2):
+            for error_type in (subprocess.CalledProcessError, subprocess.TimeoutExpired, KeyboardInterrupt):
+                with self.subTest(stop=failed_stop, error=error_type.__name__), tempfile.TemporaryDirectory() as directory:
+                    home = Path(directory)
+                    root = home / ".config/display-auto"
+                    root.mkdir(parents=True)
+                    app = home / "Applications/Display Auto.app"
+                    app.mkdir(parents=True)
+                    (app / "binary").write_text("current app")
+                    agents = home / "Library/LaunchAgents"
+                    agents.mkdir(parents=True)
+                    paths = [agents / (name + ".plist") for name in
+                             ("io.github.display-bridge", "io.github.display-bridge.menu")]
+                    for path in paths:
+                        path.write_text("current agent")
+                    snapshot([app, *paths], root / "backups/original", root / "current")
+                    services = {path.stem: True for path in paths}
+                    stop_count = 0
+                    restarted = []
+                    command = ["launchctl", "bootout", "synthetic-service"]
+                    failure = (error_type(5, command) if error_type is subprocess.CalledProcessError else
+                               error_type(command, 10) if error_type is subprocess.TimeoutExpired else error_type())
+
+                    def run(args, **kwargs):
+                        nonlocal stop_count
+                        self.assertEqual(args[0], "launchctl")
+                        verb = args[1]
+                        name = Path(args[-1]).stem if verb == "bootstrap" else args[-1].split("/")[-1]
+                        if verb == "print":
+                            return SimpleNamespace(returncode=0 if services[name] else 1)
+                        if verb == "bootout":
+                            services[name] = False  # Side effect occurred before observation failed.
+                            stop_count += 1
+                            if stop_count == failed_stop:
+                                raise failure
+                        elif verb == "bootstrap":
+                            self.assertEqual((app / "binary").read_text(), "current app")
+                            self.assertEqual(Path(args[-1]).read_text(), "current agent")
+                            services[name] = True
+                            restarted.append(name)
+                        else:
+                            self.fail("Unexpected service command")
+                        return SimpleNamespace(returncode=0)
+
+                    with patch.object(rollback.Path, "home", return_value=home), patch.object(rollback, "run", side_effect=run), patch.object(rollback, "restore", side_effect=AssertionError("No file restoration before stops complete")):
+                        with self.assertRaises(error_type) as caught:
+                            rollback.main(["original"])
+                    self.assertIs(caught.exception, failure)
+                    self.assertTrue(all(services.values()), "A service remained stopped after failed rollback")
+                    self.assertEqual(len(restarted), failed_stop)
+                    self.assertEqual(list((root / "backups").iterdir()), [root / "backups/original"])

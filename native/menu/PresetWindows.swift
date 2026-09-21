@@ -140,10 +140,15 @@ final class BrightnessChooser: NSObject, NSWindowDelegate {
     let entries:[BrightnessEntry]
     let selector=NSPopUpButton()
     let detail=NSTextField(wrappingLabelWithString:"")
+    let availability:()->String?
+    let removalAvailable:()->Bool
+    let note=NSTextField(wrappingLabelWithString:"")
+    private var unavailableReason:String?
+    private var actionButtons:[NSButton]=[]
     var result = -1
     var selected:BrightnessEntry? {entries.indices.contains(selector.indexOfSelectedItem) ? entries[selector.indexOfSelectedItem]:nil}
-    init(monitor:String,entries:[BrightnessEntry],fontSize:CGFloat,unavailable:String?,canRemove:Bool) {
-        self.entries=entries
+    init(monitor:String,entries:[BrightnessEntry],fontSize:CGFloat,availability:@escaping ()->String?,removalAvailable:@escaping ()->Bool) {
+        self.entries=entries;self.availability=availability;self.removalAvailable=removalAvailable
         window=NSPanel(contentRect:NSRect(x:0,y:0,width:640,height:620),styleMask:[.titled,.closable,.resizable],backing:.buffered,defer:false)
         super.init()
         window.title="\(monitor=="pg" ? "PG42UQ":"BenQ RD280UG") brightness presets"
@@ -159,22 +164,45 @@ final class BrightnessChooser: NSObject, NSWindowDelegate {
         selector.isEnabled = !entries.isEmpty;selector.target=self;selector.action=#selector(selectEntry(_:))
         stack.addArrangedSubview(selector);selector.widthAnchor.constraint(equalTo:stack.widthAnchor).isActive=true
         detail.font=font;detail.isSelectable=true;stack.addArrangedSubview(detail);detail.widthAnchor.constraint(equalTo:stack.widthAnchor).isActive=true
-        let note=NSTextField(wrappingLabelWithString:unavailable ?? "Saved values are not live readings. Apply checks the current input and range, then verifies the result. Nothing runs automatically.")
         note.font=font;stack.addArrangedSubview(note);note.widthAnchor.constraint(equalTo:stack.widthAnchor).isActive=true
         for (index,title) in ["Apply selected brightness","Save current brightness…","Remove selected preset","Cancel"].enumerated() {
             let button=NSButton(title:title,target:self,action:#selector(finish(_:)));button.tag=index;button.font=font
-            if index==0 {button.isEnabled=unavailable==nil && !entries.isEmpty}
-            if index==1 {button.isEnabled=unavailable==nil}
-            if index==2 {button.isEnabled=canRemove && !entries.isEmpty}
             if index==3 {button.keyEquivalent="\u{1b}"}
-            stack.addArrangedSubview(button)
+            actionButtons.append(button);stack.addArrangedSubview(button)
         }
         window.initialFirstResponder=selector;selectEntry(selector)
     }
-    @objc func selectEntry(_ sender:NSPopUpButton) {detail.stringValue=selected?.description ?? "No saved brightness presets for this monitor."}
-    @objc func finish(_ sender:NSButton) {result=sender.tag;NSApp.stopModal()}
+    @objc func selectEntry(_ sender:NSPopUpButton) {
+        detail.stringValue=selected?.description ?? "No saved brightness presets for this monitor."
+        checkAvailability()
+    }
+    @objc private func checkAvailability() {
+        if unavailableReason==nil {unavailableReason=availability()}
+        let message=unavailableReason.map{$0+" Cancel and reopen when ready."}
+            ?? "Saved values are not live readings. Apply checks the current input and range, then verifies the result. Nothing runs automatically."
+        let changed=note.stringValue != message
+        note.stringValue=message
+        note.textColor=unavailableReason==nil ? .labelColor:.systemRed
+        actionButtons[0].isEnabled=unavailableReason==nil && selected != nil
+        actionButtons[1].isEnabled=unavailableReason==nil
+        actionButtons[2].isEnabled=removalAvailable() && selected != nil
+        actionButtons[2].toolTip=actionButtons[2].isEnabled ? nil:"Removal requires a selected preset and readable, idle saved controls."
+        if changed {NSAccessibility.post(element:note,notification:.valueChanged)}
+    }
+    @objc func finish(_ sender:NSButton) {
+        checkAvailability()
+        guard actionButtons.indices.contains(sender.tag),actionButtons[sender.tag].isEnabled else{return}
+        result=sender.tag;NSApp.stopModal()
+    }
     func windowShouldClose(_ sender:NSWindow)->Bool {result = -1;NSApp.stopModal();return true}
-    func run()->Int {window.center();window.recalculateKeyViewLoop();window.makeKeyAndOrderFront(nil);NSApp.runModal(for:window);window.orderOut(nil);return result}
+    func run()->Int {
+        let timer=Timer(timeInterval:1,target:self,selector:#selector(checkAvailability),userInfo:nil,repeats:true)
+        RunLoop.main.add(timer,forMode:.modalPanel)
+        defer {timer.invalidate();window.orderOut(nil)}
+        checkAvailability()
+        window.center();window.recalculateKeyViewLoop();window.makeKeyAndOrderFront(nil);NSApp.runModal(for:window)
+        return result
+    }
 }
 
 enum PanelShortcut: Equatable {

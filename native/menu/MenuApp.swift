@@ -396,7 +396,11 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
     func chooseBrightness(_ json:String,expectedMonitor:String) {
         guard let report=brightnessEntries(json,expectedMonitor) else {message("Brightness presets unavailable","The list could not be validated. No preset was changed; refresh after checking health.");return}
         let role=report.monitor
-        let chooser=BrightnessChooser(monitor:role,entries:report.entries,fontSize:CGFloat([16,20,24][textSizeIndex()]),unavailable:monitorControlReason(read("health.json"),read("control.json"),role,busy),canRemove:controlsAvailable(read("control.json")) && !busy)
+        let chooser=BrightnessChooser(monitor:role,entries:report.entries,fontSize:CGFloat([16,20,24][textSizeIndex()]),availability:{ [unowned self] in
+            monitorControlReason(self.read("health.json"),self.read("control.json"),role,self.busy)
+        },removalAvailable:{ [unowned self] in
+            controlsAvailable(self.read("control.json")) && !self.busy
+        })
         let action=chooser.run()
         guard [0,1,2].contains(action) else{return}
         if action != 2,let reason=monitorControlReason(read("health.json"),read("control.json"),role,busy) {message("Brightness action unavailable",reason);return}

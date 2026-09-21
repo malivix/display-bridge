@@ -155,18 +155,40 @@ The useful design references remain readable scale selection, direct targeted co
 user-adjusted calibration, and model-specific capabilities. Feature advertising is not
 evidence of compatibility with this pair or a public implementation API.
 
-### Remaining work, in priority order
+### Remaining work after the current-build audit
 
-| Priority | Next deliverable | Completion evidence |
+The [nine-step UI audit](../ui-audit-2026-09-21.md) reviews `3d94e42` plus the existing
+portrait/preset demo correction. It supersedes the earlier remaining-work table, not
+its historical evidence. The [new comparison](../research/display-app-comparison-2026-09-21.md)
+checks current upstream features and source availability. Most proposed baseline
+features already exist; the next milestone improves daily decisions and verifies them.
+
+| Order | Deliverable / boundary | Completion evidence |
 | --- | --- | --- |
-| High | Qualify existing UI before adding panels | Current-build keyboard traversal, focus retention during refresh, modal cancellation, VoiceOver names/values, light/dark appearance and Largest/minimum layout; inspect ready, stale, unknown, paused, recovery and unsupported states. Record failures individually. |
-| High | Close modal context gaps | Audit all save/apply dialogs against readiness changes while open. Explain lost eligibility locally and retain canonical controller validation immediately before mutation. UI polling alone is not an atomic ownership guarantee. |
-| High | Measure rotation delay | One opt-in physical sample with exact installed revision and phase durations; separate sensor observation, debounce, native layout and readback. Optimize the measured slow phase without extra polling or weaker guards. |
-| High | Qualify upgrade interruption and recovery | Inject failures in isolated installer fixtures at each mutation boundary; establish what can recover after process death. Preserve backups and document remaining power-loss limits before any stronger release claim. |
-| Medium | Save visual matching preferences | Add identity- and orientation-bound preference metadata only after schema, invalidation, damaged-file preservation and rollback are designed. Reuse qualified modes and Keep/Revert; do not describe a preference as measured physical calibration. |
-| Medium | Local Shortcuts | Start with status and timed pause, then named presets. Explicit targets, typed outcomes, no network listener; accepted daemon work must not be described as cancelled merely because its caller exits. |
+| 1 — active next slice | Compact two-monitor size decision; `SizeChooser.swift`, presentation tests | Both current/proposed monitor effects and Preview visible at Largest/minimum; technical detail expandable; preset estimate preserved; ordinary/reference/preset/empty/unknown choices; keyboard/Escape and stale-context rejection. Reuse existing preview journal, no new persistence. |
+| 2 | At-a-glance Overview and consistent recovery actions; status presenter and menu orchestration | Both ownership summaries and selected speaker visible in healthy state; active recovery remains first; Health/Repair wording matches action; stale/unknown/away/paused/manual/preview states, freshness and click-time revalidation. No hardware polling added. |
+| 3 | Focused Controls/Audio/Displays cleanup | Single empty-state instruction; precise adjustment near readings; active audio profile near selected output; Largest/minimum and long-name checks; invalid/unknown percentage speech qualified; no cross-monitor or feature value leakage. |
+| 4 | Accessibility and release qualification of the completed flows | Exact-build keyboard traversal, focus retention during refresh, modal cancellation, VoiceOver speech, light/dark and supported text sizes; record individual failures. Extract demo fixtures only to resolve the observed consistency risk; update all native builders. |
+| 5 | Local Shortcuts, starting read-only | Status returns a typed outcome without GUI/hardware mutation. Then timed pause/resume with bounded arguments. Named preset preview is a separate slice using fresh fingerprint and existing Keep/Revert. Accepted/pending/completed/failed are distinct; caller timeout is not cancellation. No listener or arbitrary shell field. |
+| Research gate | BenQ comfort-settings inspector | Document firmware/transport/protocol provenance first. No register sweep or undocumented writes. Distinguish unsupported, unverified, unreadable and confirmed; multiplexed values cannot masquerade as live reads. Ship OSD guidance if safe narrow inspection is unproven. |
 
-The next slice is UI qualification and any defects it reveals. New feature implementation
-follows the table rather than restarting completed items. Mac B and physical tests remain
-separate from source delivery. This update does not install software, confirm CI on a new
-revision, or approve a release.
+Pair source work with two reliability gates: isolated interruption coverage for the
+installer commit phase, and opt-in exact-revision physical rotation timing. Neither
+blocks unrelated presentation work; neither is satisfied by a passing demo. Mac B,
+concurrent-controller and headset qualification remain separate. Sleep testing remains
+deferred under the user's stated workflow. No installation is part of this audit.
+
+For orders 1–3, rollback is the prior compatible menu build; no configuration migration
+or preset/journal deletion. Runtime changes require `scripts/verify`; Swift changes also
+require native verification and current-build UI evidence. New Shortcuts integration
+must preserve enrollment, ownership, busy serialization and capability checks through
+the existing command boundary. Do not create a new state machine in the integration.
+
+Defer a second visual-calibration store: existing named presets already remember an
+identity- and orientation-bound pair. Defer live brightness sync, virtual displays,
+HDR boosting, PiP and layout editing until there is a concrete unmet task. Preserve
+fixed 120 Hz, HDR off and the accepted saved sizes. Unknown monitors remain unmanaged.
+
+One slice is active at a time. The first implementation is the compact size decision
+(U1), followed by its isolated UI verification; this document is the plan, not a claim
+that those presentation changes are already implemented.

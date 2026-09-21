@@ -170,13 +170,17 @@ def report(root, bin_dir, version, validate_config, read_inputs, inspect_modes=N
         except (OSError,ValueError,KeyError,TypeError) as error:
             add('Size presets','warning',str(error),'Preserve the preset file and restore valid data for this enrollment. Ordinary relative-size previews remain available; this check does not reset presets.')
     menu=read('menu-health.json',optional=True)
+    menu_current=False
     if menu:
         try:
-            pid=menu.get('pid');age=time.time()-float(menu.get('updated_at',0))
+            pid=menu.get('pid');stamp=menu.get('updated_at');now=time.time()
+            if type(stamp) not in (int,float) or not 0<=stamp<=now:raise ValueError('Menu heartbeat timestamp is invalid')
+            age=now-stamp
             if type(pid) is not int or pid<=0:raise ValueError('Missing menu process')
             os.kill(pid,0)
             if not 0<=age<15:raise ValueError('Menu heartbeat is stale')
             if menu.get('app_version')!=version:raise ValueError('Menu and command versions differ')
+            menu_current=True
             add('Menu app','ok',f'Menu heartbeat age {age:.1f}s; version matches the command. This does not verify its visual behavior.')
         except (OSError,TypeError,ValueError) as error:
             add('Menu app','warning',str(error),'Open the installed Display Bridge menu app or reinstall the matching app/controller pair. Do not start extra controller processes.')
@@ -187,7 +191,9 @@ def report(root, bin_dir, version, validate_config, read_inputs, inspect_modes=N
         menu_build=menu.get('source_fingerprint')
         def fingerprint(value):
             return isinstance(value,str) and len(value)==64 and all(ch in '0123456789abcdef' for ch in value)
-        if controller_build is None or menu_build is None:
+        if not menu_current:
+            add('Reported build agreement','info','Current agreement is unavailable because the menu heartbeat is not valid. Stored fingerprints are only historical metadata.','Open the installed menu and refresh Health before comparing builds.')
+        elif controller_build is None or menu_build is None:
             add('Reported build agreement','info','Source fingerprints are unavailable for one or both components. Matching version numbers do not establish matching source builds.','Use a coordinated installation to record both fingerprints.')
         elif not fingerprint(controller_build) or not fingerprint(menu_build):
             add('Reported build agreement','warning','Source fingerprint metadata is malformed. Build agreement is unknown.','Reinstall the menu and controller together from a trusted checkout.')

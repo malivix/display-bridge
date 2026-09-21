@@ -129,6 +129,19 @@ assert result['status']=='error' and result['read_only'] is True
                 self.assertEqual(check['status'],status)
                 if status=='ok':self.assertIn('metadata, not binary',check['detail'])
 
+    def test_invalid_or_stale_menu_cannot_report_current_build_agreement(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root=Path(temp);(root/'config.json').write_text('{}')
+            (root/'manifest.json').write_text(json.dumps({'source_fingerprint':'a'*64}))
+            for update in ({'updated_at':1},{'updated_at':10**400},{'updated_at':True},{'updated_at':'123'},{'updated_at':float('nan')},{'updated_at':c.time.time()+3600},{'pid':0}):
+                menu={'pid':os.getpid(),'updated_at':c.time.time(),'app_version':c.VERSION,'source_fingerprint':'a'*64};menu.update(update)
+                (root/'menu-health.json').write_text(json.dumps(menu))
+                result=report(root,root,c.VERSION,lambda cfg:None,lambda cfg:{'pg':17,'benq':19})
+                self.assertEqual(next(x for x in result['checks'] if x['name']=='Menu app')['status'],'warning')
+                agreement=next(x for x in result['checks'] if x['name']=='Reported build agreement')
+                self.assertEqual(agreement['status'],'info')
+                self.assertIn('unavailable',agreement['detail'])
+
     def test_menu_health_distinguishes_current_stale_and_mismatched(self):
         with tempfile.TemporaryDirectory() as temp:
             root=Path(temp)

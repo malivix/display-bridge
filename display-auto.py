@@ -175,15 +175,23 @@ class Debounce:
     def reset(self):
         self.candidate, self.count = None, 0
         self.first_seen, self.confirmed_after = None, None
+        self.observation_pending = False
     def observe(self, value):
         now = time.monotonic()
         if value != self.candidate:
             self.first_seen, self.confirmed_after = now, None
+            self.observation_pending = True
         self.count = min(2, self.count + 1) if value == self.candidate else 1
         self.candidate = value
         if self.count == 2 and self.confirmed_after is None:
             self.confirmed_after = now - self.first_seen
         return self.count == 2
+    def outcome_seconds(self, now):
+        if self.observation_pending and self.confirmed_after is not None:
+            return round(max(0, now-self.first_seen),3)
+        return None
+    def complete(self):
+        self.observation_pending = False
 
 def matches(config, profile, screens):
     saved = {x['key']: x for x in config['baseline']['screens']}
@@ -631,8 +639,11 @@ def watch(config, once=False, interrupt=None):
                             seconds={'rotation_check':round(rotation_finished-started,3),'layout_apply':round(layout_finished-rotation_finished,3),'layout':round(layout_finished-started,3),'input_confirmation':round(inputs_finished-layout_finished,3),'audio':round(finished-inputs_finished,3),'total':round(finished-started,3)}
                             if rotated or reason=='input transition':
                                 seconds['settling']=round(debounce.confirmed_after,3)
+                            observed=debounce.outcome_seconds(finished)
+                            if observed is not None:seconds['observed_to_outcome']=observed
                             record(ROOT,{'version':VERSION,'profile':profile,'result':'ready','inputs':inputs,'reason':reason or ('rotation' if rotated else 'layout changed'),'rotated':rotated,'orientation':angle,'seconds':seconds})
                         work.complete()
+                        debounce.complete()
                     except InputsChanged as error:
                         debounce.reset();last=None;status='settling'
                         LOG.info('%s',error)
@@ -640,6 +651,8 @@ def watch(config, once=False, interrupt=None):
                     except (RuntimeError, subprocess.TimeoutExpired, OSError) as error:
                         failed_at=time.monotonic()
                         seconds['total']=round(failed_at-started,3)
+                        observed=debounce.outcome_seconds(failed_at)
+                        if observed is not None:seconds['observed_to_outcome']=observed
                         work.failed(error, failed_at)
                         record(ROOT,{'profile':profile,'result':'failed','error':str(error),'attempt':work.data['attempts'],
                                      'seconds':seconds,'failed_phase':phase,'failed_phase_seconds':round(failed_at-phase_started,3)})

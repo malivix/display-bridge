@@ -259,7 +259,12 @@ with `--monitor benq --preset Reading`. List and removal access no monitor hardw
 Failed attempts in Transition timing retain completed phase durations and identify the
 interrupted phase with its elapsed time. Unrecorded later phases are not zero. These attempts
 are excluded from successful-transition aggregates; application total still excludes time
-before state confirmation.
+before state confirmation. First observation to outcome additionally measures the latest
+uninterrupted input/orientation candidate through that attempt, including settling and retry
+waits. Completed aggregates label this First observation to ready. A changed candidate or
+reset starts a new interval; time before its first reading is unmeasured. This interval
+overlaps application time and must not be added to other phases. Routine rechecks do not
+reuse a completed candidate's old start time; older records remain unavailable.
 
 ## Explicit speaker listening check
 

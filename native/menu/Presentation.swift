@@ -389,7 +389,7 @@ func recentTimingSummary(_ value:Any?)->String {
             lines.append(String(format:"  Interrupted during %@ after %.2f s; phase did not complete.",title,elapsed.doubleValue))
         }
         var missing:[String]=[]
-        for (key,title) in [("total","Application total"),("rotation_check","Rotation"),("layout_apply","Layout application"),("input_confirmation","Input recheck"),("audio","Audio"),("settling","Stable-read interval")] {
+        for (key,title) in [("observed_to_outcome","First observation to outcome"),("total","Application total"),("rotation_check","Rotation"),("layout_apply","Layout application"),("input_confirmation","Input recheck"),("audio","Audio"),("settling","Stable-read interval")] {
             if let number=phases[key] as? NSNumber,CFGetTypeID(number) != CFBooleanGetTypeID(),number.doubleValue.isFinite,number.doubleValue>=0 {
                 lines.append(String(format:"  %@: %.2f s",title,number.doubleValue))
             } else if key=="total" {lines.append("  Application total: not recorded")} else {missing.append(title)}
@@ -403,14 +403,14 @@ func recentTimingSummary(_ value:Any?)->String {
 func timingSummary(_ json:String)->String {
     guard let data=json.data(using:.utf8),let report=(try? JSONSerialization.jsonObject(with:data)) as? [String:Any],let profiles=report["profiles"] as? [String:[String:Any]] else{return "Timing report could not be read. Save a diagnostic report for details."}
     if report["history_available"] as? Bool == false {return "Transition history is unavailable or exceeds the read limit. Save private diagnostics to inspect it; no timing conclusion can be drawn."}
-    var lines=[recentTimingSummary(report["recent_events"]),"\nAggregate application time — median / p95 / slowest"]
+    var lines=[recentTimingSummary(report["recent_events"]),"\nAggregate completed timings — median / p95 / slowest"]
     for (key,label) in [("extended","Both monitors here"),("pg","Only PG here"),("benq","Only BenQ here"),("away","Both monitors away")] {
         guard let profile=profiles[key],let phases=profile["seconds"] as? [String:[String:Any]] else{continue}
         lines.append("\n\(label)")
         if let count=profile["count"] as? Int,count>=0 {lines.append("Completed records: \(count)")}
         if let failed=profile["failed_attempts"] as? Int,failed>=0 {lines.append("Failed attempts: \(failed) (may include retries)")}
         if phases.isEmpty {lines.append("No completed phase timings available.")}
-        for (phase,name) in [("total","Application total"),("rotation_check","Rotation check and change"),("layout_apply","Layout application"),("input_confirmation","Input recheck"),("audio","Audio recovery"),("settling","Initial stable-read interval")] {
+        for (phase,name) in [("observed_to_outcome","First observation to ready"),("total","Application total"),("rotation_check","Rotation check and change"),("layout_apply","Layout application"),("input_confirmation","Input recheck"),("audio","Audio recovery"),("settling","Initial stable-read interval")] {
             guard let stats=phases[phase],let median=stats["median"] as? Double,let maximum=stats["max"] as? Double,median.isFinite,maximum.isFinite,median>=0,maximum>=0 else{continue}
             let count=stats["count"] as? Int
             let sampleText=count.map{$0>=0 ? "\($0) samples":"sample count unavailable"} ?? "sample count unavailable"
@@ -420,7 +420,7 @@ func timingSummary(_ json:String)->String {
         }
     }
     if profiles.isEmpty{lines.append("\nNo completed transitions recorded yet.")}
-    lines.append("\nPhysical input-switch time before the first valid reading is not measured. The stable-read interval is separate from application time. p95 is the nearest-rank 95th percentile; small samples are not a reliable performance baseline. Older records lack the rotation/layout breakdown. Sound still requires listening.")
+    lines.append("\nTime before the first candidate reading is unmeasured, including physical motion and input handshakes. Observation-to-outcome includes settling and retry waits for the latest uninterrupted candidate; a reset starts a new interval. It overlaps application time and must not be added to other phases. The stable-read interval is separate from application time. p95 is the nearest-rank 95th percentile; small samples are not a reliable performance baseline. Older records lack the rotation/layout breakdown. Sound still requires listening.")
     return lines.joined(separator:"\n")
 }
 

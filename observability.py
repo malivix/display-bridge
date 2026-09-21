@@ -46,7 +46,7 @@ def recent_events(rows):
         timings=row.get('seconds')
         seconds={}
         if isinstance(timings,dict):
-            for phase in ('settling','rotation_check','layout_apply','layout','input_confirmation','audio','total'):
+            for phase in ('observed_to_outcome','settling','rotation_check','layout_apply','layout','input_confirmation','audio','total'):
                 value=timings.get(phase)
                 if valid_duration(value):seconds[phase]=value
         event={'profile':row['profile'],'result':row['result'],'seconds':seconds}
@@ -69,7 +69,7 @@ def summary(root):
         failed=sum(r.get('profile')==profile and r.get('result')=='failed' for r in rows)
         if not samples and not failed:continue
         phases={}
-        for phase in ('settling','rotation_check','layout_apply','layout','input_confirmation','audio','total'):
+        for phase in ('observed_to_outcome','settling','rotation_check','layout_apply','layout','input_confirmation','audio','total'):
             values=sorted(v for r in samples if isinstance(r.get('seconds'),dict) for v in [r['seconds'].get(phase)] if valid_duration(v))
             if values:
                 middle=len(values)//2
@@ -77,7 +77,7 @@ def summary(root):
                 median=values[middle] if len(values)%2 else values[middle-1]+(values[middle]-values[middle-1])/2
                 phases[phase]={'count':len(values),'mean':round(statistics.mean(values),3),'max':round(max(values),3),'median':round(median,3),'p95':round(values[math.ceil(.95*len(values))-1],3)}
         result[profile]={'count':len(samples),'failed_attempts':failed,'seconds':phases}
-    return {'recent_events':recent_events(rows),'history_available':isinstance(source,list),'retained_events':len(rows),'profiles':result,'note':'Total is application time only. Settling measures first valid candidate to its second matching read; physical switching and time before the first valid read are unmeasured. Rotation check includes preflight and any rotation; Layout application includes its fresh input preflight; layout includes rotation check plus layout application. Each phase has its own sample count; p95 uses nearest rank. Software readback does not prove sound.'}
+    return {'recent_events':recent_events(rows),'history_available':isinstance(source,list),'retained_events':len(rows),'profiles':result,'note':'Observed-to-outcome measures the latest uninterrupted candidate observation through success or a failed attempt, including retry waits. It overlaps other phases; do not add them. Total is application time only. Settling measures first valid candidate to its second matching read; physical switching and time before the first valid read are unmeasured. Rotation check includes preflight and any rotation; Layout application includes its fresh input preflight; layout includes rotation check plus layout application. Each phase has its own sample count; p95 uses nearest rank. Software readback does not prove sound.'}
 
 def diagnostics(root, bin_dir):
     report={'created_at':time.time(),'os':platform.platform(),'files':{},'file_sha256':{},'unreadable_files':{},'helper_sha256':{},'timings':summary(root)}

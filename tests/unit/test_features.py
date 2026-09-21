@@ -43,17 +43,61 @@ class Features(unittest.TestCase):
             self.assertTrue(d.observe((17,19,90)))
             self.assertEqual(d.confirmed_after,1)
         d.reset();self.assertIsNone(d.first_seen)
+    def test_observed_interval_survives_retry_but_not_completion_or_reset(self):
+        d=c.Debounce()
+        with patch.object(c.time,'monotonic',side_effect=[10,11,30,40,41,50,51]):
+            d.observe((17,19,0));self.assertIsNone(d.outcome_seconds(10.5))
+            d.observe((17,19,0))
+            self.assertEqual(d.outcome_seconds(13),3)
+            self.assertEqual(d.outcome_seconds(20),10)  # retry wait remains measured
+            d.complete();d.observe((17,19,0))
+            self.assertIsNone(d.outcome_seconds(31))  # periodic check cannot reuse it
+            d.observe((17,19,90));d.observe((17,19,90))
+            self.assertEqual(d.outcome_seconds(43),3)
+            d.reset();self.assertIsNone(d.outcome_seconds(49))
+            d.observe((18,19,90));d.observe((18,19,90))
+            self.assertEqual(d.outcome_seconds(52),2)
+
     def test_rotation_history_measures_actual_controller_phases(self):
         clock=[100.0];events=[]
         def spend(seconds,result):
             def call(*a,**kw):clock[0]+=seconds;return result
             return call
-        with patch.object(c,'new_recovery',side_effect=lambda:c.Recovery()),patch.object(c,'read_control',return_value={}),patch.object(c,'read_inputs',return_value={'pg':17,'benq':19}),patch.object(c,'read_rotation',return_value=90),patch.object(c,'audio_inventory',return_value=[]),patch.object(c,'apply_rotation',side_effect=spend(3,True)),patch.object(c,'apply',side_effect=spend(.5,True)),patch.object(c,'confirm_inputs',side_effect=spend(.6,None)),patch.object(c,'sync_audio',side_effect=spend(1,None)),patch.object(c,'record',side_effect=lambda root,event:events.append(event)),patch.object(c,'write_health'),patch.object(c.time,'monotonic',side_effect=lambda:clock[0]),patch.object(c.time,'time',side_effect=lambda:clock[0]),patch.object(c.time,'sleep',side_effect=spend(.25,None)):
+        with patch.object(c,'new_recovery',side_effect=lambda:c.Recovery()),patch.object(c,'read_control',return_value={}),patch.object(c,'read_inputs',return_value={'pg':17,'benq':19}),patch.object(c,'read_rotation',return_value=90),patch.object(c,'audio_inventory',side_effect=spend(2,[])),patch.object(c,'apply_rotation',side_effect=spend(3,True)),patch.object(c,'apply',side_effect=spend(.5,True)),patch.object(c,'confirm_inputs',side_effect=spend(.6,None)),patch.object(c,'sync_audio',side_effect=spend(1,None)),patch.object(c,'record',side_effect=lambda root,event:events.append(event)),patch.object(c,'write_health'),patch.object(c.time,'monotonic',side_effect=lambda:clock[0]),patch.object(c.time,'time',side_effect=lambda:clock[0]),patch.object(c.time,'sleep',side_effect=spend(.25,None)):
             c.watch({'host':'A','poll_interval':.25,'rotation':{'enabled':True}},once=True)
         self.assertEqual(len(events),1)
         self.assertTrue(events[0]['rotated'])
         self.assertEqual(events[0]['orientation'],90)
-        self.assertEqual(events[0]['seconds'],{'rotation_check':3,'layout_apply':1.1,'layout':4.1,'input_confirmation':.6,'audio':1,'total':5.7,'settling':.25})
+        self.assertEqual(events[0]['seconds'],{'rotation_check':3,'layout_apply':1.1,'layout':4.1,'input_confirmation':.6,'audio':1,'total':5.7,'settling':.25,'observed_to_outcome':7.95})
+    def test_controller_observed_interval_includes_recovery_wait(self):
+        clock=[100.0];events=[];attempts=[]
+        def sleep(seconds):clock[0]+=seconds
+        def audio(*args,**kwargs):
+            clock[0]+=1;attempts.append(clock[0])
+            if len(attempts)==1:raise RuntimeError('Synthetic audio failure')
+            return 'ready'
+        with patch.object(c,'new_recovery',side_effect=lambda:c.Recovery()),patch.object(c,'read_control',return_value={}),patch.object(c,'read_inputs',return_value={'pg':17,'benq':19}),patch.object(c,'audio_inventory',return_value=[]),patch.object(c,'apply_rotation',return_value=False),patch.object(c,'apply',return_value=False),patch.object(c,'confirm_inputs'),patch.object(c,'sync_audio',side_effect=audio),patch.object(c,'record',side_effect=lambda root,event:events.append(event)),patch.object(c,'write_health'),patch.object(c.time,'monotonic',side_effect=lambda:clock[0]),patch.object(c.time,'time',side_effect=lambda:clock[0]),patch.object(c.time,'sleep',side_effect=sleep):
+            c.watch({'host':'A','poll_interval':.25},interrupt=lambda:len(events)>=2)
+        self.assertEqual([event['result'] for event in events],['failed','ready'])
+        self.assertEqual(events[0]['seconds']['observed_to_outcome'],1.25)
+        self.assertEqual(events[1]['seconds']['observed_to_outcome'],4.25)
+        self.assertEqual(events[1]['seconds']['total'],1)
+
+    def test_observed_history_keeps_failures_out_of_completed_aggregates(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root=Path(temp)
+            o.record(root,{'profile':'extended','result':'failed','seconds':{'observed_to_outcome':3}})
+            o.record(root,{'profile':'extended','result':'ready','seconds':{'observed_to_outcome':10}})
+            o.record(root,{'profile':'extended','result':'ready','seconds':{'total':1}})
+            report=o.summary(root)
+            stats=report['profiles']['extended']['seconds']['observed_to_outcome']
+            self.assertEqual(stats['count'],1);self.assertEqual(stats['median'],10)
+            self.assertNotIn('observed_to_outcome',report['recent_events'][0]['seconds'])
+            self.assertEqual(report['recent_events'][2]['seconds']['observed_to_outcome'],3)
+            for invalid in (True,-1,float('nan'),10**400):
+                event={'profile':'pg','result':'ready','seconds':{'observed_to_outcome':invalid}}
+                self.assertNotIn('observed_to_outcome',o.recent_events([event])[0]['seconds'])
+
     def test_history_phase_counts_and_even_median(self):
         with tempfile.TemporaryDirectory() as temp:
             root=Path(temp)

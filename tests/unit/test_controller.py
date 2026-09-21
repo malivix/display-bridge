@@ -148,9 +148,10 @@ class ReliabilityTests(unittest.TestCase):
                 event=record.call_args.args[1]
                 self.assertEqual(event['result'],'failed')
                 self.assertEqual(event['failed_phase'],expected)
-                self.assertEqual(set(event['seconds']),completed|{'total'})
+                self.assertEqual(set(event['seconds']),completed|{'total','observed_to_outcome'})
                 self.assertGreaterEqual(event['failed_phase_seconds'],0)
                 self.assertGreaterEqual(event['seconds']['total'],event['failed_phase_seconds'])
+                self.assertGreaterEqual(event['seconds']['observed_to_outcome'],event['seconds']['total'])
 
     def test_audio_is_not_rerouted_after_failed_layout(self):
         with patch.object(c,'write_health'), patch.object(c,'read_inputs',return_value={'pg':18,'benq':19}), patch.object(c,'apply',side_effect=RuntimeError('layout failed')), patch.object(c,'sync_audio') as audio:

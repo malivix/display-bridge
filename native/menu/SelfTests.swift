@@ -360,7 +360,17 @@ func runMenuSelfTests() {
     let retryHealth:[String:Any]=["updated_at":100.0,"status":"recovering","retry_in_seconds":8.0,"recovery":["pending":true,"attempts":2]]
     precondition(recoverySummary(retryHealth,[:],103).contains("about 5 seconds"))
     precondition(!recoverySummary(retryHealth,[:],120).contains("eligible"),"Stale data must not promise a retry")
-    precondition(recoverySummary(retryHealth,["paused":true],103).contains("paused"))
+    precondition(recoverySummary(retryHealth,["paused":true],103).contains("Paused until you choose Resume"))
+    precondition(pauseDurationSummary(["pause_until":1000],100).contains("about 15 min remaining"))
+    precondition(pauseDurationSummary(["pause_until":101],100).contains("about 1 min remaining"))
+    precondition(pauseDurationSummary(["pause_until":0],100).contains("until you choose Resume"))
+    precondition(pauseDurationSummary(["pause_until":100],100).contains("expired"))
+    precondition(pauseDurationSummary(["pause_until":true],100).contains("unavailable"))
+    precondition(pauseDurationSummary(["pause_until":Double.infinity],100).contains("unavailable"))
+    var expiredPauseHealth=retryHealth;expiredPauseHealth["status"]="paused"
+    precondition(recoverySummary(expiredPauseHealth,["paused":true,"pause_until":103],103).contains("expired"))
+    precondition(recoverySummary(expiredPauseHealth,[:],103).contains("Pause is no longer set"))
+    precondition(!recoverySummary(expiredPauseHealth,["paused":true,"pause_until":200],120).contains("min remaining"))
     var exhausted=retryHealth;exhausted["recovery"]=["pending":true,"attempts":3]
     precondition(recoverySummary(exhausted,[:],103).contains("stopped after 3"))
     var badRetry=retryHealth;badRetry["retry_in_seconds"]=Double.infinity

@@ -290,7 +290,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
                 previewActions.append(button);scalableControls.append(button)
             }
             if demo {
-                let scenarios=NSPopUpButton();scenarios.addItems(withTitles:["ready","pg-only","benq-only","stale","paused","away","unknown-input","preview","recovery","recovery-wait","presets-error","controls-error","brightness-empty","older-controller","display-refresh-failed","monitor-response-error","audio-manual"])
+                let scenarios=NSPopUpButton();scenarios.addItems(withTitles:["ready","pg-only","benq-only","stale","paused","paused-timed","away","unknown-input","preview","recovery","recovery-wait","presets-error","controls-error","brightness-empty","older-controller","display-refresh-failed","monitor-response-error","audio-manual"])
                 scenarios.target=self;scenarios.action=#selector(changeDemoScenario(_:));scenarios.setAccessibilityLabel("Synthetic scenario")
                 let compact=NSButton(title:"Minimum window",target:self,action:#selector(compactDemo))
                 let row=NSStackView(views:[scenarios,compact]);row.spacing=12;footer.addArrangedSubview(row)

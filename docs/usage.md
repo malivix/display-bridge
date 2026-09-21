@@ -183,6 +183,9 @@ not establish audible sound—listen to verify a repair.
 Timed pauses expire automatically; **Resume** ends either kind immediately. These controls
 stop automatic reconciliation without changing the current display layout. The compact
 menu labels its indefinite action **Pause until resumed**; Advanced retains the 15-minute action.
+Overview shows the expiry time and approximate minutes remaining, or says the pause lasts
+until Resume. Expiry and a Resume request can precede the controller's next status report;
+the overview identifies that wait instead of treating the desktop as already reconciled.
 The Overview recovery section distinguishes pending, paused, ownership-held and exhausted
 work. It shows the trigger, last error and retry eligibility without showing a current
 countdown from stale status. Normal switching does not offer repeated repair.

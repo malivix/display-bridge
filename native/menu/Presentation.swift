@@ -204,6 +204,18 @@ func currentRecoveryArguments(_ presented:RecoveryAction?,_ health:[String:Any],
     guard !busy,let presented=presented,presented==recoveryAction(health,control,now) else {return nil}
     return presented.arguments
 }
+func pauseDurationSummary(_ control:[String:Any],_ now:Double)->String {
+    guard let raw=control["pause_until"] else{return "Paused until you choose Resume."}
+    guard let number=raw as? NSNumber,CFGetTypeID(number) != CFBooleanGetTypeID(),
+          number.doubleValue.isFinite,number.doubleValue>=0,number.doubleValue<=253402300799,now.isFinite else {
+        return "Pause duration is unavailable. Check health."
+    }
+    let until=number.doubleValue
+    if until==0 {return "Paused until you choose Resume."}
+    if until<=now {return "Pause timer expired; waiting for controller status to update."}
+    let remaining=min(1440,ceil((until-now)/60))
+    return "Pause expires at \(Date(timeIntervalSince1970:until).formatted(date:.omitted,time:.shortened)) · about \(Int(remaining)) min remaining. Resume ends it now."
+}
 func recoverySummary(_ health:[String:Any],_ control:[String:Any],_ now:Double=Date().timeIntervalSince1970)->String {
     let recovery=health["recovery"] as? [String:Any] ?? [:]
     let state=health["status"] as? String ?? "unknown"
@@ -223,7 +235,10 @@ func recoverySummary(_ health:[String:Any],_ control:[String:Any],_ now:Double=D
         }
         if let error=preview["error"] as? String {lines.append("Last size error: "+String(error.prefix(1000)))}
     }
-    else if automationPaused(control,now) {lines.append(pending ? "Recovery is pending while automation is paused. Resume automation when ready.":"Automation is paused; no pending recovery was reported.")}
+    else if automationPaused(control,now) || state=="paused" {
+        lines.append(control["paused"] as? Bool == true ? pauseDurationSummary(control,now):"Pause is no longer set; waiting for controller status to update.")
+        lines.append(pending ? "Recovery remains pending.":"No pending recovery was reported.")
+    }
     else if ["waiting-for-known-input","waiting-for-ddc","inactive-setup","settling"].contains(state) {
         lines.append("Waiting for stable, recognized monitor ownership. Layout changes are held; do not repeatedly request repair.")
     }
@@ -557,6 +572,7 @@ struct FailureAlerts {
 // Synthetic states never read or mutate the installed controller.
 func demoState(_ scenario:String,_ name:String,_ now:Double)->[String:Any] {
     if name=="control.json",scenario=="audio-manual" {return ["audio_manual_until":now+900]}
+    if name=="control.json",scenario=="paused-timed" {return ["paused":true,"pause_until":now+900]}
     if name=="control.json" {return scenario=="controls-error" ? ["_read_unavailable":true]:scenario=="paused" ? ["paused":true]:[:]}
     guard name=="health.json" else {return [:]}
     var health:[String:Any] = ["host":"A","version":"Demo","updated_at":now,
@@ -568,7 +584,7 @@ func demoState(_ scenario:String,_ name:String,_ now:Double)->[String:Any] {
         var rotation=health["rotation"] as! [String:Any]
         rotation["sensor_observed_at"]=now-91;rotation["macos_observed_at"]=now-92
         health["rotation"]=rotation
-    case "paused":health["status"]="paused"
+    case "paused","paused-timed":health["status"]="paused"
     case "unknown-input":health["status"]="waiting-for-known-input";health["profile"]="unknown";health["inputs"]=["pg":15,"benq":19]
     case "pg-only":health["profile"]="pg";health["inputs"]=["pg":17,"benq":15]
     case "benq-only":health["profile"]="benq";health["inputs"]=["pg":18,"benq":19]

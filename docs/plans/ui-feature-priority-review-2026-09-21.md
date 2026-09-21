@@ -247,3 +247,15 @@ invalid-to-valid correction, feature-change clearing and Escape were inspected i
 current demo; native verification passed. See [validation](../log/percentage-intent-feedback.md).
 VoiceOver speech and the broader light/dark/focus matrix remain order 4 work; source
 completion is not full accessibility or physical qualification.
+
+
+### Light appearance and focused refresh checked
+
+Order 4 now has current-source light-appearance evidence for Overview, Audio, invalid
+percentage feedback and the size chooser, plus focus retention through a local status
+refresh and main-shortcut isolation while a dialog is open. No new defect was observed
+in those cases. [Exact scope and captures](../log/light-appearance-qualification.md).
+Still open: VoiceOver speech, full keyboard traversal, high contrast, live appearance
+changes, long-name layouts and focus when recovery actions disappear. These are
+qualification gaps, not evidence of a known failure. Keep source delivery separate
+from installed-hardware qualification.

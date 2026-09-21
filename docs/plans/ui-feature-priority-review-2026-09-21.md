@@ -166,7 +166,7 @@ features already exist; the next milestone improves daily decisions and verifies
 | Order | Deliverable / boundary | Completion evidence |
 | --- | --- | --- |
 | 1 — source implemented; broader qualification pending | Compact two-monitor size decision; `SizeChooser.swift`, presentation tests | Both current/proposed monitor effects and Preview visible at Largest/minimum; technical detail expandable; preset estimate preserved; ordinary/reference/preset/empty/unknown choices; keyboard/Escape and stale-context rejection. Reuse existing preview journal, no new persistence. |
-| 2 | At-a-glance Overview and consistent recovery actions; status presenter and menu orchestration | Both ownership summaries and selected speaker visible in healthy state; active recovery remains first; Health/Repair wording matches action; stale/unknown/away/paused/manual/preview states, freshness and click-time revalidation. No hardware polling added. |
+| 2 — source implemented; broader qualification pending | At-a-glance Overview and consistent recovery actions; status presenter and menu orchestration | Both ownership summaries and selected speaker visible in healthy state; active recovery remains first; Health/Repair wording matches action; stale/unknown/away/paused/manual/preview states, freshness and click-time revalidation. No hardware polling added. |
 | 3 | Focused Controls/Audio/Displays cleanup | Single empty-state instruction; precise adjustment near readings; active audio profile near selected output; Largest/minimum and long-name checks; invalid/unknown percentage speech qualified; no cross-monitor or feature value leakage. |
 | 4 | Accessibility and release qualification of the completed flows | Exact-build keyboard traversal, focus retention during refresh, modal cancellation, VoiceOver speech, light/dark and supported text sizes; record individual failures. Extract demo fixtures only to resolve the observed consistency risk; update all native builders. |
 | 5 | Local Shortcuts, starting read-only | Status returns a typed outcome without GUI/hardware mutation. Then timed pause/resume with bounded arguments. Named preset preview is a separate slice using fresh fingerprint and existing Keep/Revert. Accepted/pending/completed/failed are distinct; caller timeout is not cancellation. No listener or arbitrary shell field. |
@@ -204,3 +204,16 @@ comparison, detail disclosure by Tab/Space and Escape cancellation. Native verif
 passed. This does not qualify VoiceOver, physical preview or deployment. See the
 [delivery log](../log/compact-size-decision.md). The next source slice is Overview and
 recovery clarity; preserve the outstanding qualification matrix.
+
+
+### Overview and recovery clarity delivered
+
+Healthy Overview now includes both ownership summaries and the selected speaker before
+rotation detail. Empty recovery and duplicate ownership groups are hidden without
+rebuilding views. When recovery is pending or status is stale/paused, recovery keeps
+its earlier position and ownership stays labeled last-known. Exhausted audio recovery
+has an adjacent read-only Health action; canonical repair eligibility is unchanged.
+Largest/minimum synthetic ready, exhausted and stale views were inspected, and native
+verification passed. See [validation](../log/overview-ownership-summary.md). The next
+source slice is Controls/Audio/Displays cleanup; full accessibility and physical
+qualification remain open.

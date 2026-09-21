@@ -325,12 +325,18 @@ func statusSections(_ health:[String:Any],_ control:[String:Any])->[StatusSectio
                  "benq":"BenQ is the desktop; hidden PG mirrors BenQ","away":"Both monitors away; layout preserved"]
     let audioOverride=(control["audio_manual_until"] as? Double ?? 0)>Date().timeIntervalSince1970
     let routing = !controlsAvailable(control) ? "Saved audio preferences are unavailable":automationPaused(control) ? "Automation is paused":audioOverride ? "Manual output preservation is active":"Automatic routing follows profile preferences"
+    let speaker=selected["name"] as? String ?? "Output not reported"
+    let ownership="PG42UQ: "+prefix+owner("pg",17,18)+"\nBenQ: "+prefix+owner("benq",19,15)
+    let recovery=health["recovery"] as? [String:Any] ?? [:]
+    let compact=prefix.isEmpty && recovery["pending"] as? Bool != true && health["audio_journal_pending"] as? Bool != true
+    var overview=(health["status"] as? String ?? "").hasPrefix("preview-") ? dashboard(health,control):headline+"\n"+statusAge(health)+"\n"+prefix+(layouts[profile] ?? "Desktop not confirmed")+(unknownInputGuidance(health).map{"\n\n"+$0} ?? "")
+    if compact {overview += "\n"+ownership+"\nSelected speaker: "+speaker}
     return [
-        StatusSection(title:"Overview",body:(health["status"] as? String ?? "").hasPrefix("preview-") ? dashboard(health,control):headline+"\n"+statusAge(health)+"\n"+prefix+(layouts[profile] ?? "Desktop not confirmed")+(unknownInputGuidance(health).map{"\n\n"+$0} ?? "")),
-        StatusSection(title:"Recovery",body:recoverySummary(health,control)),
-        StatusSection(title:"PG42UQ",body:prefix+owner("pg",17,18)),
-        StatusSection(title:"BenQ RD280UG",body:prefix+owner("benq",19,15)+"\n"+rotationSummary(health,control)),
-        StatusSection(title:"Audio",body:prefix+(selected["name"] as? String ?? "Output not reported")+"\n"+routing+"\nSpeaker selection does not prove audible sound.")
+        StatusSection(title:"Overview",body:overview),
+        StatusSection(title:"Recovery",body:compact ? "":recoverySummary(health,control)),
+        StatusSection(title:"Displays",body:compact ? "":ownership),
+        StatusSection(title:"BenQ rotation",body:rotationSummary(health,control)),
+        StatusSection(title:"Audio",body:(compact ? "":prefix+speaker+"\n")+routing+"\nSpeaker selection does not prove audible sound.")
     ]
 }
 func writeReviewedSummary(_ body:String,to pasteboard:NSPasteboard)->Bool {

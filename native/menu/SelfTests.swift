@@ -352,8 +352,21 @@ func runMenuSelfTests() {
     precondition(audioRepairReason(audioHealth,["audio_manual_until":Date().timeIntervalSince1970+60],false) != nil)
     let sectionHealth:[String:Any]=["status":"ready","updated_at":Date().timeIntervalSince1970,"inputs":["pg":17,"benq":15],"profile":"pg"]
     let sections=statusSections(sectionHealth,[:])
-    precondition(sections.map{$0.title}==["Overview","Recovery","PG42UQ","BenQ RD280UG","Audio"])
-    precondition(sections[2].body=="Showing Mac A" && sections[3].body.contains("Showing Mac B"))
+    precondition(sections.map{$0.title}==["Overview","Recovery","Displays","BenQ rotation","Audio"])
+    precondition(sections[0].body.contains("PG42UQ: Showing Mac A") && sections[0].body.contains("BenQ: Showing Mac B"))
+    precondition(sections[0].body.contains("Selected speaker: Output not reported"))
+    precondition(sections[1].body.isEmpty && sections[2].body.isEmpty)
+    for state in ["degraded","recovering","waiting-for-known-input","state-error","paused"] {
+        var h=sectionHealth;h["status"]=state
+        let result=statusSections(h,[:])
+        precondition(!result[1].body.isEmpty && result[2].body.contains("Last known"))
+        precondition(!result[0].body.contains("Selected speaker:"))
+    }
+    var pendingSectionHealth=sectionHealth;pendingSectionHealth["audio_journal_pending"]=true
+    precondition(!statusSections(pendingSectionHealth,[:])[1].body.isEmpty)
+    precondition(!statusSections(sectionHealth,["paused":true])[1].body.isEmpty)
+    var namedSpeakerHealth=sectionHealth;namedSpeakerHealth["audio"]=["selected":["name":"Example headset"]]
+    precondition(statusSections(namedSpeakerHealth,[:])[0].body.contains("Selected speaker: Example headset"))
     precondition(statusSections([:],[:])[2].body.contains("Last known"))
     let previewSections=statusSections(["updated_at":Date().timeIntervalSince1970,"status":"preview-active","preview":["state":"preview","remaining_seconds":20.0]],[:])
     precondition(previewSections[0].body.contains("Keep within"))

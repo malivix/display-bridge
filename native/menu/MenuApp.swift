@@ -65,6 +65,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
     var audioReason:NSTextField?
     var overviewFields:[(NSTextField,NSTextField)]=[]
     var recoveryButton:NSButton?
+    var recoveryHealthButton:NSButton?
     var presentedRecoveryAction:RecoveryAction?
     var pauseButton:NSButton?
     var displayTextIndex:Int?
@@ -125,13 +126,19 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
                 body.setAccessibilityLabel(section.title+" details");body.setAccessibilityValue(section.body)
                 let group=NSStackView(views:[heading,body]);group.orientation = .vertical;group.alignment = .leading;group.spacing=5
                 group.setAccessibilityElement(true);group.setAccessibilityRole(.group);group.setAccessibilityLabel(section.title)
+                group.isHidden=section.body.isEmpty
                 stack.addArrangedSubview(group)
                 group.widthAnchor.constraint(equalTo:stack.widthAnchor,constant:-32).isActive=true
                 body.widthAnchor.constraint(equalTo:group.widthAnchor).isActive=true
                 overviewFields.append((heading,body))
                 if section.title=="Recovery" {
                     let button=NSButton(title:"Check health",target:self,action:#selector(runRecoveryAction(_:)))
-                    group.insertArrangedSubview(button,at:1);recoveryButton=button;scalableControls.append(button)
+                    let inspect=NSButton(title:"Check health",target:self,action:#selector(panelAction(_:)))
+                    inspect.identifier=NSUserInterfaceItemIdentifier("doctor")
+                    let actions=NSStackView(views:[inspect,button]);actions.spacing=12
+                    group.insertArrangedSubview(actions,at:1)
+                    recoveryButton=button;recoveryHealthButton=inspect
+                    scalableControls.append(contentsOf:[inspect,button])
                 }
             }
             overview.view=overviewScroll;tabs.addTabViewItem(overview)
@@ -529,12 +536,15 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
                 if !tracked.isEmpty {body += "\n\n"+tracked}
                 if !progress.isEmpty {body += "\n\n"+progress}
             }
+            fields.0.superview?.isHidden=body.isEmpty
             if fields.1.stringValue != body {fields.1.stringValue=body;fields.1.setAccessibilityValue(body)}
         }
         presentedRecoveryAction=recoveryAction(health,control)
         recoveryButton?.isHidden=presentedRecoveryAction==nil
         recoveryButton?.title=presentedRecoveryAction?.title ?? "Check health"
         recoveryButton?.isEnabled = !busy && presentedRecoveryAction != nil
+        recoveryHealthButton?.isHidden=presentedRecoveryAction?.arguments != ["repair-audio"]
+        recoveryHealthButton?.isEnabled = !busy
         pauseButton?.title=automationPaused(control) ? "Resume":"Pause…"
         pauseButton?.toolTip=automationPaused(control) ? "Resume automatic reconciliation now.":"Choose a timed pause or pause until resumed."
         pauseButton?.isEnabled = !busy && controlsUsable

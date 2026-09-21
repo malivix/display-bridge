@@ -366,3 +366,9 @@ presets** reveals framebuffer sizes and reasons saved choices cannot be offered.
 Tab to this checkbox and press Space to toggle it. Physical matching is labeled as an
 estimate; it does not measure sharpness or viewing distance. Preview and Cancel stay
 beside each other; saving the current pair and removing a preset remain separate actions.
+
+When status is fresh and ready with no pending recovery, Overview groups desktop mode,
+both monitor owners and the selected speaker together. Rotation observations and audio
+policy remain below. Pending recovery, paused or stale status keeps recovery ahead of
+last-known ownership details. Exhausted audio recovery offers **Check health** beside
+**Repair audio**; stale status offers inspection without a repair shortcut.

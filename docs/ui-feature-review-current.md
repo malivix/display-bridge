@@ -7,6 +7,12 @@ No installation, display setting, audio route or stored preference was changed.
 
 ## Result
 
+Subsequent correction: the user's screenshot exposed disproportionate large fonts
+and fixed-height controls that this review initially accepted. The implementation
+now scales control geometry and navigation; see [the correction and its scope](log/proportional-controls.md).
+The original screenshots below are historical evidence, not the corrected layout.
+
+
 The earlier major layout findings are resolved in the inspected flows. Further
 feature growth should first harden the size-review boundary, then make saved sizes
 easier to reach. Rotation performance and release reliability still need physical
@@ -38,6 +44,9 @@ Earlier evidence for those surfaces is historical, not recaptured here.
 ## Source findings
 
 ### R1 — Size reports need a validated boundary before more entry points (medium)
+
+Source fix delivered after this review; see [validation and limits](log/validated-size-review.md).
+The finding below describes the reviewed revision.
 
 `MenuApp.chooseSize` requires a JSON object with an `options` array, but then accepts
 unvalidated option dictionaries. Missing/invalid rotation is presented as Landscape.

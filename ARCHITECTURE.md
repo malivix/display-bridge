@@ -13,7 +13,9 @@ without resetting recovery or replaying actions.
 `native/menu/` contains the per-user menu app. `MenuApp.swift` owns AppKit orchestration,
 `Commands.swift` bounds process execution and defines preset capability groups,
 `Presentation.swift` formats controller observations. `SizeChooser.swift` owns size comparison,
-reference filtering and modal validity; `PresetWindows.swift` owns saved-preset dialogs and
+reference filtering and modal validity. `SizeReview.swift` validates CLI size reports and
+constructs canonical preview arguments before the chooser opens; demo fixtures and
+its focused tests share that boundary. `PresetWindows.swift` owns saved-preset dialogs and
 panel keyboard routing.
 `SelfTests.swift` holds isolated checks; `main.swift` selects test entry points or starts the app.
 `ShortcutStatus.swift` projects bounded local observations into allowlisted status

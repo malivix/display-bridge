@@ -7,6 +7,7 @@ MENU_BUILD = "2110"
 # One source inventory for menu installation, prerequisite checks and native verification.
 MENU_SOURCES = (
     "native/menu/EditingMenu.swift",
+    "native/menu/ControlSizing.swift",
     "native/menu/main.swift",
     "native/menu/Commands.swift",
     "native/menu/ShortcutStatus.swift",
@@ -20,6 +21,9 @@ MENU_SOURCES = (
     "native/menu/Presentation.swift",
     "native/menu/PresetWindows.swift",
     "native/menu/SizeChooser.swift",
+    "native/menu/SizeReview.swift",
+    "native/menu/SizeReviewDemo.swift",
+    "native/menu/SizeReviewTests.swift",
     "native/menu/ReadabilitySamples.swift",
     "native/menu/PercentChooser.swift",
     "native/menu/MenuApp.swift",

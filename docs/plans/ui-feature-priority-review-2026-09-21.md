@@ -17,15 +17,20 @@ production activation is still unqualified. No installation occurred in this rev
 
 | Order | Result | Acceptance and scope |
 | --- | --- | --- |
-| 1 — next implementation | Validate the size-review contract before extending it | Parse one typed report before showing a chooser. Reject malformed rotation, choices, preset identity or fingerprints with a clear unavailable result. Never invent Landscape or silently close on a missing fingerprint. Preserve damaged preset-file guidance while allowing independently valid ordinary options. Extract this cohesive parsing/presentation boundary from `MenuApp.swift`; no new state machine. |
-| 2 — product feature | Make saved readable sizes directly accessible | Add a Saved sizes entry under Displays/the menu, using the same qualified report and chooser. Show name, orientation, current/proposed effect and unavailable reason. Keep normal Preview/Keep/Revert and explicit replacement/removal. Do not create another preset store. |
+| 1 — implemented in source | Validate the size-review contract before extending it | Parse one typed report before showing a chooser. Reject malformed rotation, choices, preset identity or fingerprints with a clear unavailable result. Never invent Landscape or silently close on a missing fingerprint. Preserve damaged preset-file guidance while allowing independently valid ordinary options. Extract this cohesive parsing/presentation boundary from `MenuApp.swift`; no new state machine. |
+| 2 — next implementation | Make saved readable sizes directly accessible | Add a Saved sizes entry under Displays/the menu, using the same qualified report and chooser. Show name, orientation, current/proposed effect and unavailable reason. Keep normal Preview/Keep/Revert and explicit replacement/removal. Do not create another preset store. |
 | 3 — automation feature | Review a named size preset from Shortcuts | Reuse order 1 and the canonical CLI. Add explicit read-only named selection semantics and capability negotiation; opening a review must not enqueue a hardware write. Preview remains a deliberate user action; Keep remains separate. Cold/warm launch, app busy, missing/ambiguous name, damaged presets, changed orientation/ownership and timeout each get explicit outcomes. A review request is not an applied preset. |
 | 4 — reliability/UX | Explain the measured rotation delay | First gather exact-revision physical samples using existing observation, confirmation, layout and readback phases. Then show the actual waiting phase and observation age in Overview. Optimize only the measured slow phase; preserve unknown durations and ownership/debounce guards. No additional DDC reads for UI animation. |
 | Cross-cutting acceptance | Complete accessibility qualification | Run each touched flow at Largest/minimum, by keyboard, with actual VoiceOver speech and high contrast. Check focus after refresh, disabled reasons, errors and Escape. Existing screenshots/AX labels cannot close speech or all dialog tests. |
 | Release gate | Qualify installation and physical behavior | Retain the isolated caught-interrupt success and its limited boundary. Remaining installer commit phases, Mac B/concurrent controllers and headset transitions need separate evidence. Mac B remains deferred; sleep testing was declined. Fresh ownership must permit coordinated installation. |
 | Research only | BenQ comfort-settings guidance | Start with a model-specific OSD checklist. A software inspector requires narrow firmware/transport-bound read semantics. Unknown/multiplexed values must not appear confirmed. No broad register sweep or undocumented writes. |
 
-Keep one implementation slice active: order 1. Do not block source work on deferred
+Order 1 now has a validated report model, focused regressions and a scalable rejection
+dialog; see the [delivery log](../log/validated-size-review.md).
+The user's screenshot then exposed a proportional-sizing defect. The
+[control sizing correction](proportional-control-sizing.md) now has visual/native
+checks recorded in its [delivery log](../log/proportional-controls.md).
+Do not equate labels being present with good layout. Next implementation: order 2. Do not block source work on deferred
 physical tests, but do not promote it to installed qualification. Orders 2 and 3
 share one validated preview contract; they must not grow separate launch, selection
 or recovery state machines. `MenuApp.swift` is 976 lines at this review: extract the

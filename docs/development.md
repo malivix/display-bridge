@@ -64,7 +64,7 @@ with the same macOS 13 deployment target used by `scripts/verify`; the compiler 
 may target a newer OS than the development machine. Local preview bundles stay ignored.
 
 Demo windows include a synthetic scenario selector (ready, PG-only, BenQ-only, stale, paused, away, preview,
-exhausted audio recovery, pending retry, unreadable presets) and a Minimum window action. These controls exist only in demo
+exhausted audio recovery, pending retry, unreadable presets, malformed size reports) and a Minimum window action (minimum height follows the chosen interface size). These controls exist only in demo
 mode. The monitor-response-error scenario makes Read brightness and volume retain a synthetic
 previous reading after a malformed response; it does not run a monitor command. Preview time is a static 20-second fixture and the retry example has a static eight-second
 delay for layout inspection; neither simulates controller deadlines. Commands stay blocked, including Keep/Revert. Use real opt-in tests

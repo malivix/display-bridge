@@ -35,9 +35,9 @@ func sizeComparison(_ current:[String:Any],_ selected:[String:Any],details:Bool=
         return "PG about \(String(format:"%.0f",abs(delta)))% \(delta>0 ? "larger":"smaller") than BenQ"
     }
     if current["physical_size_percent"] != nil || selected["physical_size_percent"] != nil {
-        lines.append("Estimated physical UI size\nCurrent: \(physicalEstimate(current))\nSelected: \(physicalEstimate(selected))")
+        lines.append(details ? "Estimated physical UI size\nCurrent: \(physicalEstimate(current))\nSelected: \(physicalEstimate(selected))":"Estimated size: \(physicalEstimate(selected))")
     }
-    lines.append("Size estimates are approximate; sharpness and viewing distance are not measured.")
+    if details {lines.append("Size estimates are approximate; sharpness and viewing distance are not measured.")}
     return lines.joined(separator:"\n\n")
 }
 
@@ -80,7 +80,7 @@ final class SizeChooser: NSObject, NSWindowDelegate {
     var visibleIndices:[Int]=[]
     var previewButton:NSButton?
     let comparison=NSTextView()
-    let detailsToggle=NSButton(checkboxWithTitle:"Show technical details and unavailable presets",target:nil,action:nil)
+    let detailsToggle=NSButton(title:"Show details",target:nil,action:nil)
     let durationSelector=NSPopUpButton()
     let durations:[Int]
     var previewSeconds:Int {durations[max(0,min(durations.count-1,durationSelector.indexOfSelectedItem))]}
@@ -92,18 +92,19 @@ final class SizeChooser: NSObject, NSWindowDelegate {
     init(choices:[[String:Any]],current:[String:Any],notes:String,orientation:String,fontSize:CGFloat,canSave:Bool,canRemove:Bool,durations:[Int]=[20],availability:@escaping ()->String?) {
         self.choices=choices;self.current=current;self.notes=notes;self.availability=availability
         self.durations=previewDurations(["preview_seconds":durations])
-        window=NSPanel(contentRect:NSRect(x:0,y:0,width:660,height:720),styleMask:[.titled,.closable,.resizable],backing:.buffered,defer:false)
+        let height:CGFloat=fontSize>=24 ? 680:fontSize>=20 ? 610:540
+        window=NSPanel(contentRect:NSRect(x:0,y:0,width:680,height:height),styleMask:[.titled,.closable,.resizable],backing:.buffered,defer:false)
         super.init()
-        window.title="Compare display sizes";window.minSize=NSSize(width:600,height:620);window.delegate=self
+        window.title="Compare display sizes";window.minSize=NSSize(width:600,height:height-60);window.delegate=self
         window.isReleasedWhenClosed=false
-        let stack=NSStackView();stack.orientation = .vertical;stack.alignment = .leading;stack.spacing=8
+        let stack=NSStackView();stack.orientation = .vertical;stack.alignment = .leading;stack.spacing=12
         stack.translatesAutoresizingMaskIntoConstraints=false;window.contentView!.addSubview(stack)
         NSLayoutConstraint.activate([stack.leadingAnchor.constraint(equalTo:window.contentView!.leadingAnchor,constant:20),stack.trailingAnchor.constraint(equalTo:window.contentView!.trailingAnchor,constant:-20),stack.topAnchor.constraint(equalTo:window.contentView!.topAnchor,constant:20),stack.bottomAnchor.constraint(equalTo:window.contentView!.bottomAnchor,constant:-20)])
-        let intro=NSTextField(wrappingLabelWithString:"\(orientation) · Fixed 120 Hz · 2× HiDPI · HDR off\nCurrent → selected. Preview reverts unless you Keep it.")
+        let intro=NSTextField(wrappingLabelWithString:"\(orientation) · 120 Hz · HiDPI · HDR off\nPreview reverts unless you Keep it.")
         intro.font=NSFont.systemFont(ofSize:fontSize);stack.addArrangedSubview(intro)
         intro.widthAnchor.constraint(equalTo:stack.widthAnchor).isActive=true
-        selector.font=intro.font;selector.setAccessibilityLabel("Size choice to preview")
-        referenceSelector.font=intro.font
+        sizeInterfaceControl(selector,fontSize:fontSize);selector.setAccessibilityLabel("Size choice to preview")
+        sizeInterfaceControl(referenceSelector,fontSize:fontSize)
         referenceSelector.addItems(withTitles:["All qualified sizes","Keep BenQ size · adjust PG","Keep PG size · adjust BenQ"])
         referenceSelector.setAccessibilityLabel("Reference display to keep unchanged")
         referenceSelector.target=self;referenceSelector.action=#selector(referenceChanged)
@@ -111,7 +112,7 @@ final class SizeChooser: NSObject, NSWindowDelegate {
         referenceSelector.widthAnchor.constraint(equalTo:stack.widthAnchor).isActive=true
         selector.target=self;selector.action=#selector(selectionChanged(_:));stack.addArrangedSubview(selector)
         selector.widthAnchor.constraint(equalTo:stack.widthAnchor).isActive=true
-        durationSelector.font=intro.font
+        sizeInterfaceControl(durationSelector,fontSize:fontSize)
         durationSelector.setAccessibilityLabel("Time to confirm display size")
         durationSelector.addItems(withTitles:self.durations.map{"\($0) seconds to Keep or Revert"})
         durationSelector.isEnabled=self.durations.count>1
@@ -124,15 +125,17 @@ final class SizeChooser: NSObject, NSWindowDelegate {
         scroll.documentView=comparison;stack.addArrangedSubview(scroll)
         scroll.widthAnchor.constraint(equalTo:stack.widthAnchor).isActive=true
         scroll.heightAnchor.constraint(greaterThanOrEqualToConstant:140).isActive=true
-        detailsToggle.font=intro.font;detailsToggle.target=self;detailsToggle.action=#selector(selectionChanged(_:))
+        detailsToggle.setButtonType(.pushOnPushOff)
+        detailsToggle.setAccessibilityLabel("Technical details and unavailable presets")
+        sizeInterfaceControl(detailsToggle,fontSize:fontSize);detailsToggle.target=self;detailsToggle.action=#selector(selectionChanged(_:))
         stack.addArrangedSubview(detailsToggle)
         availabilityLabel.font=intro.font;stack.addArrangedSubview(availabilityLabel)
         availabilityLabel.widthAnchor.constraint(equalTo:stack.widthAnchor).isActive=true
         let primaryRow=NSStackView(),presetRow=NSStackView()
         primaryRow.spacing=12;presetRow.spacing=12
         stack.addArrangedSubview(primaryRow);stack.addArrangedSubview(presetRow)
-        for (index,title) in ["Preview selected size","Save current as preset…","Remove a saved preset…","Cancel"].enumerated() {
-            let button=NSButton(title:title,target:self,action:#selector(finish(_:)));button.tag=index;button.font=intro.font
+        for (index,title) in ["Preview size","Save current…","Remove preset…","Cancel"].enumerated() {
+            let button=NSButton(title:title,target:self,action:#selector(finish(_:)));button.tag=index;sizeInterfaceControl(button,fontSize:fontSize)
             button.setContentHuggingPriority(.required,for:.vertical)
             if index==0 {button.keyEquivalent="\r";previewButton=button}
             if index==1 {button.isEnabled=canSave}
@@ -157,6 +160,7 @@ final class SizeChooser: NSObject, NSWindowDelegate {
             return
         }
         let details=detailsToggle.state == .on
+        detailsToggle.title=details ? "Hide details":"Show details"
         comparison.string=sizeComparison(current,choices[selectedIndex],details:details)+(details && !notes.isEmpty ? "\n\n"+notes:"")
         comparison.scrollRangeToVisible(NSRange(location:0,length:0))
     }

@@ -25,7 +25,7 @@ final class ListeningDialog:NSObject,NSWindowDelegate {
         let text=NSTextField(wrappingLabelWithString:body);text.font=NSFont.systemFont(ofSize:fontSize)
         stack.addArrangedSubview(text);text.widthAnchor.constraint(equalTo:stack.widthAnchor).isActive=true
         for (index,title) in buttons.enumerated() {
-            let button=NSButton(title:title,target:self,action:#selector(select(_:)));button.tag=index;button.font=text.font
+            let button=NSButton(title:title,target:self,action:#selector(select(_:)));button.tag=index;sizeInterfaceControl(button,fontSize:fontSize)
             if index==0 {button.keyEquivalent="\r";window.initialFirstResponder=button}
             stack.addArrangedSubview(button)
         }

@@ -4,6 +4,7 @@ import UserNotifications
 import Darwin
 
 func runMenuSelfTests() {
+    runSizeReviewTests()
     runShortcutStatusTests()
     runShortcutControlTests()
     func installationJSON(_ report:[String:Any])->String {String(decoding:try! JSONSerialization.data(withJSONObject:report),as:UTF8.self)}
@@ -491,7 +492,7 @@ func runMenuSelfTests() {
     precondition(matchingChoiceIndices(groupedChoices,reference:"unknown").isEmpty)
     precondition(matchingChoiceIndices([],reference:"pg").isEmpty)
     precondition(sizeComparison(["physical_size_percent":154.3],["physical_size_percent":98.5]).contains("PG about 2% smaller than BenQ"))
-    precondition(sizeComparison(["physical_size_percent":true],["physical_size_percent":Double.infinity]).contains("Current: unavailable"))
+    precondition(sizeComparison(["physical_size_percent":true],["physical_size_percent":Double.infinity]).contains("Estimated size: unavailable"))
     precondition(sizeComparison(comparisonCurrent,comparisonLarger).contains("25% larger"))
     precondition(sizeComparison(comparisonLarger,comparisonCurrent).contains("20% smaller"))
     precondition(sizeComparison(comparisonCurrent,comparisonCurrent).contains("unchanged"))
@@ -779,9 +780,9 @@ func runShortcutStatusTests() {
     try! JSONSerialization.data(withJSONObject:base).write(to:health)
     precondition(ShortcutStatusSnapshot.read(root:root,now:101)==ready)
     let intentStatus=DisplayBridgeStatusResult.readLatest(root:root,now:101)
-    if CommandLine.arguments.contains("--demo") {
+    if menuDemoMode() {
         precondition(intentStatus.freshness == .unavailable && intentStatus.controller == .unknown,
-                     "A command-line demo must not return controller observations through Shortcuts")
+                     "A demo must not return controller observations through Shortcuts")
     } else {
         precondition(intentStatus.freshness == .fresh && intentStatus.controller == .ready)
     }

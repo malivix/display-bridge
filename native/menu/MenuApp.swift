@@ -29,6 +29,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
     }
     var panelText:NSTextView?
     var contentTabs:NSTabView?
+    var tabPicker:SizedTabPicker?
     var modeText:NSTextView?
     var modeStatus:NSTextField?
     var displayReading=DisplayReading()
@@ -174,7 +175,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
             let displays=NSTabViewItem(identifier:"displays");displays.label="Displays"
             let modeView=NSView(frame:NSRect(x:0,y:0,width:580,height:400))
             let modeScroll=NSScrollView(frame:NSRect(x:12,y:52,width:556,height:336))
-            modeScroll.hasVerticalScroller=true;modeScroll.autoresizingMask=[.width,.height]
+            modeScroll.hasVerticalScroller=true;modeScroll.drawsBackground=false;modeScroll.autoresizingMask=[.width,.height]
             let modeContent=NSTextView(frame:modeScroll.bounds)
             modeContent.isEditable=false;modeContent.isSelectable=true;modeContent.drawsBackground=false
             modeContent.isVerticallyResizable=true;modeContent.isHorizontallyResizable=false;modeContent.textContainer?.widthTracksTextView=true
@@ -201,7 +202,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
             modeStatus=snapshotStatus;scalableControls.append(snapshotStatus)
             NSLayoutConstraint.activate([snapshotStatus.leadingAnchor.constraint(equalTo:modeView.leadingAnchor,constant:12),snapshotStatus.trailingAnchor.constraint(equalTo:modeView.trailingAnchor,constant:-12),snapshotStatus.topAnchor.constraint(equalTo:modeView.topAnchor,constant:12)])
             modeScroll.translatesAutoresizingMaskIntoConstraints=false
-            NSLayoutConstraint.activate([displayActions.leadingAnchor.constraint(equalTo:modeView.leadingAnchor,constant:12),displayActions.bottomAnchor.constraint(equalTo:modeView.bottomAnchor,constant:-12),modeScroll.leadingAnchor.constraint(equalTo:modeView.leadingAnchor,constant:12),modeScroll.trailingAnchor.constraint(equalTo:modeView.trailingAnchor,constant:-12),modeScroll.topAnchor.constraint(equalTo:snapshotStatus.bottomAnchor,constant:8),modeScroll.bottomAnchor.constraint(equalTo:displayActions.topAnchor,constant:-12)])
+            NSLayoutConstraint.activate([displayActions.leadingAnchor.constraint(equalTo:modeView.leadingAnchor,constant:12),displayActions.topAnchor.constraint(equalTo:snapshotStatus.bottomAnchor,constant:12),modeScroll.leadingAnchor.constraint(equalTo:modeView.leadingAnchor,constant:12),modeScroll.trailingAnchor.constraint(equalTo:modeView.trailingAnchor,constant:-12),modeScroll.topAnchor.constraint(equalTo:displayActions.bottomAnchor,constant:12),modeScroll.bottomAnchor.constraint(equalTo:modeView.bottomAnchor,constant:-12)])
             displays.view=modeView;tabs.addTabViewItem(displays)
             let audioTab=NSTabViewItem(identifier:"audio");audioTab.label="Audio"
             let audioScroll=NSScrollView();audioScroll.hasVerticalScroller=true
@@ -286,7 +287,11 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
             let footer=NSStackView();footer.orientation = .vertical;footer.alignment = .leading;footer.spacing=10
             footer.translatesAutoresizingMaskIntoConstraints=false;content.addSubview(footer)
             tabs.translatesAutoresizingMaskIntoConstraints=false;content.addSubview(tabs)
-            NSLayoutConstraint.activate([footer.leadingAnchor.constraint(equalTo:content.leadingAnchor,constant:20),footer.trailingAnchor.constraint(equalTo:content.trailingAnchor,constant:-20),footer.bottomAnchor.constraint(equalTo:content.bottomAnchor,constant:-16),tabs.leadingAnchor.constraint(equalTo:content.leadingAnchor,constant:20),tabs.trailingAnchor.constraint(equalTo:content.trailingAnchor,constant:-20),tabs.topAnchor.constraint(equalTo:content.topAnchor,constant:16),tabs.bottomAnchor.constraint(equalTo:footer.topAnchor,constant:-16)])
+            let picker=SizedTabPicker(tabs:tabs);tabPicker=picker
+            picker.control.translatesAutoresizingMaskIntoConstraints=false;content.addSubview(picker.control)
+            scalableControls.append(picker.control)
+            NSLayoutConstraint.activate([picker.control.leadingAnchor.constraint(equalTo:content.leadingAnchor,constant:20),picker.control.trailingAnchor.constraint(equalTo:content.trailingAnchor,constant:-20),picker.control.topAnchor.constraint(equalTo:content.topAnchor,constant:16)])
+            NSLayoutConstraint.activate([footer.leadingAnchor.constraint(equalTo:content.leadingAnchor,constant:20),footer.trailingAnchor.constraint(equalTo:content.trailingAnchor,constant:-20),footer.bottomAnchor.constraint(equalTo:content.bottomAnchor,constant:-16),tabs.leadingAnchor.constraint(equalTo:content.leadingAnchor,constant:20),tabs.trailingAnchor.constraint(equalTo:content.trailingAnchor,constant:-20),tabs.topAnchor.constraint(equalTo:picker.control.bottomAnchor,constant:12),tabs.bottomAnchor.constraint(equalTo:footer.topAnchor,constant:-16)])
             let sizes=NSSegmentedControl(labels:["Standard","Large","Largest"],trackingMode:.selectOne,target:self,action:#selector(changeTextSize(_:)))
             sizes.selectedSegment=textSizeIndex();sizes.setAccessibilityLabel("Interface size")
             let pause=NSButton(title:"Pause…",target:self,action:#selector(togglePause(_:)));pauseButton=pause
@@ -299,7 +304,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
                 previewActions.append(button);scalableControls.append(button)
             }
             if demo {
-                let scenarios=NSPopUpButton();scenarios.addItems(withTitles:["ready","pg-only","benq-only","stale","paused","paused-timed","away","unknown-input","preview","recovery","recovery-wait","presets-error","controls-error","brightness-empty","older-controller","display-refresh-failed","monitor-response-error","audio-manual"])
+                let scenarios=NSPopUpButton();scenarios.addItems(withTitles:["ready","pg-only","benq-only","stale","paused","paused-timed","away","unknown-input","preview","recovery","recovery-wait","presets-error","size-report-error","controls-error","brightness-empty","older-controller","display-refresh-failed","monitor-response-error","audio-manual"])
                 scenarios.target=self;scenarios.action=#selector(changeDemoScenario(_:));scenarios.setAccessibilityLabel("Synthetic scenario")
                 let compact=NSButton(title:"Minimum window",target:self,action:#selector(compactDemo))
                 let row=NSStackView(views:[scenarios,compact]);row.spacing=12;footer.addArrangedSubview(row)
@@ -313,7 +318,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
         switch shortcut {
         case .tab(let identifier):
             contentTabs?.selectTabViewItem(withIdentifier:identifier)
-            panel?.makeFirstResponder(contentTabs)
+            panel?.makeFirstResponder(tabPicker?.control)
         case .controls:
             if let anchor=pauseButton {openControls(anchor)}
         case .refresh:
@@ -359,7 +364,11 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
     func textSizeIndex()->Int {displayTextIndex ?? min(2,max(0,UserDefaults.standard.integer(forKey:"statusTextSize")))}
     func applyTextSize(_ index:Int) {
         let size=CGFloat([16,20,24][index])
-        for control in scalableControls {control.font=NSFont.systemFont(ofSize:size);control.invalidateIntrinsicContentSize()}
+        panel?.minSize=NSSize(width:600,height:[480,520,560][index])
+        if let window=panel,window.frame.height<window.minSize.height {
+            var frame=window.frame;frame.size.height=window.minSize.height;window.setFrame(frame,display:true)
+        }
+        for control in scalableControls {sizeInterfaceControl(control,fontSize:size)}
         contentTabs?.font=NSFont.systemFont(ofSize:size)
         panelText?.font=NSFont.systemFont(ofSize:size)
         modeText?.font=NSFont.systemFont(ofSize:size)
@@ -535,7 +544,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
         let focused=panel?.firstResponder
         let losingRepairFocus=recoveryButton != nil && focused === recoveryButton && presentedRecoveryAction != nextRecoveryAction
         let losingHealthFocus=recoveryHealthButton != nil && focused === recoveryHealthButton && nextRecoveryAction?.arguments != ["repair-audio"]
-        if losingRepairFocus || losingHealthFocus {panel?.makeFirstResponder(contentTabs)}
+        if losingRepairFocus || losingHealthFocus {panel?.makeFirstResponder(tabPicker?.control)}
         let sections=statusSections(health,control)
         for (index,fields) in overviewFields.enumerated() where index<sections.count {
             var body=sections[index].body
@@ -780,17 +789,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
         }
         if args==["preset-save-prompt"] {savePresetPrompt();return}
         if demo && args==["preview-options"] {
-            let modes:[String:Any] = ["pg":["width":1920,"height":1080,"pixelWidth":3840,"pixelHeight":2160],"benq":["width":1280,"height":1920,"pixelWidth":2560,"pixelHeight":3840]]
-            var report:[String:Any] = ["preview_seconds":[20,40],"rotation":90,"options":[["label":"Current size","size":"current","fingerprint":"demo","modes":modes],["label":"Larger interface","size":"larger","fingerprint":"demo-larger","modes":["pg":["width":1536,"height":864,"pixelWidth":3072,"pixelHeight":1728],"benq":["width":1024,"height":1536,"pixelWidth":2048,"pixelHeight":3072]]]],
-                "presets":[["name":"Reading","rotation":90,"revision":"demo","physical_size_percent":154.3,"available":true,"fingerprint":"demo","modes":modes],
-                           ["name":"Reading","rotation":0,"revision":"demo","available":false,"reason":"Preset belongs to the other orientation"]]]
-            if var options=report["options"] as? [[String:Any]] {
-                options[0]["physical_size_percent"]=154.3
-                options.append(["label":"Match PG size to BenQ","size":"match-benq","fingerprint":"demo-match","physical_size_percent":98.5,
-                    "modes":["pg":["width":3008,"height":1692,"pixelWidth":6016,"pixelHeight":3384],"benq":modes["benq"]!]])
-                report["options"]=options
-            }
-            if demoScenario=="presets-error" {report["presets"]=[];report["preset_error"]="Saved presets are unreadable. The original file was preserved. Ordinary size previews remain available."}
+            let report=demoSizeReview(demoScenario)
             if let data=try? JSONSerialization.data(withJSONObject:report),let text=String(data:data,encoding:.utf8) {chooseSize(text)}
             return
         }
@@ -892,39 +891,27 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
         let dialog=PresetDialog(fontSize:CGFloat([16,20,24][textSizeIndex()]),presets:presets,availability:{nil})
         if let arguments=dialog.run() {execute(arguments)}
     }
-    func chooseSize(_ json:String){
-        guard let data=json.data(using:.utf8),let report=(try? JSONSerialization.jsonObject(with:data)) as? [String:Any],let relative=report["options"] as? [[String:Any]] else {message("Size preview unavailable","No qualified size choices were returned.");return}
-        let presetError=report["preset_error"] as? String
-        var choices=relative
-        var unavailable:[String]=[]
-        for preset in report["presets"] as? [[String:Any]] ?? [] {
-            let name=preset["name"] as? String ?? "Unnamed"
-            if preset["available"] as? Bool == true {
-                var option=preset;option["label"]="Preset: "+name;option["preset"]=name;choices.append(option)
-            } else {unavailable.append(name+" — "+(preset["rotation"] as? Int == 90 ? "Portrait":"Landscape")+": "+(preset["reason"] as? String ?? "Unavailable"))}
+    func chooseSize(_ json:String) {
+        guard let report=SizeReview.decode(json) else {
+            _=ListeningDialog(title:"Size preview unavailable",body:"The size report could not be validated. No preview was requested. Inspect fresh choices after checking controller compatibility.",buttons:["Close"],fontSize:CGFloat([16,20,24][textSizeIndex()])).run()
+            return
         }
-        guard !choices.isEmpty else {message("Size preview unavailable","No qualified choices are currently available.");return}
         NSApp.activate(ignoringOtherApps:true)
-        let presets=report["presets"] as? [[String:Any]] ?? []
-        let current=relative.first(where:{$0["size"] as? String == "current"}) ?? [:]
-        var notes:[String]=[]
-        if let error=presetError {notes.append("Saved presets unavailable\n"+error)}
-        if !unavailable.isEmpty {notes.append("Unavailable presets\n"+unavailable.joined(separator:"\n"))}
+        let choices=report.choices.map{$0.presentation}
+        var notes=report.notes
         let canSave=visibleCapabilities?.contains("preset-save")==true
         let canRemove=visibleCapabilities?.contains("preset-remove")==true
         if !canSave || !canRemove {notes.append(presetCompatibilitySummary(visibleCapabilities,checking:checkingCapabilities)+" Check support in Controls.")}
         let inspectedAt=Date().timeIntervalSince1970
-        let chooser=SizeChooser(choices:choices,current:current,notes:notes.joined(separator:"\n\n"),orientation:report["rotation"] as? Int == 90 ? "Portrait":"Landscape",fontSize:CGFloat([16,20,24][textSizeIndex()]),canSave:presetError==nil && canSave,canRemove:presetError==nil && !presets.isEmpty && canRemove,durations:previewDurations(report),availability:{ [unowned self] in
-            sizePreviewReason(self.read("health.json"),self.read("control.json"),self.busy,expectedRotation:report["rotation"] as? Int,observedAfter:inspectedAt)
+        let chooser=SizeChooser(choices:choices,current:report.current,notes:notes.joined(separator:"\n\n"),orientation:report.rotation==90 ? "Portrait":"Landscape",fontSize:CGFloat([16,20,24][textSizeIndex()]),canSave:report.presetError==nil && canSave,canRemove:report.presetError==nil && !report.presets.isEmpty && canRemove,durations:report.durations,availability:{ [unowned self] in
+            sizePreviewReason(self.read("health.json"),self.read("control.json"),self.busy,expectedRotation:report.rotation,observedAfter:inspectedAt)
         })
         let response=chooser.run()
-        if response==1,presetError==nil {savePresetPrompt();return}
-        if response==2,presetError==nil {removePresetPrompt(presets);return}
+        if response==1,report.presetError==nil {savePresetPrompt();return}
+        if response==2,report.presetError==nil {removePresetPrompt(report.presets);return}
         let index=chooser.selectedIndex
-        guard response==0,index>=0,index<choices.count,let fingerprint=choices[index]["fingerprint"] as? String else {return}
-        let durationArguments=chooser.previewSeconds==20 ? []:["--preview-seconds",String(chooser.previewSeconds)]
-        if let preset=choices[index]["preset"] as? String {execute(["preview-start","--preset",preset,"--fingerprint",fingerprint]+durationArguments)}
-        else if let size=choices[index]["size"] as? String {execute(["preview-start","--size",size,"--fingerprint",fingerprint]+durationArguments)}
+        guard response==0,report.choices.indices.contains(index) else{return}
+        execute(report.choices[index].arguments(seconds:chooser.previewSeconds))
     }
     func notify(_ health:[String:Any],fresh:Bool) {
         guard fresh else{return}

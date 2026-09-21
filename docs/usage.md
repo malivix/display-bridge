@@ -368,9 +368,8 @@ A reported completion still needs current health and physical checks. Older cont
 a coordinated update before they can provide this report.
 
 The size chooser leads with each monitor's current → selected logical dimensions and
-larger/smaller/unchanged interface effect. **Show technical details and unavailable
-presets** reveals framebuffer sizes and reasons saved choices cannot be offered.
-Tab to this checkbox and press Space to toggle it. Physical matching is labeled as an
+larger/smaller/unchanged interface effect. **Show details** reveals framebuffer sizes and reasons saved choices cannot be offered.
+Tab to this button and press Space to toggle it. Physical matching is labeled as an
 estimate; it does not measure sharpness or viewing distance. Preview and Cancel stay
 beside each other; saving the current pair and removing a preset remain separate actions.
 
@@ -397,3 +396,12 @@ and a valid **Requested** value. Its slider exposes the same accessible value
 description; a retained slider position is not an accepted request or hardware reading.
 Invalid input keeps Apply disabled. Changing brightness/volume refreshes this feedback
 from that feature's own observation, and Escape closes without applying.
+
+Size preview rejects malformed reports before opening a chooser; missing orientation is
+not treated as Landscape. If validation fails, no preview is submitted: inspect fresh
+choices and check that the controller and menu are compatible. A damaged saved-preset
+file still leaves independently valid ordinary size choices available.
+
+Interface size adjusts control padding and the minimum window height as well as text.
+The size comparison leads with both monitor effects and the selected estimated ratio;
+Show details includes the full estimates, framebuffer information and limitations.

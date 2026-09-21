@@ -42,6 +42,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
     var monitorButtons:[NSButton]=[]
     var monitorReason:NSTextField?
     var monitorFeedback:NSTextField?
+    var monitorSupportDetails:NSStackView?
     var speakerPopups:[String:NSPopUpButton]=[:]
     var audioInfo:NSTextField?
     var listeningResponse=""
@@ -195,21 +196,37 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
             let selector=NSPopUpButton();selector.addItems(withTitles:["PG42UQ","BenQ RD280UG"])
             selector.target=self;selector.action=#selector(selectMonitor(_:));selector.setAccessibilityLabel("Monitor to adjust")
             controlsStack.addArrangedSubview(selector);monitorSelector=selector;scalableControls.append(selector)
-            let compatibility=NSTextField(wrappingLabelWithString:"");compatibility.isSelectable=true
-            controlsStack.addArrangedSubview(compatibility);compatibility.widthAnchor.constraint(equalTo:controlsStack.widthAnchor,constant:-32).isActive=true
-            compatibilityLabel=compatibility;scalableControls.append(compatibility)
-            let checkSupport=NSButton(title:"Check preset support",target:self,action:#selector(checkPresetSupport))
-            controlsStack.addArrangedSubview(checkSupport);compatibilityButton=checkSupport;scalableControls.append(checkSupport)
-            let presetsButton=NSButton(title:"Brightness presets…",target:self,action:#selector(openBrightnessPresets))
-            presetsButton.identifier=NSUserInterfaceItemIdentifier("brightness-list");controlsStack.addArrangedSubview(presetsButton);panelActions.append(presetsButton);scalableControls.append(presetsButton)
             let availability=NSTextField(wrappingLabelWithString:"");controlsStack.addArrangedSubview(availability)
             availability.widthAnchor.constraint(equalTo:controlsStack.widthAnchor,constant:-32).isActive=true;monitorReason=availability
-            for (title,key) in [("Read brightness and volume","read"),("Brightness −5%","luminance:-5"),("Brightness +5%","luminance:5"),("Speaker volume −5%","volume:-5"),("Speaker volume +5%","volume:5")] {
-                let button=NSButton(title:title,target:self,action:#selector(adjustMonitor(_:)))
-                button.identifier=NSUserInterfaceItemIdentifier(key);controlsStack.addArrangedSubview(button);monitorButtons.append(button);scalableControls.append(button)
+            let read=NSButton(title:"Read brightness and volume",target:self,action:#selector(adjustMonitor(_:)))
+            read.identifier=NSUserInterfaceItemIdentifier("read");controlsStack.addArrangedSubview(read);monitorButtons.append(read);scalableControls.append(read)
+            for (name,feature) in [("Brightness","luminance"),("Volume","volume")] {
+                let row=NSStackView();row.spacing=12
+                for (suffix,step) in [("−5%","-5"),("+5%","5")] {
+                    let button=NSButton(title:"\(name) \(suffix)",target:self,action:#selector(adjustMonitor(_:)))
+                    button.identifier=NSUserInterfaceItemIdentifier("\(feature):\(step)")
+                    button.setAccessibilityLabel("\(name == "Volume" ? "Monitor speaker volume":name) \(suffix)")
+                    row.addArrangedSubview(button);monitorButtons.append(button);scalableControls.append(button)
+                }
+                controlsStack.addArrangedSubview(row)
             }
-            let feedback=NSTextField(wrappingLabelWithString:"Read settings to see confirmed hardware values. Equal brightness percentages do not mean equal light output. Speaker volume does not select the Mac audio output.")
+            let feedback=NSTextField(wrappingLabelWithString:"No confirmed settings yet. Read brightness and volume to inspect this monitor.")
             controlsStack.addArrangedSubview(feedback);feedback.widthAnchor.constraint(equalTo:controlsStack.widthAnchor,constant:-32).isActive=true;monitorFeedback=feedback
+            let presetsButton=NSButton(title:"Brightness presets…",target:self,action:#selector(openBrightnessPresets))
+            presetsButton.identifier=NSUserInterfaceItemIdentifier("brightness-list");controlsStack.addArrangedSubview(presetsButton);panelActions.append(presetsButton);scalableControls.append(presetsButton)
+            let disclosure=NSButton(checkboxWithTitle:"Show support details",target:self,action:#selector(toggleMonitorSupport(_:)))
+            controlsStack.addArrangedSubview(disclosure);scalableControls.append(disclosure)
+            let support=NSStackView();support.orientation = .vertical;support.alignment = .leading;support.spacing=12
+            controlsStack.addArrangedSubview(support);support.widthAnchor.constraint(equalTo:controlsStack.widthAnchor,constant:-32).isActive=true
+            monitorSupportDetails=support
+            let compatibility=NSTextField(wrappingLabelWithString:"");compatibility.isSelectable=true
+            support.addArrangedSubview(compatibility);compatibility.widthAnchor.constraint(equalTo:support.widthAnchor).isActive=true
+            compatibilityLabel=compatibility;scalableControls.append(compatibility)
+            let checkSupport=NSButton(title:"Check preset support",target:self,action:#selector(checkPresetSupport))
+            support.addArrangedSubview(checkSupport);compatibilityButton=checkSupport;scalableControls.append(checkSupport)
+            let explanation=NSTextField(wrappingLabelWithString:"Equal brightness percentages do not mean equal light output. Monitor speaker volume does not select the Mac audio output.")
+            support.addArrangedSubview(explanation);explanation.widthAnchor.constraint(equalTo:support.widthAnchor).isActive=true;scalableControls.append(explanation)
+            support.isHidden=true
             controlsTab.view=controlsScroll;tabs.addTabViewItem(controlsTab)
             guard let content=window.contentView else {return}
             let footer=NSStackView();footer.orientation = .vertical;footer.alignment = .leading;footer.spacing=10
@@ -319,6 +336,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
         monitorFeedback?.stringValue=text
         contentTabs?.selectTabViewItem(withIdentifier:"monitor-controls")
     }
+    @objc func toggleMonitorSupport(_ sender:NSButton) {monitorSupportDetails?.isHidden=sender.state != .on}
     @objc func openBrightnessPresets() {execute(["brightness-list","--monitor",monitorRole])}
     func chooseBrightness(_ json:String,expectedMonitor:String) {
         guard let report=brightnessEntries(json,expectedMonitor) else {message("Brightness presets unavailable","The list could not be validated. No preset was changed; refresh after checking health.");return}
@@ -464,7 +482,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
         compatibilityLabel?.stringValue=presetCompatibilitySummary(visibleCapabilities,checking:checkingCapabilities)
         compatibilityButton?.isEnabled = !checkingCapabilities && !busy && !demo
         let monitorUnavailable=monitorControlReason(health,control,monitorRole,busy)
-        monitorReason?.stringValue=monitorUnavailable ?? "Controls apply only to the selected monitor. Each adjustment waits for hardware confirmation."
+        monitorReason?.stringValue=monitorUnavailable ?? "Adjusting the selected monitor; changes require hardware confirmation."
         for button in monitorButtons {button.isEnabled=monitorUnavailable==nil}
         monitorSelector?.isEnabled = !busy
         for button in panelActions {

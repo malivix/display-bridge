@@ -5,11 +5,11 @@ from contextlib import contextmanager
 from scaling_preview import Preview,TERMINAL,decode_snapshot,finite,PREVIEW_SECONDS,validate_preview_seconds
 from preview_runner import Runner
 from preview_hardware import ControllerHardware
-from scaling_choices import candidates,paired_sizes,physical_size_percent
+from scaling_choices import candidates,paired_sizes,physical_size_percent,MATCH_TARGETS
 from scaling_proposal import build
 import size_presets
 
-LABELS={'larger':'Larger interface','current':'Current size','more-space':'More space','match-benq':'Match PG size to BenQ','match-pg':'Match BenQ size to PG'}
+LABELS={'larger':'Larger interface','current':'Current size','more-space':'More space',**{key:label for key,(_,_,label) in MATCH_TARGETS.items()}}
 
 
 def unresolved(root):

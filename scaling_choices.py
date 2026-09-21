@@ -71,8 +71,8 @@ def paired_sizes(report):
             pair[role]=copy.deepcopy(choice)
         if len(pair)==2 and abs(pair['pg']['interface_percent']-pair['benq']['interface_percent'])<=6:
             proposals.append({'label':label,'target_interface_percent':target,'modes':pair})
-    for reference in ("benq", "pg"):
-        match = physical_match(report, reference)
+    for reference,percent,_ in MATCH_TARGETS.values():
+        match = physical_match(report, reference, percent)
         if match is not None:proposals.append(match)
     return proposals
 
@@ -90,23 +90,38 @@ def physical_size_percent(modes):
     return round(100 * lengths['pg'] / lengths['benq'], 1)
 
 
-def physical_match(report, reference="benq"):
+MATCH_TARGETS = {
+    'match-benq': ('benq',100,'Match PG size to BenQ'),
+    'match-pg': ('pg',100,'Match BenQ size to PG'),
+    'match-benq-larger': ('benq',110,'PG about 10% larger than BenQ'),
+    'match-benq-smaller': ('benq',90,'PG about 10% smaller than BenQ'),
+    'match-pg-larger': ('pg',110,'BenQ about 10% larger than PG'),
+    'match-pg-smaller': ('pg',90,'BenQ about 10% smaller than PG'),
+}
+
+
+def physical_match(report, reference="benq", target_percent=100):
     if reference not in ("pg", "benq"):raise ValueError("Unknown reference monitor")
+    if type(target_percent) is not int or target_percent not in (90,100,110):raise ValueError("Unsupported physical size target")
     target = "benq" if reference == "pg" else "pg"
     displays = report['displays']
     current = {r: displays[r].get('current', {}) for r in ('pg', 'benq')}
     before = physical_size_percent(current)
-    if before is None:
+    if before is None or before<=0:
         return None
+    before = before if reference == "benq" else 10000 / before
     references = [mode for mode in displays[reference]['choices'] if mode.get('current') is True]
     if len(references) != 1:return None
     choices = []
     for mode in displays[target]['choices']:
         pair = {target: mode, reference: references[0]}
         estimate = physical_size_percent(pair)
-        if estimate is not None and abs(estimate - 100) <= 5 and abs(estimate - 100) + .5 < abs(before - 100):
-            choices.append((abs(estimate - 100), mode['modeID'], pair))
+        if estimate is None or estimate<=0:continue
+        estimate = estimate if reference == "benq" else 10000 / estimate
+        if abs(estimate - target_percent) <= 5 and abs(estimate - target_percent) + .5 < abs(before - target_percent):
+            choices.append((abs(estimate - target_percent), mode['modeID'], pair))
     if not choices:
         return None
     pair = min(choices, key=lambda item: item[:2])[2]
-    return {'label': 'Match PG size to BenQ' if reference == 'benq' else 'Match BenQ size to PG', 'modes': copy.deepcopy(pair)}
+    label=next(label for ref,percent,label in MATCH_TARGETS.values() if ref==reference and percent==target_percent)
+    return {'label':label, 'modes':copy.deepcopy(pair)}

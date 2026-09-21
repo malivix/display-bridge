@@ -63,6 +63,12 @@ rotation or other settings; refresh after changing them.
 
 ## Display size and named presets
 
+When qualified modes exist, the chooser also offers one monitor at about 10% larger
+or smaller physical UI size than the other. The named reference monitor keeps its
+current mode. These are model-based targets, not measured calibration; the comparison
+shows the actual estimated ratio. Use the timed preview to judge readability and save
+a named preset after keeping a comfortable choice. Unavailable targets are omitted.
+
 With both enrolled monitors local, extended and healthy, choose **Displays → Preview size…**. Select
 a relative size or available named preset, then **Preview selected size**. Selection alone
 changes nothing. The comparison shows current/proposed logical and framebuffer dimensions

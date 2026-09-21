@@ -66,7 +66,7 @@ class ScalingChoices(unittest.TestCase):
             self.assertEqual(match['modes']['benq'],report['displays']['benq']['choices'][0])
             self.assertLess(abs(physical_size_percent(match['modes'])-100),5)
             self.assertEqual(report,before)
-            self.assertEqual(paired_sizes(report)[-1]['label'],'Match PG size to BenQ')
+            self.assertIn('Match PG size to BenQ',[pair['label'] for pair in paired_sizes(report)])
         report=candidates(*self.fixture())
         self.assertIsNone(physical_match(report))
         self.assertIsNone(physical_size_percent({'pg':{},'benq':{}}))
@@ -89,6 +89,34 @@ class ScalingChoices(unittest.TestCase):
             self.assertEqual(match['modes']['pg'],report['displays']['pg']['choices'][0])
             self.assertLess(abs(physical_size_percent(match['modes'])-100),5)
         with self.assertRaises(ValueError):physical_match(report,'other')
+
+    def test_relative_physical_targets_preserve_reference(self):
+        for reference in ('pg','benq'):
+            for percent in (90,110):
+                a,b,k=self.fixture()
+                target=0 if reference=='benq' else 1
+                from scaling_choices import MODEL_LONG_MM
+                role='pg' if target==0 else 'benq'
+                reference_width=max(a[1-target]['current'][f] for f in ('width','height'))
+                width=MODEL_LONG_MM[role]/MODEL_LONG_MM[reference]*reference_width*100/percent
+                unit=16 if target==0 else 3
+                width=round(width/unit)*unit
+                height=width*9//16 if target==0 else width*2//3
+                a[target]['modes'].append(dict(a[target]['modes'][0],modeID=9,width=width,height=height,pixelWidth=2*width,pixelHeight=2*height))
+                b['displays'][target]['modes'].append({'modeID':9,'variableRefresh':False,'proMotion':False})
+                report=candidates(a,b,k);match=physical_match(report,reference,percent)
+                self.assertIsNotNone(match)
+                self.assertEqual(match['modes'][role]['modeID'],9)
+                self.assertTrue(match['modes'][reference]['current'])
+                ratio=physical_size_percent(match['modes'])
+                if reference=='pg':ratio=10000/ratio
+                self.assertLess(abs(ratio-percent),1)
+        for invalid in (True,0,89,111,100.0,'110'):
+            with self.assertRaises(ValueError):physical_match(report,'pg',invalid)
+
+    def test_rounded_zero_physical_ratio_is_unavailable(self):
+        report={'displays':{role:{'current':{'width':width,'height':width,'pixelWidth':2*width,'pixelHeight':2*width},'choices':[]} for role,width in [('pg',32768),('benq',1)]}}
+        self.assertIsNone(physical_match(report,'pg',110))
 
     def test_non_hidpi_and_wrong_refresh_excluded(self):
         a,b,k=self.fixture()

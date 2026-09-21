@@ -25,12 +25,12 @@ class ServiceTests(unittest.TestCase):
         enqueue(self.c,'start','current')
         self.assertEqual(self.service.step(),'preview', self.health)
         return self.service.journal.read()['token']
-    def check_physical_match_preview(self, reference_role):
+    def check_physical_match_preview(self, reference_role, percent=100):
         from preview_service import options
         target=0 if reference_role=='benq' else 1
         display=self.fixture.public[target]
         reference=max(self.fixture.public[1-target]['current'][f] for f in ('width','height'))
-        width=round(reference*1.54/16)*16 if target==0 else round(reference/1.54/3)*3
+        width=round(reference*1.54*100/percent/16)*16 if target==0 else round(reference/1.54*100/percent/3)*3
         height=width*9//16 if target==0 else width*2//3
         display['modes'].append(dict(display['modes'][0],modeID=3,width=width,height=height,pixelWidth=2*width,pixelHeight=2*height))
         self.fixture.metadata['displays'][target]['modes'].append({'modeID':3,'variableRefresh':False,'proMotion':False})
@@ -44,9 +44,11 @@ class ServiceTests(unittest.TestCase):
                     self.fixture.metadata['displays'][index].update(screen)
             return result
         self.c.command=applied_readback
-        option=next(row for row in options(self.c)['options'] if row['size']=='match-'+reference_role)
-        self.assertLess(abs(option['physical_size_percent']-100),5)
-        enqueue(self.c,'start','match-'+reference_role,fingerprint=option['fingerprint'])
+        key='match-'+reference_role+('' if percent==100 else '-larger' if percent>100 else '-smaller')
+        option=next(row for row in options(self.c)['options'] if row['size']==key)
+        ratio=option['physical_size_percent'] if reference_role=='benq' else 10000/option['physical_size_percent']
+        self.assertLess(abs(ratio-percent),5)
+        enqueue(self.c,'start',key,fingerprint=option['fingerprint'])
         self.assertEqual(self.service.step(),'preview',self.health)
         self.assertEqual(Service(self.c).step(),'reverted')
 
@@ -55,6 +57,12 @@ class ServiceTests(unittest.TestCase):
 
     def test_reverse_match_uses_existing_preview_and_rollback(self):
         self.check_physical_match_preview('pg')
+
+    def test_larger_pg_relative_preview_reverts_after_restart(self):
+        self.check_physical_match_preview('benq',110)
+
+    def test_smaller_benq_relative_preview_reverts_after_restart(self):
+        self.check_physical_match_preview('pg',90)
 
     def test_duration_options_reach_journal_and_restart_restores(self):
         from preview_service import options

@@ -167,6 +167,11 @@ func runMenuSelfTests() {
     precondition(monitorResult(validMonitor,percentArgs) != nil)
     precondition(monitorResult(validMonitor,Array(percentArgs.dropLast())+["31"])==nil)
     precondition(monitorResult(validMonitor,Array(percentArgs.dropLast(2)))==nil)
+    precondition(percentageSupportReason(nil,checking:true)?.hasPrefix("Checking")==true)
+    precondition(percentageSupportReason(nil,checking:false)?.contains("unverified")==true)
+    precondition(percentageSupportReason([],checking:false)?.contains("does not support")==true)
+    precondition(percentageSupportReason(["monitor-set"],checking:false)==nil)
+    precondition(percentageSupportReason(["monitor-adjust"],checking:false) != nil)
     var percentCalls:[[String]]=[]
     let unsupportedPercent=runCompatibleMenuCommand(percentArgs) { args,_,_ in
         percentCalls.append(args);return CommandResult(output:"{}",code:0)

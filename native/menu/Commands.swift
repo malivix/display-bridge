@@ -102,6 +102,17 @@ func menuCapabilities(_ probe:CommandResult)->Set<String>? {
           let commands=report["commands"] as? [String],commands.count<=128,Set(commands).count==commands.count else{return nil}
     return Set(commands)
 }
+func percentageSupportReason(_ commands:Set<String>?,checking:Bool)->String? {
+    if checking {return "Checking percentage control support…"}
+    guard let commands=commands else {
+        return "Percentage support is unverified. Open Show support details and check support."
+    }
+    guard commands.contains("monitor-set") else {
+        return "This controller does not support percentage entry. Update the menu and controller together, then check support."
+    }
+    return nil
+}
+
 func presetCompatibilitySummary(_ commands:Set<String>?,checking:Bool)->String {
     if checking {return "Checking preset command support…"}
     guard let commands=commands else {return "Preset support could not be verified. Update the menu and controller together, then choose Check preset support. Status and recovery remain available."}

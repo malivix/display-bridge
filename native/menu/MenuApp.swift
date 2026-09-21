@@ -45,6 +45,8 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
     var monitorReason:NSTextField?
     var monitorFeedback:NSTextField?
     var monitorReadingSummary:NSTextField?
+    var percentageButton:NSButton?
+    var percentageReason:NSTextField?
     var monitorSupportDetails:NSStackView?
     var speakerPopups:[String:NSPopUpButton]=[:]
     var audioInfo:NSTextField?
@@ -72,7 +74,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
     var checkingCapabilities=false
     var compatibilityLabel:NSTextField?
     var compatibilityButton:NSButton?
-    var visibleCapabilities:Set<String>? {demo ? (demoScenario=="older-controller" ? []:PresetCommands.all):presetCapabilities}
+    var visibleCapabilities:Set<String>? {demo ? (demoScenario=="older-controller" ? []:PresetCommands.all.union(["monitor-set"])):presetCapabilities}
     @objc func checkPresetSupport() {
         guard !checkingCapabilities,!demo else{return}
         checkingCapabilities=true;presetCapabilities=nil;refresh()
@@ -234,7 +236,11 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
                 controlsStack.addArrangedSubview(row)
             }
             let precise=NSButton(title:"Set percentage…",target:self,action:#selector(setMonitorPercentage))
-            controlsStack.addArrangedSubview(precise);monitorButtons.append(precise);scalableControls.append(precise)
+            controlsStack.addArrangedSubview(precise);percentageButton=precise;scalableControls.append(precise)
+            let preciseReason=NSTextField(wrappingLabelWithString:"")
+            controlsStack.addArrangedSubview(preciseReason);scalableControls.append(preciseReason)
+            preciseReason.widthAnchor.constraint(equalTo:controlsStack.widthAnchor,constant:-32).isActive=true
+            percentageReason=preciseReason
             let feedback=NSTextField(wrappingLabelWithString:"No confirmed settings yet. Read brightness and volume to inspect this monitor.")
             controlsStack.addArrangedSubview(feedback);feedback.widthAnchor.constraint(equalTo:controlsStack.widthAnchor,constant:-32).isActive=true;monitorFeedback=feedback
             let presetsButton=NSButton(title:"Brightness presets…",target:self,action:#selector(openBrightnessPresets))
@@ -361,7 +367,10 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
     }
     @objc func setMonitorPercentage() {
         let role=monitorRole
-        let available={ [unowned self] in monitorControlReason(self.read("health.json"),self.read("control.json"),role,self.busy) }
+        let available={ [unowned self] in
+            monitorControlReason(self.read("health.json"),self.read("control.json"),role,self.busy)
+                ?? percentageSupportReason(self.visibleCapabilities,checking:self.checkingCapabilities)
+        }
         guard available()==nil else{return}
         let chooser=PercentChooser(role:role,readings:monitorReadings,fontSize:CGFloat([16,20,24][textSizeIndex()]),availability:available)
         guard let arguments=chooser.run() else{return}
@@ -519,6 +528,11 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
         let monitorUnavailable=monitorControlReason(health,control,monitorRole,busy)
         monitorReason?.stringValue=monitorUnavailable ?? "Ready to adjust this monitor."
         for button in monitorButtons {button.isEnabled=monitorUnavailable==nil}
+        let supportReason=percentageSupportReason(visibleCapabilities,checking:checkingCapabilities)
+        percentageButton?.isEnabled=monitorUnavailable==nil && supportReason==nil
+        percentageButton?.toolTip=monitorUnavailable ?? supportReason
+        percentageReason?.stringValue=supportReason ?? ""
+        percentageReason?.isHidden=supportReason==nil
         monitorSelector?.isEnabled = !busy
         for button in panelActions {
             let action=button.identifier?.rawValue ?? "doctor"

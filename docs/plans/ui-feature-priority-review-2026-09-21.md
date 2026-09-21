@@ -217,3 +217,13 @@ Largest/minimum synthetic ready, exhausted and stale views were inspected, and n
 verification passed. See [validation](../log/overview-ownership-summary.md). The next
 source slice is Controls/Audio/Displays cleanup; full accessibility and physical
 qualification remain open.
+
+
+### Controls and Displays cleanup delivered
+
+Order 3 is partly delivered: precise adjustment is visible near readings, the redundant
+healthy availability sentence is hidden, and Displays has one empty-state instruction.
+Current-build Largest/minimum inspection confirmed the placement, stale blocking
+message and disabled controls, and synthetic display refresh. Native checks passed.
+See [validation](../log/controls-display-cleanup.md). Contextual Audio preferences and
+percentage screen-reader feedback remain the next parts of this order.

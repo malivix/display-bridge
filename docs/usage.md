@@ -372,3 +372,8 @@ both monitor owners and the selected speaker together. Rotation observations and
 policy remain below. Pending recovery, paused or stale status keeps recovery ahead of
 last-known ownership details. Exhausted audio recovery offers **Check health** beside
 **Repair audio**; stale status offers inspection without a repair shortcut.
+
+Controls places **Set percentage…** immediately after **Read brightness and volume**.
+Availability guidance appears when adjustment is blocked; enabled controls retain the
+same ownership checks. Displays uses one empty-state instruction. Refresh's tooltip
+and accessibility help explain that it reads a snapshot without changing settings.

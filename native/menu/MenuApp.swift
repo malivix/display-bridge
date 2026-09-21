@@ -178,10 +178,12 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
             let modeContent=NSTextView(frame:modeScroll.bounds)
             modeContent.isEditable=false;modeContent.isSelectable=true;modeContent.drawsBackground=false
             modeContent.isVerticallyResizable=true;modeContent.isHorizontallyResizable=false;modeContent.textContainer?.widthTracksTextView=true
-            modeContent.string="Refresh to inspect the enrolled displays. This reads current modes without changing settings. Values are a snapshot, not continuous monitoring."
+            modeContent.string=""
             modeContent.setAccessibilityLabel("Measured display modes")
             modeScroll.documentView=modeContent;modeView.addSubview(modeScroll);modeText=modeContent
             let refreshModes=NSButton(title:"Refresh display details",target:self,action:#selector(panelAction(_:)))
+            refreshModes.toolTip="Reads current modes without changing settings. Values remain a snapshot until refreshed."
+            refreshModes.setAccessibilityHelp(refreshModes.toolTip)
             refreshModes.identifier=NSUserInterfaceItemIdentifier("display-info");refreshModes.translatesAutoresizingMaskIntoConstraints=false;scalableControls.append(refreshModes)
             let displayActions=NSStackView();displayActions.orientation = .vertical;displayActions.alignment = .leading;displayActions.spacing=10
             displayActions.translatesAutoresizingMaskIntoConstraints=false;modeView.addSubview(displayActions)
@@ -246,6 +248,12 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
             availability.widthAnchor.constraint(equalTo:controlsStack.widthAnchor,constant:-32).isActive=true;monitorReason=availability
             let read=NSButton(title:"Read brightness and volume",target:self,action:#selector(adjustMonitor(_:)))
             read.identifier=NSUserInterfaceItemIdentifier("read");controlsStack.addArrangedSubview(read);monitorButtons.append(read);scalableControls.append(read)
+            let precise=NSButton(title:"Set percentage…",target:self,action:#selector(setMonitorPercentage))
+            controlsStack.addArrangedSubview(precise);percentageButton=precise;scalableControls.append(precise)
+            let preciseReason=NSTextField(wrappingLabelWithString:"")
+            controlsStack.addArrangedSubview(preciseReason);scalableControls.append(preciseReason)
+            preciseReason.widthAnchor.constraint(equalTo:controlsStack.widthAnchor,constant:-32).isActive=true
+            percentageReason=preciseReason
             for (name,feature) in [("Brightness","luminance"),("Volume","volume")] {
                 let row=NSStackView();row.spacing=12
                 for (suffix,step) in [("−5%","-5"),("+5%","5")] {
@@ -256,12 +264,6 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
                 }
                 controlsStack.addArrangedSubview(row)
             }
-            let precise=NSButton(title:"Set percentage…",target:self,action:#selector(setMonitorPercentage))
-            controlsStack.addArrangedSubview(precise);percentageButton=precise;scalableControls.append(precise)
-            let preciseReason=NSTextField(wrappingLabelWithString:"")
-            controlsStack.addArrangedSubview(preciseReason);scalableControls.append(preciseReason)
-            preciseReason.widthAnchor.constraint(equalTo:controlsStack.widthAnchor,constant:-32).isActive=true
-            percentageReason=preciseReason
             let feedback=NSTextField(wrappingLabelWithString:"No confirmed settings yet. Read brightness and volume to inspect this monitor.")
             controlsStack.addArrangedSubview(feedback);feedback.widthAnchor.constraint(equalTo:controlsStack.widthAnchor,constant:-32).isActive=true;monitorFeedback=feedback
             let presetsButton=NSButton(title:"Brightness presets…",target:self,action:#selector(openBrightnessPresets))
@@ -571,7 +573,8 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
         compatibilityButton?.isEnabled = !checkingCapabilities && !busy && !demo
         monitorReadingSummary?.stringValue=monitorReadings.compactSummary(for:monitorRole,at:Date())
         let monitorUnavailable=monitorControlReason(health,control,monitorRole,busy)
-        monitorReason?.stringValue=monitorUnavailable ?? "Ready to adjust this monitor."
+        monitorReason?.stringValue=monitorUnavailable ?? ""
+        monitorReason?.isHidden=monitorUnavailable==nil
         for button in monitorButtons {button.isEnabled=monitorUnavailable==nil}
         let supportReason=percentageSupportReason(visibleCapabilities,checking:checkingCapabilities)
         percentageButton?.isEnabled=monitorUnavailable==nil && supportReason==nil

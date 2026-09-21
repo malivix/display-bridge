@@ -84,6 +84,7 @@ def main(argv=None):
             if run(["launchctl", "print", service], capture_output=True).returncode == 0
         ]
         stopped = []
+        restarted = 0
         undo = None
         try:
             for service, path in reversed(running):
@@ -139,6 +140,7 @@ def main(argv=None):
                             ["launchctl", "bootstrap", f"gui/{os.getuid()}", str(path)],
                             check=True,
                         )
+                        restarted += 1
                     except (OSError, subprocess.SubprocessError) as error:
                         restart_errors.append((path.stem, error))
             if restart_errors:
@@ -147,7 +149,8 @@ def main(argv=None):
                     f"Rollback service restart failed: {failed}. Inspect service status before retrying."
                 ) from (original_error if original_error is not None else restart_errors[0][1])
     print(
-        f"Restored {backup.name}; controller and menu restored together. Undo snapshot: {undo}"
+        f"Restored files from {backup.name}. Restarted {restarted} previously loaded services. "
+        f"Undo snapshot: {undo}"
     )
 
 

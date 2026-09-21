@@ -4,6 +4,8 @@ from pathlib import Path
 from types import SimpleNamespace
 import tempfile
 import subprocess
+import contextlib
+import io
 import unittest
 from unittest.mock import patch
 from deployment import snapshot
@@ -196,3 +198,46 @@ class CoordinatedRollbackTests(unittest.TestCase):
                     self.assertTrue(all(services.values()), "A service remained stopped after failed rollback")
                     self.assertEqual(len(restarted), failed_stop)
                     self.assertEqual(list((root / "backups").iterdir()), [root / "backups/original"])
+
+    def test_preinstallation_backup_removes_services_and_preserves_undo(self):
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            root = home / ".config/display-auto"
+            root.mkdir(parents=True)
+            app = home / "Applications/Display Auto.app"
+            launcher = home / ".local/bin/display-auto.sh"
+            agents = [home / "Library/LaunchAgents" / (label + ".plist") for label in
+                      ("io.github.display-bridge", "io.github.display-bridge.menu")]
+            paths = [launcher, app, *agents]
+            snapshot(paths, root / "backups/before-install", root / "current")
+            app.mkdir(parents=True)
+            (app / "binary").write_text("installed app")
+            for path in (launcher, *agents):
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("installed file")
+            loaded = {path.stem: True for path in agents}
+            events = []
+
+            def run(args, **kwargs):
+                self.assertEqual(args[0], "launchctl")
+                events.append(args[1])
+                name = args[-1].split("/")[-1]
+                if args[1] == "print":
+                    return SimpleNamespace(returncode=0 if loaded[name] else 1)
+                self.assertEqual(args[1], "bootout", "Absent service must not be bootstrapped")
+                loaded[name] = False
+                return SimpleNamespace(returncode=0)
+
+            output = io.StringIO()
+            with patch.object(rollback.Path, "home", return_value=home), patch.object(rollback, "run", side_effect=run), contextlib.redirect_stdout(output):
+                rollback.main(["before-install"])
+            self.assertFalse(any(loaded.values()))
+            self.assertTrue(all(not path.exists() for path in paths))
+            self.assertEqual(events, ["print", "print", "bootout", "bootout"])
+            self.assertIn("Restarted 0 previously loaded services", output.getvalue())
+            undo = next(path for path in (root / "backups").iterdir() if path.name.startswith("before-rollback-"))
+            from deployment import restore
+            restore(undo)  # Files-only recovery, still inside the disposable fixture.
+            self.assertEqual((app / "binary").read_text(), "installed app")
+            for path in (launcher, *agents):
+                self.assertEqual(path.read_text(), "installed file")

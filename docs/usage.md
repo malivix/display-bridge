@@ -260,7 +260,12 @@ added together. Time before the first valid monitor reading remains unmeasured.
 
 Rollback with `python3 rollback.py BACKUP_TIMESTAMP` from the repository restores controller
 and menu together from newer snapshots. Older backups lacking menu coverage are rejected.
-Read [installation](install.md) and [qualification](qualification.md) before deployment or rollback.
+The result reports how many previously loaded services were restarted. A backup from before
+first installation can restore absent files and leave both services stopped; its undo snapshot
+preserves the files removed by that rollback. Services that were not loaded before rollback
+are not automatically started. A successful restart command does not prove a healthy desktop
+or audible sound. Read [installation](install.md) and [qualification](qualification.md) before
+deployment or rollback.
 
 ## Terminal reference
 

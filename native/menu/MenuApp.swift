@@ -115,7 +115,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
             tabs.setAccessibilityHelp("Command 1 through 5 selects a tab. Command R refreshes the current view. Command Shift P opens More controls.")
             let overview=NSTabViewItem(identifier:"overview");overview.label="Overview"
             let overviewScroll=NSScrollView();overviewScroll.hasVerticalScroller=true;overviewScroll.autohidesScrollers=true
-            let stack=NSStackView();stack.orientation = .vertical;stack.alignment = .leading;stack.spacing=18
+            let stack=OverviewStackView();stack.orientation = .vertical;stack.alignment = .leading;stack.spacing=18
             stack.edgeInsets=NSEdgeInsets(top:16,left:16,bottom:16,right:16)
             stack.translatesAutoresizingMaskIntoConstraints=false;overviewScroll.documentView=stack
             NSLayoutConstraint.activate([stack.widthAnchor.constraint(equalTo:overviewScroll.contentView.widthAnchor),stack.topAnchor.constraint(equalTo:overviewScroll.contentView.topAnchor)])

@@ -2,6 +2,9 @@
 import AppKit
 import CoreFoundation
 
+// A short Overview document stays at the top when recovery sections collapse.
+final class OverviewStackView:NSStackView {override var isFlipped:Bool {true}}
+
 func presetNameError(_ value:String)->String? {
     let scalars=Array(value.unicodeScalars)
     // Match Python's code-point count and str.strip whitespace contract in size_presets.

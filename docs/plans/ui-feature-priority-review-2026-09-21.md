@@ -3,7 +3,28 @@
 Initial review covered source `c3e19ba` on 2026-09-21. See the delivery update below
 before treating the original findings as open. This is the current priority order and
 supersedes the delivery ordering in [the earlier follow-up](ui-feature-follow-up-2026-09-21.md).
-This review changes documentation only; it does not install software or qualify hardware.
+The original review changed documentation only. Subsequent source deliveries and
+their validation are recorded below; none establishes installed hardware qualification.
+
+## Current decision
+
+This table is the current work order; older findings and delivery sections below
+preserve evidence rather than represent additional open tasks. The
+[competitor comparison](../research/display-app-comparison-2026-09-21.md) explains
+the product choices and primary sources.
+
+| Priority | Next result | Status and acceptance |
+| --- | --- | --- |
+| First | Qualify accessible operation of existing UI | Compact size comparison, ownership/speaker summary, precise controls and contextual audio preferences are implemented. Recovery focus and top alignment defects are fixed. Finish keyboard traversal, long-name layouts, high contrast and VoiceOver speech; fix observed failures individually. |
+| Next feature | Local Shortcuts for status, then timed pause/resume | Not implemented. Use the existing command boundary, typed results, bounded arguments and current guards. Read-only status must work before adding mutations. Named size-preset preview follows separately with Keep/Revert. |
+| Reliability | Explain and reduce measured rotation delays | Timing reports exist; exact-revision physical samples remain pending. Separate sensor observation, confirmation, layout and readback. Optimize the measured slow phase, not guessed polling intervals. |
+| Release | Finish installer interruption and hardware qualification | Full installer commit-phase interruption, Mac B, concurrent controllers and headset transitions remain open. Keep source tests, package checks and physical outcomes separate. |
+| Research only | BenQ comfort-settings inspector | Establish narrow firmware/transport-bound protocol evidence before exposing controls. Unreadable or multiplexed values cannot be presented as confirmed settings. Retain OSD guidance if reliable inspection is unavailable. |
+
+Do not add adaptive brightness, application-triggered color changes, virtual displays
+or HDR boosting to this milestone. They do not address the current accepted desktop
+and would introduce competing behavior or substantially different implementation scope.
+Keep fixed 120 Hz, HDR off and the saved readable sizes.
 
 ## Evidence
 
@@ -271,3 +292,12 @@ unchanged. [Reproduction and limits](../log/recovery-focus-restoration.md).
 The probe also exposed excess blank space above Overview after sections collapse at
 Standard text; investigate document sizing/scroll position next. This remaining layout
 issue is separate from the fixed keyboard focus loss.
+
+### Recovery layout defect fixed
+
+The short, non-flipped document caused the blank top region. Overview now uses
+top-down coordinates. The isolated geometry regression and current-source original
+recovery-to-ready UI reproduction pass; focus remains on Overview. Native verification
+passed. See [cause, evidence and limits](../log/overview-top-alignment.md).
+The next qualification work is long-name layout and keyboard traversal; VoiceOver speech
+and physical testing remain separate requirements.

@@ -368,6 +368,17 @@ func runMenuSelfTests() {
     precondition(audioRepairReason(audioHealth,["paused":true],false) != nil)
     precondition(audioRepairReason(audioHealth,[:],true) != nil)
     precondition(audioRepairReason(audioHealth,["audio_manual_until":Date().timeIntervalSince1970+60],false) != nil)
+    // Exercise real clip/document coordinates after a tall report shrinks.
+    let overviewClip=NSScrollView(frame:NSRect(x:0,y:0,width:600,height:440))
+    let overviewDocument=OverviewStackView(frame:NSRect(x:0,y:0,width:600,height:650))
+    overviewClip.documentView=overviewDocument
+    for height in [300.0,700.0,200.0] {
+        overviewDocument.setFrameSize(NSSize(width:600,height:height))
+        overviewClip.layoutSubtreeIfNeeded()
+        let top=overviewClip.contentView.convert(NSPoint(x:0,y:overviewDocument.isFlipped ? overviewDocument.bounds.minY:overviewDocument.bounds.maxY),from:overviewDocument)
+        let gap=overviewClip.contentView.isFlipped ? top.y-overviewClip.contentView.bounds.minY:overviewClip.contentView.bounds.maxY-top.y
+        precondition(abs(gap)<1,"Overview content must remain top aligned after shrinking")
+    }
     let sectionHealth:[String:Any]=["status":"ready","updated_at":Date().timeIntervalSince1970,"inputs":["pg":17,"benq":15],"profile":"pg"]
     let sections=statusSections(sectionHealth,[:])
     precondition(sections.map{$0.title}==["Overview","Recovery","Displays","BenQ rotation","Audio"])

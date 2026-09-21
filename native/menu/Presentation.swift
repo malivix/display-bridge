@@ -112,13 +112,21 @@ func monitorControlReason(_ health:[String:Any],_ control:[String:Any],_ role:St
     let expected=role=="pg" ? (host=="A" ? 17:18):(host=="A" ? 19:15)
     return inputs[role]==expected ? nil:"This monitor is not showing this Mac. No setting changes are available."
 }
-func sizePreviewReason(_ health:[String:Any],_ control:[String:Any],_ busy:Bool)->String? {
+func sizePreviewReason(_ health:[String:Any],_ control:[String:Any],_ busy:Bool,expectedRotation:Int?=nil,observedAfter:Double?=nil)->String? {
     if busy {return "Wait for the current command to finish."}
     if !controlsAvailable(control) {return "Saved controls are unreadable. Check health first."}
     if !statusFresh(health) {return "Controller status is unavailable. Check health first."}
     if automationPaused(control) {return "Resume automation before previewing a size."}
     if health["status"] as? String != "ready" {return "Wait for switching or recovery to finish."}
     if health["profile"] as? String != "extended" {return "Both enrolled monitors must show this Mac to preview a size."}
+    if let expected=expectedRotation,[0,90].contains(expected),let inspectedAt=observedAfter,
+       let rotation=health["rotation"] as? [String:Any],
+       let angle=rotation["macos_degrees"] as? NSNumber,CFGetTypeID(angle) != CFBooleanGetTypeID(),
+       [0.0,90,180,270].contains(angle.doubleValue),
+       let readAt=rotation["macos_observed_at"] as? Double,readAt.isFinite,
+       readAt>=inspectedAt,readAt<=Date().timeIntervalSince1970,angle.intValue != expected {
+        return "Monitor orientation changed after these choices were inspected."
+    }
     return nil
 }
 

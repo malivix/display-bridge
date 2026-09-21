@@ -853,8 +853,9 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
         let canSave=visibleCapabilities?.contains("preset-save")==true
         let canRemove=visibleCapabilities?.contains("preset-remove")==true
         if !canSave || !canRemove {notes.append(presetCompatibilitySummary(visibleCapabilities,checking:checkingCapabilities)+" Check support in Controls.")}
+        let inspectedAt=Date().timeIntervalSince1970
         let chooser=SizeChooser(choices:choices,current:current,notes:notes.joined(separator:"\n\n"),orientation:report["rotation"] as? Int == 90 ? "Portrait":"Landscape",fontSize:CGFloat([16,20,24][textSizeIndex()]),canSave:presetError==nil && canSave,canRemove:presetError==nil && !presets.isEmpty && canRemove,durations:previewDurations(report),availability:{ [unowned self] in
-            sizePreviewReason(self.read("health.json"),self.read("control.json"),self.busy)
+            sizePreviewReason(self.read("health.json"),self.read("control.json"),self.busy,expectedRotation:report["rotation"] as? Int,observedAfter:inspectedAt)
         })
         let response=chooser.run()
         if response==1,presetError==nil {savePresetPrompt();return}

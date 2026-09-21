@@ -186,6 +186,14 @@ func runMenuSelfTests() {
     for scenario in ["stale","away","pg-only","benq-only","recovery","unknown-input"] {
         precondition(sizePreviewReason(demoState(scenario,"health.json",Date().timeIntervalSince1970),[:],false) != nil)
     }
+    let inspectionTime=Date().timeIntervalSince1970-2
+    var rotatedPreview=previewReady
+    rotatedPreview["rotation"]=["macos_degrees":90,"macos_observed_at":inspectionTime+1]
+    precondition(sizePreviewReason(rotatedPreview,[:],false,expectedRotation:0,observedAfter:inspectionTime)?.contains("orientation changed")==true)
+    precondition(sizePreviewReason(rotatedPreview,[:],false,expectedRotation:90,observedAfter:inspectionTime)==nil)
+    precondition(sizePreviewReason(rotatedPreview,[:],false,expectedRotation:0,observedAfter:inspectionTime+2)==nil)
+    rotatedPreview["rotation"]=["macos_degrees":true,"macos_observed_at":inspectionTime+1]
+    precondition(sizePreviewReason(rotatedPreview,[:],false,expectedRotation:0,observedAfter:inspectionTime)==nil)
     var percentCalls:[[String]]=[]
     let unsupportedPercent=runCompatibleMenuCommand(percentArgs) { args,_,_ in
         percentCalls.append(args);return CommandResult(output:"{}",code:0)

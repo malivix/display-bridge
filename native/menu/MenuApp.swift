@@ -352,7 +352,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
         let role=monitorRole
         let available={ [unowned self] in monitorControlReason(self.read("health.json"),self.read("control.json"),role,self.busy) }
         guard available()==nil else{return}
-        let chooser=PercentChooser(role:role,previous:monitorReadings.previous(for:role),fontSize:CGFloat([16,20,24][textSizeIndex()]),availability:available)
+        let chooser=PercentChooser(role:role,readings:monitorReadings,fontSize:CGFloat([16,20,24][textSizeIndex()]),availability:available)
         guard let arguments=chooser.run() else{return}
         if let reason=available() {message("Monitor setting unavailable",reason);return}
         execute(arguments)

@@ -196,6 +196,18 @@ func runMenuSelfTests() {
     precondition(readings.previous(for:"benq")?.contains("PG42UQ")==false)
     precondition(readings.previous(for:"pg")?.contains("BenQ")==false)
     precondition(readings.previous(for:"unmanaged")==nil)
+    precondition(readings.observation(for:"pg",feature:"luminance")?.setting.percent==30)
+    precondition(readings.observation(for:"pg",feature:"volume")==nil)
+    precondition(readings.observation(for:"unmanaged",feature:"luminance")==nil)
+    let volumeDate=readDate.addingTimeInterval(60)
+    let volumeSetting=MonitorSetting(["value":70,"maximum":100,"percent":70])!
+    _=readings.accept(.adjustment(role:"benq",feature:"volume",setting:volumeSetting),at:volumeDate)
+    precondition(readings.observation(for:"benq",feature:"volume")?.setting.percent==70)
+    precondition(readings.observation(for:"benq",feature:"volume")?.date==volumeDate)
+    precondition(readings.observation(for:"benq",feature:"luminance")?.date==readDate)
+    precondition(readings.observation(for:"benq",feature:"luminance")?.setting.percent==30)
+    precondition(readings.observation(for:"pg",feature:"volume")==nil)
+    precondition(readings.observation(for:"benq",feature:"volume")?.description.contains("not refreshed")==true)
     for (field,value) in [("read_only",1 as Any),("settings",["luminance":setting]),("monitor","pg")] {
         var invalid=snapshot;invalid[field]=value;precondition(monitorResult(invalid,snapshotArgs)==nil)
     }

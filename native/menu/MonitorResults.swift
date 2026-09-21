@@ -81,12 +81,32 @@ enum MonitorResponse {
 // never reuse PG's reading, and returning to a target must not imply a new read.
 struct MonitorReadings {
     private var readings:[String:String]=[:]
+    private var settings:[String:[String:MonitorObservation]]=[:]
+    func observation(for role:String,feature:String)->MonitorObservation? {
+        settings[role]?[feature]
+    }
     mutating func accept(_ response:MonitorResponse,at date:Date)->String {
         let summary=response.summary(at:date)
         readings[response.role]=summary
+        switch response {
+        case .snapshot(let role,let brightness,let volume):
+            settings[role] = ["luminance":MonitorObservation(setting:brightness,date:date),
+                              "volume":MonitorObservation(setting:volume,date:date)]
+        case .adjustment(let role,let feature,let setting):
+            settings[role,default:[:]][feature]=MonitorObservation(setting:setting,date:date)
+        }
         return summary
     }
     func previous(for role:String)->String? {
         readings[role].map{"Previous reading (not refreshed):\n"+$0}
+    }
+}
+
+// Each feature keeps its own observation age; adjusting volume does not refresh brightness.
+struct MonitorObservation {
+    let setting:MonitorSetting
+    let date:Date
+    var description:String {
+        "Previous reading (not refreshed): \(setting.percent)%\nRead at \(date.formatted(date:.abbreviated,time:.standard))"
     }
 }

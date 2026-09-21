@@ -65,7 +65,9 @@ rotation or other settings; refresh after changing them.
 
 In Controls, choose a monitor and **Set percentage…**. Select brightness or monitor
 speaker volume, move the slider, then choose **Apply requested percentage**. Dragging
-never sends writes. The proposed value starts at 50%, not at a claimed current setting;
+never sends writes. The proposal starts from the selected setting’s previous reading, labeled unrefreshed.
+Without a reading, Apply stays disabled until you move the slider. Switching between
+brightness and volume resets the proposal to that feature’s own reading;
 any previous reading is shown separately. Cancel/Escape discards the proposal.
 
 Hardware ranges may round the request: 75% on a 0–50 scale becomes 38/50, reported as 76%.

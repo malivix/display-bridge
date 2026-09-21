@@ -24,9 +24,14 @@ fixed-120/HDR-off modes, the menu app and build agreement all report ok. One liv
 was then observed: the PG moved to the other host's input, the controller selected the BenQ
 profile, and audio followed to the RD280UG.
 
-That is a first deployment and one observed transition, not a Mac B switching or listening
-qualification. Listening, both-away and both-return orders, sleep/wake, and rotation are
-unqualified on Mac B; no orientation profiles exist there, so automatic rotation is disabled.
+Both orientation profiles were then captured on Mac B and automatic rotation is enabled
+there. The landscape capture succeeded against the running controller; the portrait one
+required stopping it first, and needed two failed attempts and a restored landscape layout
+before that cause was identified. Each attempt rolled back and left the installation working.
+
+That is a first deployment, one observed transition and a completed rotation enrollment, not
+a Mac B switching, listening or rotation qualification. Listening, both-away and both-return
+orders, sleep/wake, and an actual sensor-driven rotation have not been exercised on Mac B.
 
 A release should record the exact revision, OS, model/connection categories, test commands,
 physical outcomes, and unresolved cases without publishing serials, UUIDs, local paths, or logs.

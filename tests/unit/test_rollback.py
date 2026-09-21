@@ -11,7 +11,7 @@ import rollback
 
 
 class CoordinatedRollbackTests(unittest.TestCase):
-    def exercise(self, fail=False):
+    def exercise(self, fail=False, restart_failures=()):
         with tempfile.TemporaryDirectory() as directory:
             home = Path(directory)
             root = home / ".config/display-auto"
@@ -42,6 +42,8 @@ class CoordinatedRollbackTests(unittest.TestCase):
             def run(args, **kwargs):
                 if args[0] == "launchctl":
                     events.append((args[1], Path(args[-1]).name))
+                    if args[1] == "bootstrap" and Path(args[-1]).stem in restart_failures:
+                        raise subprocess.CalledProcessError(5, args)
                     return SimpleNamespace(returncode=0)
                 self.assertEqual(args, [str(launcher), "once"])
                 self.assertEqual((app / "binary").read_text(), "old app")
@@ -54,7 +56,16 @@ class CoordinatedRollbackTests(unittest.TestCase):
                 patch.object(rollback, "run", side_effect=run),
                 patch("builtins.print"),
             ):
-                if fail:
+                if restart_failures:
+                    with self.assertRaises(RuntimeError) as caught:
+                        rollback.main(["original"])
+                    for name in restart_failures:
+                        self.assertIn(name, str(caught.exception))
+                    if fail:
+                        self.assertIn("injected verification failure", str(caught.exception.__cause__))
+                    else:
+                        self.assertIsInstance(caught.exception.__cause__, subprocess.CalledProcessError)
+                elif fail:
                     with self.assertRaisesRegex(RuntimeError, "injected"):
                         rollback.main(["original"])
                 else:
@@ -72,6 +83,14 @@ class CoordinatedRollbackTests(unittest.TestCase):
 
     def test_failed_verification_undoes_both_components(self):
         self.exercise(fail=True)
+
+    def test_restart_failure_does_not_skip_other_service(self):
+        controller = "io.github.display-bridge"
+        menu = controller + ".menu"
+        for failures in ((controller,), (menu,), (controller, menu)):
+            for verification_failed in (False, True):
+                with self.subTest(failures=failures, verification_failed=verification_failed):
+                    self.exercise(fail=verification_failed, restart_failures=failures)
 
     def test_old_backup_rejected_before_stopping_any_service(self):
         with tempfile.TemporaryDirectory() as directory:

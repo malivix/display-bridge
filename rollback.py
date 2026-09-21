@@ -128,14 +128,24 @@ def main(argv=None):
                 restore(undo)
             raise
         finally:
+            original_error = sys.exc_info()[1]
             fcntl.flock(controller, fcntl.LOCK_UN)
             fcntl.flock(maintenance, fcntl.LOCK_UN)
+            restart_errors = []
             for service, path in stopped:
                 if path.exists():
-                    run(
-                        ["launchctl", "bootstrap", f"gui/{os.getuid()}", str(path)],
-                        check=True,
-                    )
+                    try:
+                        run(
+                            ["launchctl", "bootstrap", f"gui/{os.getuid()}", str(path)],
+                            check=True,
+                        )
+                    except (OSError, subprocess.SubprocessError) as error:
+                        restart_errors.append((path.stem, error))
+            if restart_errors:
+                failed = ", ".join(f"{name} ({type(error).__name__})" for name, error in restart_errors)
+                raise RuntimeError(
+                    f"Rollback service restart failed: {failed}. Inspect service status before retrying."
+                ) from (original_error if original_error is not None else restart_errors[0][1])
     print(
         f"Restored {backup.name}; controller and menu restored together. Undo snapshot: {undo}"
     )

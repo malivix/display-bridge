@@ -37,6 +37,23 @@ func setupReview(_ json:String,host:String)->SetupReview {
         + names.filter{!failed.contains($0)}.map{"✓ \($0)"}
     return SetupReview(ready:ready,text:([ready ? "Software prerequisites passed":"Resolve these software prerequisites first"]+rows+["Hardware has not been inspected by this review. Installation independently checks the saved setup and current monitor state."]).joined(separator:"\n\n"))
 }
+// Correlate a report to the child owned by this window, not merely the last
+// installer record on disk. A terminated child cannot imply ongoing progress.
+func setupAttemptSummary(_ source:[String:Any],pid:Int32,host:String,launchedAt:Double,running:Bool,now:Double)->String? {
+    func number(_ key:String)->Double? {
+        guard let value=source[key] as? NSNumber,CFGetTypeID(value) != CFBooleanGetTypeID(),value.doubleValue.isFinite else{return nil}
+        return value.doubleValue
+    }
+    guard pid>0,["A","B"].contains(host),launchedAt.isFinite,now.isFinite,
+          number("pid")==Double(pid),source["host"] as? String==host,
+          let start=number("started_at"),start>=launchedAt,start<=now else{return nil}
+    var report=source
+    report["read_only"]=true;report["available"]=true
+    report["process_observation"]=running ? "present":"not-found"
+    guard let bytes=try? JSONSerialization.data(withJSONObject:report),let json=String(data:bytes,encoding:.utf8) else{return nil}
+    return installationSummary(json,now)
+}
+
 struct SetupSelection {
     var host:String?
     var reviewedHost:String?
@@ -72,5 +89,16 @@ func runSetupTests() {
     report["read_only"]=true;report["checks"]=[["name":"Platform","status":"ok"]]
     precondition(!setupReview(json(),host:"A").ready)
     precondition(!setupReview("{}",host:"A").ready)
-    print("PASS setup role changes, explicit readiness and typed prerequisite review")
+    let now=1000.0
+    var attempt=demoInstallationReport("recovery-wait",now)
+    attempt["pid"]=42;attempt["started_at"]=900.0
+    func observed(_ running:Bool)->String? {setupAttemptSummary(attempt,pid:42,host:"A",launchedAt:899,running:running,now:now)}
+    precondition(observed(true)?.contains("A process exists")==true)
+    precondition(observed(false)?.contains("Outcome unknown · recorded process not found")==true)
+    attempt["pid"]=43;precondition(observed(true)==nil)
+    attempt["pid"]=true;precondition(observed(true)==nil)
+    attempt["pid"]=42;attempt["started_at"]=898.0;precondition(observed(true)==nil)
+    attempt["started_at"]=1001.0;precondition(observed(true)==nil)
+    attempt["started_at"]=900.0;attempt["host"]="B";precondition(observed(true)==nil)
+    print("PASS setup readiness, failure guidance and current-attempt correlation")
 }

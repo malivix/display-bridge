@@ -105,14 +105,15 @@ final class SetupApp:NSObject,NSApplicationDelegate,NSWindowDelegate {
         } catch {banner.stringValue="Installer could not start. No successful installation is claimed. Recheck the checkout and software prerequisites.";selection.reviewedHost=nil;refreshControls()}
     }
     @discardableResult func showProgress()->Bool {
-        guard let task=task,var report=readMenuState(progressURL),let pid=report["pid"] as? NSNumber,
-              CFGetTypeID(pid) != CFBooleanGetTypeID(),pid.doubleValue==Double(task.processIdentifier),
-              let started=report["started_at"] as? Double,started>=launchedAt,report["host"] as? String==selection.host else{return false}
-        report["read_only"]=true;report["available"]=true
-        if task.isRunning {report["process_observation"]="present"}
-        if let bytes=try? JSONSerialization.data(withJSONObject:report),let json=String(data:bytes,encoding:.utf8) {text.string=installationSummary(json);return true}
-        return false
+        guard let task=task else{return false}
+        guard let report=readMenuState(progressURL),let host=selection.host,
+              let summary=setupAttemptSummary(report,pid:task.processIdentifier,host:host,launchedAt:launchedAt,running:task.isRunning,now:Date().timeIntervalSince1970) else {
+            text.string="No matching report is currently available for this attempt. The installer may still be working; inspect its private log. An earlier report is not a current outcome."
+            return false
+        }
+        text.string=summary;return true
     }
+
     func finished(_ child:Process) {
         if !showProgress() {text.string="No matching report was recorded for this attempt. Inspect the private log and check system health; no installation outcome is inferred from an older report."}
         timer?.invalidate();timer=nil;selection.installing=false;selection.reviewedHost=nil

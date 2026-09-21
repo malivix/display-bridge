@@ -1,6 +1,7 @@
 # Native macOS Shortcuts integration
 
-Status: integration probe implemented; production feature not yet delivered.
+Status: signed synthetic integration qualified on the development Mac;
+production feature not yet delivered.
 This extends the [current product plan](ui-feature-priority-review-2026-09-21.md).
 
 ## Intended user outcome
@@ -34,16 +35,28 @@ requires source and compiler-constant file lists. The script derives toolchain,
 SDK and build version locally rather than publishing machine paths or pinning the
 developer's Xcode location. This establishes one toolchain, not all supported Xcodes.
 
-Opening an earlier private synthetic probe was attempted, but the Shortcuts UI
-did not open a new editor through the available New Shortcut commands. Therefore
-action discovery and execution inside Shortcuts remain unverified. Do not bypass
-this with direct modification of the Shortcuts database or undocumented import data.
+The subsequent Shortcuts test discovered the action but could not execute the
+ad-hoc-signed app. Targeted system logs reported a missing signing team identity.
+A private copy signed with an existing Apple Development identity executed
+successfully without executable or metadata changes. Another action read its
+typed `State` property as `Ready`. After unregistering duplicate synthetic bundles,
+the same test passed with the signed app initially stopped. See the
+[integration evidence](../log/shortcuts-signed-execution.md). This establishes one
+signed development setup, not all macOS versions or public distribution.
+
+The builder accepts an optional local `DISPLAY_BRIDGE_PROBE_SIGN_IDENTITY`
+environment variable for this comparison. It does not discover credentials,
+create certificates, change keychain permissions or publish signed artifacts.
+Default remains ad-hoc for isolated checks. Keep only one registered probe bundle
+for this fixed test identifier when checking launch behavior; stale duplicate
+registrations can launch an older app. Never reset the whole Launch Services
+database to fix this test.
 
 ## Production implementation order
 
-1. Qualify action discovery and execution with the synthetic app. Confirm its
-   typed fields can be consumed by another action; verify behavior with the app
-   already running and when launched by Shortcuts. Keep test names synthetic.
+1. Synthetic gate passed on one signed development setup: discovery, execution,
+   typed-field consumption, and execution with the app running and stopped.
+   Broader OS/distribution coverage remains open. Keep test names synthetic.
 2. Add a bounded status projection using the existing `readMenuState` boundary.
    Separate freshness (`fresh`, `stale`, `unavailable`) from controller status,
    pause state, arrangement and recovery. Missing or malformed fields stay
@@ -54,7 +67,8 @@ this with direct modification of the Shortcuts database or undocumented import d
    launch behavior intact; a background action must not take ownership from the
    running UI. A native action result is observation, never mutation authorization.
 4. Integrate metadata extraction and validation before signing in the real build.
-   Resolve full-Xcode versus Command-Line-Tools availability explicitly; do not
+   Resolve full-Xcode versus Command-Line-Tools availability and signed identity
+   requirements explicitly; do not
    silently ship an advertised action without metadata or unexpectedly drop the
    project's documented installation support. Include metadata in coordinated
    backup/rollback and package verification, with tests for extraction failure.

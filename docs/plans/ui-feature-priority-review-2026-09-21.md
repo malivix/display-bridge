@@ -329,3 +329,12 @@ metadata, passes its typed-result self-test and verifies its ad-hoc signature.
 This is an integration dependency, not a shipped status action. Discovery and
 execution inside Shortcuts remain open, as do production state projection and
 packaging. Follow the [concrete implementation and rollback plan](local-shortcuts.md).
+
+### Signed Shortcuts execution and typed consumption checked
+
+The synthetic action is discoverable. Ad-hoc execution failed with missing signing
+identity evidence; a development-signed copy passed, including reading its `State`
+field from another action and launching the app from stopped. Duplicate test-bundle
+registrations initially selected the wrong build and were removed narrowly.
+[Evidence and limits](../log/shortcuts-signed-execution.md). Production status,
+process integration and signing-aware packaging remain the next implementation work.

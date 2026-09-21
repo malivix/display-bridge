@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Build a private synthetic App Intents probe. Does not install or open apps."""
 import json
+import os
 import plistlib
 import subprocess
 import tempfile
@@ -14,6 +15,9 @@ def run(arguments):
 
 
 def main():
+    signing_identity = os.environ.get("DISPLAY_BRIDGE_PROBE_SIGN_IDENTITY", "-").strip()
+    if not signing_identity:
+        raise RuntimeError("Explicit probe signing identity must not be empty")
     sdk = run(["xcrun", "--sdk", "macosx", "--show-sdk-path"])
     swift = Path(run(["xcrun", "--find", "swiftc"]))
     processor = run(["xcrun", "--find", "appintentsmetadataprocessor"])
@@ -60,11 +64,16 @@ def main():
         "CFBundlePackageType": "APPL", "CFBundleVersion": "1",
         "LSUIElement": True, "LSMinimumSystemVersion": "13.0",
     }))
-    run(["codesign", "--force", "--sign", "-", str(app)])
+    # Optional identity is supplied locally, never discovered or stored in source.
+    try:
+        run(["codesign", "--force", "--sign", signing_identity, str(app)])
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
+        raise RuntimeError("Probe signing failed; check the chosen local identity") from None
     run(["codesign", "--verify", "--deep", "--strict", str(app)])
     result = subprocess.run([str(binary), "--self-test"], check=True, capture_output=True, text=True, timeout=15)
     print(result.stdout.strip())
-    print("PASS App Intents metadata extraction and ad-hoc bundle signature")
+    print("PASS App Intents metadata extraction and bundle signature (" +
+          ("ad-hoc" if signing_identity == "-" else "explicit local identity") + ")")
     print("Private probe: " + str(app.relative_to(ROOT)))
     print("Shortcuts discovery and execution are NOT qualified by this check.")
 

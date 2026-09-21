@@ -80,6 +80,10 @@ and directly tests a private synthetic App Intents app using full Xcode. It perf
 no installation or hardware access and does not open Shortcuts. This opt-in probe
 does not qualify action discovery or execution inside Shortcuts; see the
 [implementation plan](plans/local-shortcuts.md). Keep its generated bundle private.
+For explicit signing qualification, supply a locally chosen identity through
+`DISPLAY_BRIDGE_PROBE_SIGN_IDENTITY`; the default is ad-hoc. An ad-hoc signature
+passed bundle validation but failed Shortcuts execution on the development Mac,
+while a development-signed copy passed. See the plan for scope and remaining gates.
 
 ## Optional pasteboard integration check
 

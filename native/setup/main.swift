@@ -61,7 +61,7 @@ final class SetupApp:NSObject,NSApplicationDelegate,NSWindowDelegate {
         checking=true;selection.reviewedHost=nil;banner.stringValue="Reviewing software prerequisites…";refreshControls()
         if demo {selection.reviewedHost=host;checking=false;banner.stringValue="Synthetic prerequisites passed. No hardware was inspected.";refreshControls();return}
         guard let python=python else {checking=false;banner.stringValue="Python location is unavailable. Rebuild this setup app from the checkout.";refreshControls();return}
-        let arguments=[package.appendingPathComponent("install.py").path,host,"--preflight"]
+        let arguments=setupArguments(package.appendingPathComponent("install.py"),host:host,preflight:true)
         DispatchQueue.global(qos:.userInitiated).async {
             let result=runMenuCommand(python,arguments,timeout:60)
             let review=setupReview(result.output,host:host)
@@ -93,7 +93,7 @@ final class SetupApp:NSObject,NSApplicationDelegate,NSWindowDelegate {
             let fd=Darwin.open(url.path,O_WRONLY|O_CREAT|O_EXCL|O_NOFOLLOW,0o600)
             guard fd>=0 else{throw NSError(domain:NSPOSIXErrorDomain,code:Int(errno))}
             let output=FileHandle(fileDescriptor:fd,closeOnDealloc:true),process=Process()
-            process.executableURL=python;process.arguments=[package.appendingPathComponent("install.py").path,host]
+            process.executableURL=python;process.arguments=setupArguments(package.appendingPathComponent("install.py"),host:host,preflight:false)
             process.standardInput=FileHandle.nullDevice;process.standardOutput=output;process.standardError=output
             var environment=ProcessInfo.processInfo.environment;environment["PYTHONDONTWRITEBYTECODE"]="1";environment["PYTHONUNBUFFERED"]="1";process.environment=environment
             process.terminationHandler={ [weak self] child in DispatchQueue.main.async {self?.finished(child)} }

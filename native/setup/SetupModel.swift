@@ -2,6 +2,11 @@
 import Foundation
 import CoreFoundation
 
+func setupArguments(_ script:URL,host:String,preflight:Bool)->[String] {
+    // Keep Python import caches out of the signed source snapshot.
+    ["-B",script.path,host]+(preflight ? ["--preflight"]:[])
+}
+
 struct SetupReview {
     let ready:Bool
     let text:String
@@ -29,6 +34,9 @@ struct SetupSelection {
     mutating func select(_ role:String?) {host=["A","B"].contains(role ?? "") ? role:nil;reviewedHost=nil;prepared=false}
 }
 func runSetupTests() {
+    let script=URL(fileURLWithPath:"/tmp/source with spaces/install.py")
+    precondition(setupArguments(script,host:"A",preflight:true)==["-B",script.path,"A","--preflight"])
+    precondition(setupArguments(script,host:"B",preflight:false)==["-B",script.path,"B"])
     var choice=SetupSelection();precondition(!choice.canInstall)
     choice.select("A");choice.reviewedHost="A";choice.prepared=true;precondition(choice.canInstall)
     choice.select("B");precondition(!choice.canInstall && !choice.prepared)

@@ -451,10 +451,18 @@ func runMenuSelfTests() {
     precondition(currentRecoveryArguments(repair,repairHealth,[:],true,103)==nil)
     precondition(currentRecoveryArguments(repair,repairHealth,[:],false,120)==nil)
     precondition(currentRecoveryArguments(repair,repairHealth,[:],false,103)==["repair-audio"])
-    for state in ["settling","recovering","waiting-for-ddc","waiting-for-known-input"] {
+    for state in ["settling","recovering","waiting-for-ddc"] {
         var waiting=repairHealth;waiting["status"]=state
         precondition(recoveryAction(waiting,[:],103)==nil)
     }
+    let unknownHealth:[String:Any]=["updated_at":100.0,"status":"waiting-for-known-input","profile":"unknown","inputs":["pg":15,"benq":19]]
+    let inspectUnknown=recoveryAction(unknownHealth,[:],103)!
+    precondition(inspectUnknown.title=="Check health" && inspectUnknown.arguments==["doctor"])
+    precondition(currentRecoveryArguments(inspectUnknown,unknownHealth,[:],false,103)==["doctor"])
+    precondition(currentRecoveryArguments(inspectUnknown,unknownHealth,[:],true,103)==nil)
+    precondition(currentRecoveryArguments(inspectUnknown,["updated_at":100.0,"status":"ready"],[:],false,103)==nil)
+    var exhaustedUnknown=unknownHealth;exhaustedUnknown["recovery"]=["pending":true,"attempts":3]
+    precondition(recoveryAction(exhaustedUnknown,[:],103)?.arguments==["doctor"])
     repairHealth["status"]="preview-recovery";repairHealth["preview"]=["state":"needs-repair","token":"example-one"]
     let restoration=recoveryAction(repairHealth,[:],103)!
     precondition(restoration.arguments==["preview-repair","--token","example-one"])

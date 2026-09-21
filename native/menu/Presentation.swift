@@ -203,7 +203,7 @@ func recoveryAction(_ health:[String:Any],_ control:[String:Any],_ now:Double=Da
     let inspect=RecoveryAction(title:"Check health",arguments:["doctor"])
     guard statusFresh(health,now),controlsAvailable(control) else {return inspect}
     let state=health["status"] as? String ?? "unknown"
-    if state=="state-error" {return inspect}
+    if ["state-error","waiting-for-known-input"].contains(state) {return inspect}
     if state.hasPrefix("preview-") {
         let preview=health["preview"] as? [String:Any] ?? [:]
         guard preview["state"] as? String == "needs-repair" else {return nil}

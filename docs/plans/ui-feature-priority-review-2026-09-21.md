@@ -382,3 +382,11 @@ invalid-duration rejection, unknown acknowledgement without retry, typed consump
 and cold-start resume. The observed default dialog wait is removed. See
 [scope, evidence and registration handling](../log/shortcuts-control-execution.md).
 Review and deliver the completed source before adding further feature scope.
+
+### Unknown-input inspection action delivered
+
+Existing mapping guidance now has the canonical Check health action for fresh
+unknown ownership, including when no recovery is pending. Largest/minimum keyboard
+activation and native guards passed in the isolated demo. See
+[validation and limits](../log/unknown-input-health-action.md). This does not remap
+or resolve a physical unknown input and does not remove the deployment ownership gate.

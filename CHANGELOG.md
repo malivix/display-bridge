@@ -2,24 +2,39 @@
 
 ## 2.10.2 — unreleased
 
-- Separate native sources, unit tests, native tests, and physical tests.
-- Share an isolated test command with the import-safe installer.
-- Bound menu commands by deadline and output size.
-- Show command progress, status age, and last-known labels; open status from failure notifications.
-- Align health and display snapshots on orientation-specific saved layouts for both monitors.
-- Add direct monitor controls with inline readback and ownership-aware availability.
-- Add a separate allowlisted support summary with no automatic upload.
-- Prevent duplicate menu ownership and block app replacement while old instances remain.
-- Add an Audio tab with profile preferences and explanations for unavailable repair.
-- Add read-only display-mode snapshots with measured/saved comparisons and ownership checks.
-- Group status into Overview and Details, expose Pause directly, and hide inactive preview decisions.
-- Add a resizable status window, three text sizes, and a hardware-free UI demo.
-- Deduplicate failure alerts per incident and ignore stale notification repair actions.
-- Track controller request acknowledgements and bounded durable outcomes without replaying hardware work.
-- Reject oversized request timestamps without blocking preview restoration.
-- Validate backup payloads before restoration and roll back controller/menu together.
-- Clarify installation, usage, troubleshooting, development, and qualification docs.
-- Centralize the controller/menu version and test Python compatibility in CI.
+These are source changes, not a newly qualified binary release. Updating the checkout
+alone does not update an installed controller or menu app. See the
+[upgrade guide](docs/install.md#upgrade-or-replace-a-saved-baseline) and
+[qualification limits](docs/qualification.md).
+
+### Controls and readability
+
+- Add Overview, Details, Displays, Audio and Controls tabs, a resizable window and three interface text sizes.
+- Offer 15-, 30- and 60-minute pauses from the main window; show expiry and distinguish stale controller status.
+- Add window-scoped tab/refresh shortcuts, ⌘⇧P for More controls, and an in-app keyboard reference.
+- Add targeted brightness/volume controls, explicit-Apply percentage entry, dated readbacks and named brightness presets.
+- Add display snapshots, paired readability samples, reference-monitor size comparisons and named size presets with physical-size estimates.
+- Preview qualified sizes with Keep/Revert and automatic restoration; reject stale choices when readiness or orientation changes.
+- Show speaker preferences by profile, temporary output preservation, and explanations for unavailable audio repair.
+- Validate preset names during editing and explain why an open save/apply dialog lost eligibility.
+- Add a local diagnostic report and a separate allowlisted support summary without automatic upload.
+
+### Recovery and deployment
+
+- Bound menu commands by deadline and output size; show progress, status age and last-known values.
+- Track controller request acknowledgements and durable outcomes without replaying hardware work; reject oversized request timestamps without blocking preview restoration.
+- Deduplicate failure notifications per incident and reject stale repair actions.
+- Align health and snapshots with orientation-specific saved layouts; prevent duplicate menu ownership and replacement while old instances remain.
+- Validate backup payloads and restore controller/menu together. Prepare all restore copies before changing live files so a copy failure leaves the current installation intact.
+- Attempt service recovery after failed stop observations, continue remaining restarts after an operational restart error, and report partial recovery explicitly.
+- Add a separately built graphical setup app with bundled source, software preflight and an explicit installation action.
+
+### Development and evidence
+
+- Separate native sources, unit tests and opt-in physical tests; share the isolated test command with the import-safe installer.
+- Centralize controller/menu versioning and build inventories; verify Python compatibility, native helpers, commit conventions and privacy in CI.
+- Add isolated process-termination, restore-copy, permissions and relative-link regressions. These do not establish whole-installation atomicity or power-loss durability.
+- Expand installation, usage, troubleshooting, architecture and qualification guides. Detailed evidence remains in [work logs](docs/log/).
 
 ## Public bootstrap — based on 2.10.1
 

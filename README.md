@@ -56,7 +56,7 @@ if you close the menu app.
 ```
 
 Start with the [control map](docs/usage.md#find-a-control), [readable interface](docs/usage.md#readable-interface-and-keyboard-navigation),
-and [troubleshooting](docs/usage.md#when-something-is-wrong). Source checkout updates do not
+and [troubleshooting](docs/usage.md#when-something-is-wrong). The [changelog](CHANGELOG.md) summarizes current source changes. Source checkout updates do not
 update the installed app; use the [coordinated upgrade](docs/install.md#upgrade-or-replace-a-saved-baseline).
 Diagnostics contain private device information; keep them local. Read [SECURITY.md](SECURITY.md) before sharing any report.
 

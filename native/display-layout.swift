@@ -132,9 +132,20 @@ func runLayoutSelfTests() {
     let rotated = screen("benq", 853, 1280, rotation: 90, x: -853)
     expect(!mismatches(baseline: [pg, benq], live: [pg, rotated]).isEmpty,
            "rotation is compared")
+    let rotatedAlone = screen("benq", 1280, 853, rotation: 90, x: -1280)
+    expect(!mismatches(baseline: [pg, benq], live: [pg, rotatedAlone]).isEmpty,
+           "rotation alone is compared")
     let moved = screen("benq", 1280, 853, x: -999)
     expect(!mismatches(baseline: [pg, benq], live: [pg, moved]).isEmpty,
            "position is compared")
+
+    let differentMode = screen("benq", 1280, 853, x: -1280, modeID: 2)
+    expect(!mismatches(baseline: [pg, benq], live: [pg, differentMode]).isEmpty,
+           "a different mode ID is a mismatch in strict mode")
+    let differentModeLax = screen("benq", 1280, 853, x: -1280, modeID: 2, strictMode: nil)
+    let benqLax = screen("benq", 1280, 853, x: -1280, strictMode: nil)
+    expect(mismatches(baseline: [pg, benqLax], live: [pg, differentModeLax]).isEmpty,
+           "a different mode ID is ignored when strict mode is off")
 
     let mirroredRotated = screen("benq", 853, 1280, rotation: 90, x: -853, mirrorOf: "pg")
     expect(mismatches(baseline: [pg, screen("benq", 1280, 853, mirrorOf: "pg")],

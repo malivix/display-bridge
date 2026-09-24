@@ -1,4 +1,5 @@
 import importlib.util
+import json
 from pathlib import Path
 import unittest
 import tempfile
@@ -82,17 +83,33 @@ class ControllerTests(unittest.TestCase):
         config={'m1ddc':'unused','keys':{'pg':'p','benq':'b'}}
         with patch.object(c,'command',return_value='DDC read failed 17'):
             with self.assertRaises(RuntimeError): c.read_inputs(config)
-    def test_mirror_direction_and_resolution_are_checked(self):
+    def test_mirror_direction_and_resolution_are_described(self):
+        # The native helper compares; the controller must describe the direction and
+        # keep the source's saved mode so that comparison has something to enforce.
         base=[dict(key=k,width=100,height=80,pixelWidth=200,pixelHeight=160,hz=120,rotation=0,x=x,y=0) for k,x in [('p',0),('b',100)]]
         config={'keys':{'pg':'p','benq':'b'},'baseline':{'screens':base}}
-        actual=[dict(base[0]),dict(base[1],mirrorOf='p',x=0)]
-        self.assertTrue(c.matches(config,'pg',actual))
-        wrong=[dict(base[0],mirrorOf='b'),dict(base[1],x=0)]
-        self.assertFalse(c.matches(config,'pg',wrong))
-        actual[0]['width']=80
-        self.assertFalse(c.matches(config,'pg',actual))
-    def test_topology_change_is_rejected(self):
-        self.assertFalse(c.matches({'baseline':{'screens':[]},'keys':{}},'extended',[]))
+        rows={s['key']:s for s in c.derive_baseline(config,'pg')['screens']}
+        self.assertEqual(rows['b']['mirrorOf'],'p')
+        self.assertNotIn('mirrorOf',rows['p'])
+        self.assertEqual(rows['p']['width'],100)
+    def test_apply_hands_the_derived_baseline_to_the_helper(self):
+        base=[dict(key=k,width=100,height=80,pixelWidth=200,pixelHeight=160,hz=120,rotation=0,x=x,y=0) for k,x in [('p',0),('b',100)]]
+        config={'keys':{'pg':'p','benq':'b'},'baseline':{'screens':base}}
+        calls=[]
+        def helper(args,*a):
+            calls.append(args);return json.dumps({'changed':args[1]=='apply' and len(calls)==1})
+        with tempfile.TemporaryDirectory() as temp,patch.object(c,'ROOT',Path(temp)),patch.object(c,'command',side_effect=helper):
+            self.assertTrue(c.apply(config,'benq'))
+            written=json.loads((Path(temp)/'rotation-active.json').read_text())
+            self.assertEqual(calls[0],[c.HELPER,'apply',Path(temp)/'rotation-active.json'])
+            self.assertEqual(written,c.derive_baseline(config,'benq'))
+            self.assertFalse(c.apply(config,'benq'))
+            self.assertFalse(c.apply(config,'away'))
+        self.assertEqual(len(calls),2)
+    def test_failed_native_apply_is_not_success(self):
+        config={'keys':{'pg':'p','benq':'b'},'baseline':{'screens':[]}}
+        with tempfile.TemporaryDirectory() as temp,patch.object(c,'ROOT',Path(temp)),patch.object(c,'command',side_effect=RuntimeError('display-layout: Layout readback differs')):
+            with self.assertRaisesRegex(RuntimeError,'readback'):c.apply(config,'extended')
 
 class ReliabilityTests(unittest.TestCase):
     def setUp(self):
@@ -102,6 +119,45 @@ class ReliabilityTests(unittest.TestCase):
     def test_deadline_expires(self):
         with self.assertRaises(TimeoutError): c.remaining(c.time.monotonic()-1, 5)
 
+    def test_derive_baseline_describes_mirroring_per_profile(self):
+        saved = {'screens': [
+            {'key': 'PG', 'width': 2048, 'height': 1152, 'x': 0, 'y': 0, 'rotation': 0,
+             'pixelWidth': 4096, 'pixelHeight': 2304, 'hz': 120, 'modeID': 1, 'strictMode': True},
+            {'key': 'BQ', 'width': 1280, 'height': 853, 'x': -1280, 'y': 0, 'rotation': 0,
+             'pixelWidth': 2560, 'pixelHeight': 1706, 'hz': 120, 'modeID': 2, 'strictMode': True}]}
+        config = {'keys': {'pg': 'PG', 'benq': 'BQ'}, 'baseline': saved}
+
+        extended = {s['key']: s for s in c.derive_baseline(config, 'extended')['screens']}
+        self.assertIsNone(extended['PG'].get('mirrorOf'))
+        self.assertIsNone(extended['BQ'].get('mirrorOf'))
+        self.assertEqual((extended['BQ']['x'], extended['BQ']['y']), (-1280, 0))
+
+        pg = {s['key']: s for s in c.derive_baseline(config, 'pg')['screens']}
+        self.assertEqual(pg['BQ']['mirrorOf'], 'PG')
+        # The surviving source moves to the origin, as the native helper used to do itself.
+        self.assertEqual((pg['PG']['x'], pg['PG']['y']), (0, 0))
+        self.assertIsNone(pg['PG'].get('mirrorOf'))
+
+        benq = {s['key']: s for s in c.derive_baseline(config, 'benq')['screens']}
+        self.assertEqual(benq['PG']['mirrorOf'], 'BQ')
+        self.assertEqual((benq['BQ']['x'], benq['BQ']['y']), (0, 0))
+
+    def test_derive_baseline_leaves_a_mirrored_screen_without_a_mode(self):
+        saved = {'screens': [
+            {'key': 'PG', 'width': 2048, 'height': 1152, 'x': 0, 'y': 0, 'rotation': 0,
+             'pixelWidth': 4096, 'pixelHeight': 2304, 'hz': 120, 'modeID': 1, 'strictMode': True},
+            {'key': 'BQ', 'width': 1280, 'height': 853, 'x': -1280, 'y': 0, 'rotation': 90,
+             'pixelWidth': 2560, 'pixelHeight': 1706, 'hz': 120, 'modeID': 2, 'strictMode': True}]}
+        config = {'keys': {'pg': 'PG', 'benq': 'BQ'}, 'baseline': saved}
+        rows = {s['key']: s for s in c.derive_baseline(config, 'pg')['screens']}
+        mirrored, master = rows['BQ'], rows['PG']
+        self.assertEqual(mirrored['mirrorOf'], 'PG')
+        # Rows decode into a type whose geometry is required, so a mirrored row carries
+        # its master's. It never carries a mode requirement of its own.
+        for field in ('width', 'height', 'pixelWidth', 'pixelHeight', 'hz', 'rotation'):
+            self.assertEqual(mirrored[field], master[field], field)
+        self.assertNotIn('modeID', mirrored)
+        self.assertNotIn('strictMode', mirrored)
     def test_busy_reader_lock_is_bounded(self):
         with patch.object(c.fcntl,'flock',side_effect=BlockingIOError):
             with self.assertRaises(TimeoutError): c.acquire_lock(None,0)

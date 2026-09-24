@@ -129,6 +129,10 @@ func runLayoutSelfTests() {
     expect(!mismatches(baseline: [pg, benq], live: [pg, mirrored]).isEmpty,
            "an unmirrored screen does not match when it is mirrored")
 
+    let pgMirrorsBenq = screen("pg", 2048, 1152, mirrorOf: "benq")
+    expect(!mismatches(baseline: [pg, mirrored], live: [pgMirrorsBenq, screen("benq", 1280, 853)]).isEmpty,
+           "a reversed mirror direction is a mismatch")
+
     let rotated = screen("benq", 853, 1280, rotation: 90, x: -853)
     expect(!mismatches(baseline: [pg, benq], live: [pg, rotated]).isEmpty,
            "rotation is compared")
@@ -162,9 +166,16 @@ func runLayoutSelfTests() {
                                      screen("b", 100, 100, mirrorOf: "a")]) == ["a", "b"],
            "a display may not mirror another mirror")
 
+    // The usage string is the contract the controller depends on; it has no source argument.
+    expect(!usage.contains("SOURCE_KEY") && usage.contains("apply BASELINE.json") &&
+           usage.contains("check BASELINE.json"),
+           "apply and check take a baseline and no source")
+
     print("PASS layout comparison: topology, mirroring, rotation, position")
 }
-struct Mismatch { let key: String; let reason: String }
+struct Mismatch: Codable { let key: String; let reason: String }
+struct CheckReport: Codable { let matches: Bool; let mismatches: [Mismatch] }
+let usage = "Usage: display-layout status | modes | check BASELINE.json | apply BASELINE.json"
 
 /// Does `live` already satisfy `baseline`? Pure: no CoreGraphics calls, so this is
 /// testable without displays and is the only place layout equality is defined.
@@ -228,11 +239,18 @@ func run() throws {
         let encoder = JSONEncoder(); encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         print(String(decoding: try encoder.encode(online().map(inventory)), as: UTF8.self)); return
     }
-    try require(args.count == 4 && args[1] == "apply", "Usage: display-layout status | modes | apply BASELINE.json extended|SOURCE_KEY")
+    try require(args.count == 3 && (args[1] == "apply" || args[1] == "check"), usage)
     let baseline = try JSONDecoder().decode(Layout.self, from: Data(contentsOf: URL(fileURLWithPath: args[2])))
     let ids = try online()
     let keys = ids.map(key)
     try require(Set(keys).count == ids.count, "Ambiguous display identities; no changes applied")
+    let live = try ids.map(screen)
+    if args[1] == "check" {
+        // Read-only: the same comparison apply uses, so no caller keeps its own copy.
+        let found = mismatches(baseline: baseline.screens, live: live)
+        let data = try JSONEncoder().encode(CheckReport(matches: found.isEmpty, mismatches: found))
+        print(String(decoding: data, as: UTF8.self)); return
+    }
     let byKey = Dictionary(uniqueKeysWithValues: zip(keys, ids))
     // Set equality pins the topology exactly; it is strictly as strong as also
     // hardcoding a count, and it does not assume how many displays are enrolled.
@@ -241,8 +259,6 @@ func run() throws {
                 "Display topology differs from the saved setup; no changes applied")
     try require(unknownMasters(baseline: baseline.screens).isEmpty,
                 "Saved layout mirrors a display that is not a source in the same baseline; no changes applied")
-    let source = args[3]
-    try require(source == "extended" || byKey[source] != nil, "Unknown source; no changes applied")
     for saved in baseline.screens where saved.mirrorOf == nil {
         try require(saved.width > 0 && saved.height > 0 && saved.pixelWidth > 0 && saved.pixelHeight > 0 &&
                     saved.hz.isFinite && saved.hz >= 0 &&
@@ -251,10 +267,14 @@ func run() throws {
         try require(CGDisplayRotation(byKey[saved.key]!) == saved.rotation,
                     "Rotation changed for \(saved.key); restore it and recapture; no changes applied")
     }
-    let selected = baseline.screens.filter { source == "extended" || $0.key == source }
+    if mismatches(baseline: baseline.screens, live: live).isEmpty {
+        print("{\"changed\":false}"); return
+    }
+    // A mirrored screen adopts its master's mode, so only sources are mode-set.
+    let sources = baseline.screens.filter { $0.mirrorOf == nil }
     // Preflight every requested mode BEFORE releasing the current mirror.
-    let modes = try selected.map { try matchingMode(byKey[$0.key]!, $0) }
-    let before = try ids.map(screen)
+    let modes = try sources.map { try matchingMode(byKey[$0.key]!, $0) }
+    let before = live
     let beforeModes = try ids.map { id -> CGDisplayMode in
         guard let mode = CGDisplayCopyDisplayMode(id) else { throw Failure(description: "Cannot snapshot current mode") }
         return mode
@@ -270,16 +290,14 @@ func run() throws {
             Thread.sleep(forTimeInterval: 0.15)
         }
         try transaction { config in
-            for (saved, mode) in zip(selected, modes) {
+            for (saved, mode) in zip(sources, modes) {
                 let id = byKey[saved.key]!
                 try check(CGConfigureDisplayWithDisplayMode(config, id, mode, nil), "restore source mode")
-                try check(CGConfigureDisplayOrigin(config, id, source == "extended" ? Int32(saved.x) : 0,
-                                                   source == "extended" ? Int32(saved.y) : 0), "position display")
+                try check(CGConfigureDisplayOrigin(config, id, Int32(saved.x), Int32(saved.y)), "position display")
             }
-            if source != "extended" {
-                for id in ids where id != byKey[source]! {
-                    try check(CGConfigureDisplayMirrorOfDisplay(config, id, byKey[source]!), "mirror")
-                }
+            for saved in baseline.screens {
+                guard let master = saved.mirrorOf else { continue }
+                try check(CGConfigureDisplayMirrorOfDisplay(config, byKey[saved.key]!, byKey[master]!), "mirror")
             }
         }
     } catch {
@@ -302,6 +320,15 @@ func run() throws {
         }
         throw error
     }
+    for _ in 0..<5 {
+        if mismatches(baseline: baseline.screens, live: try ids.map(screen)).isEmpty {
+            print("{\"changed\":true}"); return
+        }
+        Thread.sleep(forTimeInterval: 0.1)
+    }
+    let remaining = mismatches(baseline: baseline.screens, live: try ids.map(screen))
+    throw Failure(description: "Layout readback differs: " +
+                  remaining.map { "\($0.key) \($0.reason)" }.joined(separator: "; "))
 }
 if CommandLine.arguments.contains("--self-test") { runLayoutSelfTests(); exit(0) }
 do { try run() }

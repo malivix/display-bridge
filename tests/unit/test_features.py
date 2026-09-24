@@ -163,12 +163,11 @@ class Features(unittest.TestCase):
     def test_exact_pair_is_accepted(self):
         with patch.object(c,'layout',return_value=[{'key':'p'},{'key':'b'}]):c.verify_setup({'keys':{'pg':'p','benq':'b'}})
     def test_equal_hertz_does_not_accept_variable_mode(self):
+        # The native comparison rejects another mode ID in strict mode (its self-test);
+        # the derived intent must keep both fields so that rejection can happen.
         base=[dict(key=k,width=100,height=80,pixelWidth=200,pixelHeight=160,hz=120,rotation=0,x=x,y=0,modeID=7,strictMode=True) for k,x in [('p',0),('b',100)]]
         cfg={'keys':{'pg':'p','benq':'b'},'baseline':{'screens':base}}
-        current=[dict(x) for x in base]
-        self.assertTrue(c.matches(cfg,'extended',current))
-        current[1]['modeID']=6
-        self.assertFalse(c.matches(cfg,'extended',current))
+        self.assertEqual(c.derive_baseline(cfg,'extended'),{'screens':base})
     def test_matching_model_with_other_uuid_is_inactive(self):
         cfg={'keys':{'pg':'p','benq':'b'},'m1ddc':'unused','ddc_identifiers':{'pg':'uuid=aaaa','benq':'uuid=bbbb'}}
         with patch.object(c,'layout',return_value=[{'key':'p'},{'key':'b'}]),patch.object(c,'command',return_value='[1] PG42UQ (aaaa)\n[2] BenQ RD280UG (cccc)'):

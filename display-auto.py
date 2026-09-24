@@ -11,6 +11,7 @@ from pathlib import Path
 import re
 import subprocess
 import sys
+import tempfile
 import time
 import uuid
 from contextlib import ExitStack
@@ -193,43 +194,59 @@ class Debounce:
     def complete(self):
         self.observation_pending = False
 
-def matches(config, profile, screens):
-    saved = {x['key']: x for x in config['baseline']['screens']}
-    current = {x['key']: x for x in screens}
-    if len(screens) != 2 or set(saved) != set(current):
-        return False
+GEOMETRY = ('width', 'height', 'pixelWidth', 'pixelHeight', 'hz', 'rotation', 'x', 'y')
+
+def derive_baseline(config, profile):
+    """The layout intent for a profile, as a baseline the native helper can apply.
+
+    A screen keeps its saved mode when it shows its own desktop. A screen that should
+    mirror names its master and carries that master's geometry, because a mirrored
+    display adopts its master's mode: the values are never compared and never applied,
+    they describe what it will show. This is the only description of intent; the native
+    helper owns the comparison against the live layout.
+    """
     source = config['keys'].get(profile)
-    for key, item in current.items():
-        if profile == 'extended' or key == source:
-            if item.get('mirrorOf'):
-                return False
-            base = saved[key]
-            if base.get('strictMode') and item.get('modeID') != base.get('modeID'):
-                return False
-            if any(item[k] != base[k] for k in ('width', 'height', 'pixelWidth', 'pixelHeight', 'rotation')):
-                return False
-            if base.get('ioFlags') is not None and item.get('ioFlags') != base['ioFlags']:
-                return False
-            if abs(item['hz'] - base['hz']) > 0.2:
-                return False
-            position = (base['x'], base['y']) if profile == 'extended' else (0, 0)
-            if (item['x'], item['y']) != position:
-                return False
-        elif item.get('mirrorOf') != source:
-            return False
-    return True
+    saved = config['baseline']['screens']
+    rows = {s['key']: s for s in saved}
+
+    def mirror_row(key, master):
+        row = {field: rows[master][field] for field in GEOMETRY if field in rows[master]}
+        row.update(key=key, mirrorOf=master)
+        return row
+
+    screens = []
+    for screen in saved:
+        if source is None:
+            screens.append(dict(screen))
+        elif screen['key'] == source:
+            screens.append(dict(screen, x=0, y=0))
+        else:
+            screens.append(mirror_row(screen['key'], source))
+    return {'screens': screens}
+
+def write_active_baseline(baseline):
+    # Historical name: this file now carries every derived intent, not only rotation.
+    # It is referenced by name in the preview snapshot and restore payloads.
+    path = ROOT / 'rotation-active.json'
+    encoded = json.dumps(baseline) + '\n'
+    if not path.exists() or path.read_text() != encoded:
+        temporary = path.with_suffix('.tmp')
+        temporary.write_text(encoded)
+        temporary.replace(path)
+    return path
 
 def apply(config, profile, deadline=None):
     if profile in ('away', 'unknown'):
         return False
-    if matches(config, profile, layout(deadline)):
-        return False
-    command([HELPER, 'apply', config.get('active_baseline_path',BASELINE), config['keys'].get(profile, 'extended')], 8, deadline)
-    for _ in range(5):
-        if matches(config, profile, layout(deadline)):
-            return True
-        time.sleep(.1)
-    raise RuntimeError('Layout readback differs from requested source or saved mode')
+    path = write_active_baseline(derive_baseline(config, profile))
+    return json.loads(command([HELPER, 'apply', path], 8, deadline))['changed'] is True
+
+def layout_matches(baseline, deadline=None):
+    """Read-only: whether the live layout already satisfies a baseline."""
+    with tempfile.TemporaryDirectory(prefix='display-check-') as directory:
+        path = Path(directory) / 'baseline.json'
+        path.write_text(json.dumps(baseline))
+        return json.loads(command([HELPER, 'check', path], deadline=deadline))['matches'] is True
 
 def read_rotation(config,profile,deadline=None):
     rotation=config.get('rotation',{})
@@ -284,11 +301,7 @@ def stable_state(config, debounce, state, last, profile, deadline=None):
 def select_rotation_baseline(config,angle):
     try:saved=rotation_baseline(config,angle)
     except ValueError as error:raise RuntimeError(str(error)) from error
-    path=ROOT/'rotation-active.json'
-    if config.get('active_baseline_path')!=path or config['baseline']!=saved or not path.exists():
-        temporary=path.with_suffix('.tmp');temporary.write_text(json.dumps(saved)+'\n');temporary.replace(path)
     config['baseline']=saved
-    config['active_baseline_path']=path
 
 def apply_rotation(config,profile,angle,inputs,deadline=None):
     if not config.get('rotation',{}).get('enabled'):return False

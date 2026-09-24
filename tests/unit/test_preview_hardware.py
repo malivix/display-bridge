@@ -22,7 +22,7 @@ class AdapterTests(unittest.TestCase):
                 return json.dumps(self.metadata)
             if args[1]=='apply':self.writes.append(json.loads(Path(args[2]).read_text()));return ''
             raise AssertionError(args)
-        self.c=SimpleNamespace(HELPER='layout',MODE_INFO='metadata',INPUTS={'A':{'pg':17,'benq':19}},read_inputs=lambda cfg:self.inputs,layout=lambda:self.screens,command=command,matches=lambda cfg,profile,screens:cfg['baseline']['screens'][0]['modeID']==screens[0]['modeID'])
+        self.c=SimpleNamespace(HELPER='layout',MODE_INFO='metadata',INPUTS={'A':{'pg':17,'benq':19}},read_inputs=lambda cfg:self.inputs,layout=lambda:self.screens,command=command,layout_matches=lambda baseline:baseline['screens'][0]['modeID']==self.screens[0]['modeID'])
         self.h=ControllerHardware(self.c,self.config);self.context=self.h.context()
     def test_apply_uses_exact_modes_and_temporary_strict_baseline(self):
         self.h.apply(self.files,self.context)

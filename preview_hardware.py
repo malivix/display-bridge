@@ -57,12 +57,12 @@ class ControllerHardware:
         if self.context()!=expected:raise RuntimeError('Inputs or orientation changed before applying preview')
         with tempfile.TemporaryDirectory(prefix='display-preview-') as directory:
             path=Path(directory)/'baseline.json';path.write_text(json.dumps(config['baseline']))
-            self.c.command([self.c.HELPER,'apply',path,'extended'],8)
+            self.c.command([self.c.HELPER,'apply',path],8)
 
     def verify(self,files,expected):
         if self.context()!=expected:return False
         config=self.effective(files,expected)
-        if not self.c.matches(config,'extended',self.c.layout()):return False
+        if not self.c.layout_matches(config['baseline']):return False
         metadata=json.loads(self.c.command([self.metadata_helper,'status']))
         checks=mode_checks(config,expected['inputs'],metadata)
         return len(checks)==2 and all(check['status']=='ok' for check in checks) and self.context()==expected

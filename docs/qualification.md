@@ -37,9 +37,12 @@ orders, sleep/wake, and an actual sensor-driven rotation have not been exercised
 
 Lid-open support was then installed on Mac B. With the lid closed, the installer's
 four layout transitions passed on it and on the layout refactor before it, doctor reported ok,
-and the log showed no readback failure. The built-in display has not been enrolled or
-observed with the lid open yet. Mirroring per profile and rotation with the lid open have
-unit coverage only.
+and the log showed no readback failure. The built-in display was then enrolled with the lid
+open. The first attempt failed its readback and rolled back: macOS had left the BenQ as the
+main display, which a mirroring change cannot move. After the fix, the four transitions
+passed with the lid open, doctor reported ok with the lid enrolled, and the built-in mirrored
+the PG with the PG back at the origin. A rotation with the lid open, and opening or closing
+the lid while the controller runs, have not been exercised.
 
 A release should record the exact revision, OS, model/connection categories, test commands,
 physical outcomes, and unresolved cases without publishing serials, UUIDs, local paths, or logs.

@@ -38,6 +38,23 @@ Physical, Mac B, lid closed: installation succeeded, all four `test-layouts` tra
 passed (1.10 s, 1.28 s, 1.52 s, 1.75 s), there was no readback failure, doctor reported `ok`
 with `Lid enrollment` as `info`, and the controller returned to `ready extended`.
 
-Not yet exercised: lid enrollment itself, each profile with the lid open, a rotation with the
-lid open, and opening or closing the lid while the controller runs. Size previews still
-require the lid closed.
+Physical, Mac B, lid open. Before enrollment, macOS had mirrored the built-in onto the BenQ
+and made the BenQ main, at (0, 0) with the PG at (1280, 0), and automation was idle. The
+first `--capture-lid` enrolled the panel, but the installer's one-shot check failed with
+`Layout readback differs: … position differs` for both externals, and the installer rolled
+back. The mirror had been applied. The arrangement came back shifted by 1280 so that the
+BenQ stayed main: CoreGraphics keeps the current main display at the origin when one
+transaction changes mirroring and origins together. With the lid closed the PG was always
+already main, so this never showed. A transaction of origins alone does move the main
+display, so apply now re-positions the sources that way when they are still off. Reproduced
+from the same state: lid mirroring the BenQ, BenQ main. The fixed helper printed
+`{"changed":true}` and left the PG at the origin, the BenQ at (-1280, 0) and the lid
+mirroring the PG, and a second apply printed `{"changed":false}`.
+
+After that fix, enrollment succeeded. `test-layouts` passed `pg` in 1.65 s, `extended` in
+2.00 s, `benq` in 2.04 s and `extended` in 2.43 s, each verified by the helper's own readback,
+including the lid's target. The controller returned to `ready extended` with the built-in
+mirroring the PG at 2048 × 1152. Doctor reported `ok`, with `Lid enrollment` as `ok`.
+
+Not yet exercised: a BenQ rotation with the lid open, and opening or closing the lid while
+the controller runs. Size previews still require the lid closed.

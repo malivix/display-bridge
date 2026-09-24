@@ -152,6 +152,16 @@ func runLayoutSelfTests() {
                       live: [pg, mirroredRotated]).isEmpty,
            "a mirrored screen ignores its own geometry and rotation")
 
+    // A baseline may name a master, which must be another key in the same baseline.
+    expect(unknownMasters(baseline: [pg, screen("benq", 1280, 853, mirrorOf: "pg")]).isEmpty,
+           "a master present in the baseline is accepted")
+    expect(unknownMasters(baseline: [pg, screen("benq", 1280, 853, mirrorOf: "absent")])
+               == ["benq"],
+           "a master absent from the baseline is rejected")
+    expect(unknownMasters(baseline: [screen("a", 100, 100, mirrorOf: "b"),
+                                     screen("b", 100, 100, mirrorOf: "a")]) == ["a", "b"],
+           "a display may not mirror another mirror")
+
     print("PASS layout comparison: topology, mirroring, rotation, position")
 }
 struct Mismatch { let key: String; let reason: String }
@@ -198,6 +208,16 @@ func mismatches(baseline: [Screen], live: [Screen]) -> [Mismatch] {
     }
     return found
 }
+
+/// Keys whose `mirrorOf` does not name a non-mirrored screen in the same baseline.
+/// A chain of mirrors has no meaning to CoreGraphics, so it is rejected as data.
+func unknownMasters(baseline: [Screen]) -> [String] {
+    let sources = Set(baseline.filter { $0.mirrorOf == nil }.map(\.key))
+    return baseline.filter { screen in
+        guard let master = screen.mirrorOf else { return false }
+        return !sources.contains(master)
+    }.map(\.key).sorted()
+}
 func run() throws {
     let args = CommandLine.arguments
     if args.count == 2 && args[1] == "status" {
@@ -214,13 +234,18 @@ func run() throws {
     let keys = ids.map(key)
     try require(Set(keys).count == ids.count, "Ambiguous display identities; no changes applied")
     let byKey = Dictionary(uniqueKeysWithValues: zip(keys, ids))
-    try require(ids.count == 2 && baseline.screens.count == 2 && Set(baseline.screens.map(\.key)) == Set(keys),
-                "Display topology differs from saved two-monitor setup; no changes applied")
+    // Set equality pins the topology exactly; it is strictly as strong as also
+    // hardcoding a count, and it does not assume how many displays are enrolled.
+    try require(baseline.screens.count == Set(baseline.screens.map(\.key)).count &&
+                Set(baseline.screens.map(\.key)) == Set(keys),
+                "Display topology differs from the saved setup; no changes applied")
+    try require(unknownMasters(baseline: baseline.screens).isEmpty,
+                "Saved layout mirrors a display that is not a source in the same baseline; no changes applied")
     let source = args[3]
     try require(source == "extended" || byKey[source] != nil, "Unknown source; no changes applied")
-    for saved in baseline.screens {
+    for saved in baseline.screens where saved.mirrorOf == nil {
         try require(saved.width > 0 && saved.height > 0 && saved.pixelWidth > 0 && saved.pixelHeight > 0 &&
-                    saved.hz.isFinite && saved.hz >= 0 && saved.mirrorOf == nil &&
+                    saved.hz.isFinite && saved.hz >= 0 &&
                     Int32(exactly: saved.x) != nil && Int32(exactly: saved.y) != nil,
                     "Invalid saved layout; no changes applied")
         try require(CGDisplayRotation(byKey[saved.key]!) == saved.rotation,

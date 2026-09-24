@@ -1,11 +1,19 @@
 import importlib.util,json,os,tempfile,unittest
 from pathlib import Path
 from unittest.mock import patch
-from health_check import report,mode_checks
+from health_check import report,mode_checks,lid_check
 spec=importlib.util.spec_from_file_location('controller_health',(Path(__file__).resolve().parents[2]/'display-auto.py'))
 c=importlib.util.module_from_spec(spec);spec.loader.exec_module(c)
 
 class HealthChecks(unittest.TestCase):
+    def test_doctor_reports_lid_enrollment(self):
+        enrolled=lid_check({'host':'B','keys':{'pg':'PG','benq':'BQ'},'builtin':'LID'})
+        self.assertEqual(enrolled['status'],'ok')
+        absent=lid_check({'host':'B','keys':{'pg':'PG','benq':'BQ'}})
+        self.assertEqual(absent['status'],'info')
+        self.assertIn('install.py B --capture-lid',absent['action'])
+        from health_check import setup_checks
+        self.assertEqual([c['name'] for c in setup_checks({'host':'B'})][-1],'Lid enrollment')
     def modes(self):
         screens=[dict(key=k,width=1280,height=853,pixelWidth=2560,pixelHeight=1706,rotation=0,modeID=67,hz=120) for k in ('p','b')]
         config={'host':'A','keys':{'pg':'p','benq':'b'},'baseline':{'screens':screens}}

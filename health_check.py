@@ -70,7 +70,20 @@ def setup_checks(config):
     detail+=' Automatic rotation is '+('configured.' if enabled else 'not configured.')
     checks.append({'name':'Rotation enrollment','status':'ok' if complete else 'warning' if enabled else 'info','detail':detail,
                    'action':'Confirm rotation physically after enrollment. Stored profiles do not prove sensor operation or timing.' if complete else 'Keep existing profiles. Capture the missing orientation through the installer on this Mac; do not copy profiles from another host.'})
+    checks.append(lid_check(config))
     return checks
+
+
+def lid_check(config):
+    builtin=config.get('builtin')
+    if isinstance(builtin,str) and builtin:
+        return {'name':'Lid enrollment','status':'ok',
+                'detail':'The built-in display is enrolled; while the lid is open it mirrors the PG, or the BenQ while the PG is away.',
+                'action':'Confirm the mirror physically with the lid open. Enrollment does not prove it.'}
+    host=config.get('host') if config.get('host') in ('A','B') else '<host>'
+    return {'name':'Lid enrollment','status':'info',
+            'detail':'The built-in display is not enrolled, so opening the lid idles automation.',
+            'action':f'To mirror it instead, open the lid and run python3 install.py {host} --capture-lid. It records only the built-in identity.'}
 
 
 def report(root, bin_dir, version, validate_config, read_inputs, inspect_modes=None):

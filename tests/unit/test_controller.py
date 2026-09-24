@@ -284,6 +284,22 @@ class ReliabilityTests(unittest.TestCase):
             with patch.object(c,'BASELINE',path):
                 with self.assertRaisesRegex(RuntimeError,'differs'): c.validate_config(config)
 
+    def test_validate_config_accepts_an_optional_builtin_identity(self):
+        from tempfile import TemporaryDirectory
+        with TemporaryDirectory() as temp:
+            path=Path(temp)/'baseline.json'
+            baseline={'screens':[{'key':'PG'},{'key':'BQ'}]}
+            path.write_text(json.dumps(baseline))
+            def config(**extra):
+                return dict({'version':c.VERSION,'host':'B','poll_interval':.25,
+                             'keys':{'pg':'PG','benq':'BQ'},'baseline':baseline},**extra)
+            with patch.object(c,'BASELINE',path):
+                c.validate_config(config())
+                c.validate_config(config(builtin='LID'))
+                for bad in ('PG','BQ','',7):
+                    with self.subTest(builtin=bad),self.assertRaisesRegex(RuntimeError,'built-in'):
+                        c.validate_config(config(builtin=bad))
+
     def test_capture_identifies_benq_on_either_input_edid(self):
         # The RD280UG publishes a different EDID product code per physical input, so
         # the two hosts see different model numbers for the same panel.

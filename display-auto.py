@@ -471,6 +471,9 @@ def validate_config(config):
         raise RuntimeError('Invalid two-display configuration')
     if set(x.get('key') for x in screens) != set(keys.values()):
         raise RuntimeError('Display keys differ from baseline')
+    builtin = config.get('builtin')
+    if builtin is not None and (not isinstance(builtin,str) or not builtin or builtin in keys.values()):
+        raise RuntimeError('Invalid built-in display configuration; rerun the installer with --capture-lid')
     audio = config.get('audio')
     if audio and audio.get('enabled'):
         if not isinstance(audio.get('refresh_on_transition', []), list) or not set(audio.get('refresh_on_transition', [])).issubset({'pg','benq'}):

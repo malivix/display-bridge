@@ -112,6 +112,34 @@ class InstallerEntryTests(unittest.TestCase):
             self.assertEqual(errors,{'Source files','Build tools'})
             self.assertEqual(list(Path(directory).iterdir()),[])
 
+    def test_builtin_key_requires_exactly_one_built_in_display(self):
+        module = self.load()
+        screens = [{'key': 'PG', 'builtin': False}, {'key': 'LID', 'builtin': True}]
+        self.assertEqual(module.builtin_key(screens), 'LID')
+        with self.assertRaisesRegex(RuntimeError, 'built-in'):
+            module.builtin_key([{'key': 'PG', 'builtin': False}])
+        with self.assertRaisesRegex(RuntimeError, 'built-in'):
+            module.builtin_key([{'key': 'A', 'builtin': True}, {'key': 'B', 'builtin': True}])
+        # Absent metadata is not an assertion that a display is internal.
+        with self.assertRaisesRegex(RuntimeError, 'built-in'):
+            module.builtin_key([{'key': 'PG'}, {'key': 'LID'}])
+
+    def test_lid_capture_needs_an_enrolled_host_and_changes_nothing_without_one(self):
+        module=self.load()
+        for existing in (None,'{"host":"A"}','{broken'):
+            with self.subTest(existing=existing),tempfile.TemporaryDirectory() as directory:
+                home=Path(directory);root=home/'.config/display-auto';root.mkdir(parents=True)
+                if existing:(root/'config.json').write_text(existing)
+                before={p.relative_to(home):p.read_bytes() for p in home.rglob('*') if p.is_file()}
+                paths=set(home.rglob('*'))
+                with patch('pathlib.Path.home',return_value=home),patch('platform.system',return_value='Darwin'),patch('platform.machine',return_value='arm64'),patch.object(module,'run',side_effect=AssertionError('No process before the enrollment guard')),contextlib.redirect_stderr(io.StringIO()) as error:
+                    with self.assertRaises(SystemExit) as result:
+                        module.main(['B','--capture-lid'])
+                self.assertEqual(result.exception.code,2)
+                self.assertIn('lid closed before --capture-lid',error.getvalue())
+                self.assertEqual(set(home.rglob('*')),paths)
+                self.assertEqual({p.relative_to(home):p.read_bytes() for p in home.rglob('*') if p.is_file()},before)
+
     def test_pending_or_damaged_preview_rejected_before_directory_changes(self):
         from scaling_preview import Preview
         module=self.load()

@@ -113,6 +113,27 @@ def interpreter_path():
     return python
 
 
+def enrolled_host(config_path, role):
+    try:
+        return json.loads(config_path.read_text()).get("host") == role
+    except (OSError, ValueError, AttributeError):
+        return False
+
+
+def builtin_key(screens):
+    """The identity of the internal panel, refusing to guess.
+
+    Enrolling the wrong display would mirror a projector or a meeting-room screen,
+    so only CoreGraphics' own answer counts and it must be unambiguous.
+    """
+    found = [s["key"] for s in screens if s.get("builtin") is True]
+    if len(found) != 1:
+        raise RuntimeError(
+            "Open the laptop lid and retry; exactly one built-in display must be online"
+        )
+    return found[0]
+
+
 def main(argv=None):
     with ExitStack() as resources:
         return run_install(argv, resources)
@@ -130,9 +151,11 @@ def run_install(argv, resources):
     capture = parser.add_mutually_exclusive_group()
     capture.add_argument("--capture-fixed-120", action="store_true")
     capture.add_argument("--capture-rotation", action="store_true")
+    capture.add_argument("--capture-lid", action="store_true",
+                         help="With the lid open, enroll the built-in display's identity only")
     args = parser.parse_args(argv)
     if args.status:
-        if args.capture_fixed_120 or args.capture_rotation:
+        if args.capture_fixed_120 or args.capture_rotation or args.capture_lid:
             parser.error("--status cannot be combined with capture options")
         from install_progress import read_progress
         result=read_progress(Path.home()/'.config/display-auto',args.host)
@@ -140,7 +163,7 @@ def run_install(argv, resources):
         if not result['available']:raise SystemExit(1)
         return
     if args.preflight:
-        if args.capture_fixed_120 or args.capture_rotation:
+        if args.capture_fixed_120 or args.capture_rotation or args.capture_lid:
             parser.error("--preflight cannot be combined with capture options")
         result=preflight(Path(__file__).resolve().parent,Path.home())
         print(json.dumps(dict(result,host=args.host),indent=2))
@@ -158,6 +181,8 @@ def run_install(argv, resources):
     root = home / ".config/display-auto"
     bin_dir = home / ".local/bin"
     require_service_namespace(home, label)
+    if args.capture_lid and not enrolled_host(root / "config.json", role):
+        parser.error(f"Install Mac {role} with the lid closed before --capture-lid")
     require_idle_preview(root)
     root.mkdir(mode=0o700, parents=True, exist_ok=True)
     root.chmod(0o700)
@@ -443,6 +468,17 @@ def run_install(argv, resources):
                         )
                         rotation["baselines"][str(int(angle))] = previous["baseline"]
                         rotation["enabled"] = set(rotation["baselines"]) == {"0", "90"}
+                if args.capture_lid:
+                    # Only the identity is recorded. The saved baseline stays the two
+                    # externals, so this never meets capture's exactly-two requirement.
+                    key = builtin_key(json.loads(
+                        run([str(bin_dir / "display-layout"), "status"],
+                            capture_output=True, text=True, check=True).stdout
+                    )["screens"])
+                    if key in previous["keys"].values():
+                        raise RuntimeError("The built-in display is already enrolled as an external")
+                    # Kept apart from keys, which everywhere means the two externals.
+                    previous["builtin"] = key
                 if "audio" not in previous:
                     import importlib.util
 

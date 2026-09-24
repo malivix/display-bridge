@@ -162,6 +162,22 @@ class Features(unittest.TestCase):
                 command.assert_not_called()
     def test_exact_pair_is_accepted(self):
         with patch.object(c,'layout',return_value=[{'key':'p'},{'key':'b'}]):c.verify_setup({'keys':{'pg':'p','benq':'b'}})
+    def test_setup_accepts_the_enrolled_lid_and_idles_on_any_other_display(self):
+        enrolled = {'keys': {'pg': 'p', 'benq': 'b'}, 'builtin': 'lid'}
+        plain = {'keys': {'pg': 'p', 'benq': 'b'}}
+        cases = [(enrolled, ['p', 'b'], True), (enrolled, ['p', 'b', 'lid'], True),
+                 (enrolled, ['p', 'b', 'projector'], False), (enrolled, ['p', 'lid'], False),
+                 (enrolled, ['p', 'b', 'lid', 'projector'], False), (enrolled, ['p', 'b', 'lid', 'lid'], False),
+                 (plain, ['p', 'b', 'lid'], False)]
+        for config, online, accepted in cases:
+            with self.subTest(online=online, enrolled='builtin' in config), \
+                 patch.object(c, 'layout', return_value=[{'key': k} for k in online]):
+                if accepted:
+                    c.verify_setup(config)
+                else:
+                    with self.assertRaisesRegex(c.SetupUnavailable, 'not the active setup'):
+                        c.verify_setup(config)
+
     def test_equal_hertz_does_not_accept_variable_mode(self):
         # The native comparison rejects another mode ID in strict mode (its self-test);
         # the derived intent must keep both fields so that rejection can happen.
@@ -200,6 +216,21 @@ class Features(unittest.TestCase):
             self.assertTrue(c.apply_rotation(cfg,'extended',90,{'pg':17,'benq':19}))
             self.assertEqual(cfg['baseline'],cfg['rotation']['baselines']['90'])
             command.assert_called_once();apply.assert_not_called()
+    def test_rotation_keeps_a_mirroring_lid_and_names_it_to_the_helper(self):
+        cfg=self.rotation_config();cfg['builtin']='lid'
+        before=[{'key':'p','rotation':0},{'key':'b','rotation':0},{'key':'lid','rotation':0,'mirrorOf':'p'}]
+        after=[dict(before[0]),{'key':'b','rotation':90},dict(before[2])]
+        with tempfile.TemporaryDirectory() as temp,patch.object(c,'ROOT',Path(temp)),patch.object(c,'layout',side_effect=[before,after]),patch.object(c,'confirm_inputs'),patch.object(c,'command') as command,patch.object(c,'apply') as apply:
+            self.assertTrue(c.apply_rotation(cfg,'extended',90,{'pg':17,'benq':19}))
+            apply.assert_not_called()
+            self.assertEqual(command.call_args.args[0][1:],['p','b','90','lid'])
+    def test_rotation_still_releases_a_mirrored_external_with_the_lid_enrolled(self):
+        cfg=self.rotation_config();cfg['builtin']='lid'
+        before=[{'key':'p','rotation':0},{'key':'b','rotation':0,'mirrorOf':'p'}]
+        after=[{'key':'p','rotation':0},{'key':'b','rotation':90}]
+        with tempfile.TemporaryDirectory() as temp,patch.object(c,'ROOT',Path(temp)),patch.object(c,'layout',side_effect=[before,after]),patch.object(c,'confirm_inputs'),patch.object(c,'command'),patch.object(c,'apply') as apply:
+            self.assertTrue(c.apply_rotation(cfg,'extended',90,{'pg':17,'benq':19}))
+            apply.assert_called_once()
     def test_preserve_and_unavailable_speaker(self):
         a={'enabled':True,'pg':'p','benq':'b','fallback':'i','preferences':{'extended':'preserve','away':'pg'}}
         devices=[{'uid':'p','default':True,'system':True,'alive':True},{'uid':'i','alive':True}]

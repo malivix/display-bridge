@@ -300,6 +300,58 @@ class ReliabilityTests(unittest.TestCase):
                     with self.subTest(builtin=bad),self.assertRaisesRegex(RuntimeError,'built-in'):
                         c.validate_config(config(builtin=bad))
 
+    def lid_saved(self, benq_rotation):
+        wide = benq_rotation == 0
+        return {'screens': [
+            {'key': 'PG', 'width': 2048, 'height': 1152, 'x': 0, 'y': 0, 'rotation': 0,
+             'pixelWidth': 4096, 'pixelHeight': 2304, 'hz': 120, 'modeID': 1, 'strictMode': True},
+            {'key': 'BQ', 'width': 1280 if wide else 853, 'height': 853 if wide else 1280,
+             'x': -1280 if wide else -853, 'y': 0, 'rotation': benq_rotation,
+             'pixelWidth': 2560 if wide else 1706, 'pixelHeight': 1706 if wide else 2560,
+             'hz': 120, 'modeID': 2, 'strictMode': True}]}
+
+    def test_lid_mirrors_the_pg_and_falls_back_to_the_benq(self):
+        config = {'keys': {'pg': 'PG', 'benq': 'BQ'}, 'builtin': 'LID', 'baseline': self.lid_saved(90)}
+
+        def lid(profile):
+            rows = {s['key']: s for s in
+                    c.derive_baseline(config, profile, lid_online=True)['screens']}
+            return rows.get('LID')
+
+        # The PG never rotates, so it is the target whenever it is present.
+        self.assertEqual(lid('extended')['mirrorOf'], 'PG')
+        self.assertEqual(lid('pg')['mirrorOf'], 'PG')
+        # Only when the PG is away does the BenQ become the target.
+        self.assertEqual(lid('benq')['mirrorOf'], 'BQ')
+        # The lid carries its target's geometry, so the portrait BenQ's never leaks
+        # onto the lid while the PG is present.
+        self.assertEqual((lid('extended')['width'], lid('extended')['rotation']), (2048, 0))
+        self.assertEqual((lid('benq')['width'], lid('benq')['rotation']), (853, 90))
+        self.assertNotIn('modeID', lid('extended'))
+        # With both externals away nothing is applied, and a closed lid adds no row.
+        self.assertIsNone(lid('away'))
+        self.assertNotIn('LID', {s['key'] for s in c.derive_baseline(config, 'extended')['screens']})
+        # The externals' rows are exactly what they are without the lid.
+        for profile in ('extended', 'pg', 'benq'):
+            with_lid = c.derive_baseline(config, profile, lid_online=True)['screens']
+            self.assertEqual(with_lid[:2], c.derive_baseline(config, profile)['screens'])
+
+    def test_lid_is_not_mirrored_when_it_is_not_enrolled(self):
+        config = {'keys': {'pg': 'PG', 'benq': 'BQ'}, 'baseline': self.lid_saved(0)}
+        rows = c.derive_baseline(config, 'extended', lid_online=True)['screens']
+        self.assertEqual({s['key'] for s in rows}, {'PG', 'BQ'})
+
+    def test_apply_includes_the_lid_only_while_it_is_online(self):
+        config = {'keys': {'pg': 'PG', 'benq': 'BQ'}, 'builtin': 'LID', 'baseline': self.lid_saved(0)}
+        for online, expected in ([['PG', 'BQ'], {'PG', 'BQ'}], [['PG', 'BQ', 'LID'], {'PG', 'BQ', 'LID'}]):
+            with self.subTest(online=online), tempfile.TemporaryDirectory() as temp, \
+                 patch.object(c, 'ROOT', Path(temp)), \
+                 patch.object(c, 'layout', return_value=[{'key': k} for k in online]), \
+                 patch.object(c, 'command', return_value='{"changed":true}'):
+                self.assertTrue(c.apply(config, 'extended'))
+                written = json.loads((Path(temp) / 'rotation-active.json').read_text())
+                self.assertEqual({s['key'] for s in written['screens']}, expected)
+
     def test_capture_identifies_benq_on_either_input_edid(self):
         # The RD280UG publishes a different EDID product code per physical input, so
         # the two hosts see different model numbers for the same panel.

@@ -135,11 +135,16 @@ def capture_identifiers(m1ddc):
         found[role]='uuid='+values[0]
     return found
 
+def accepted_setups(config):
+    """Online sets automation reconciles: the enrolled pair, plus the enrolled lid."""
+    pair=set(config['keys'].values())
+    return [pair]+([pair|{config['builtin']}] if config.get('builtin') else [])
+
 def verify_setup(config, deadline=None):
     screens=layout(deadline)
     keys=[s['key'] for s in screens]
-    if len(keys)!=2 or len(set(keys))!=2 or set(keys)!=set(config['keys'].values()):
-        raise SetupUnavailable('Saved PG and BenQ pair is not the active two-monitor setup; automation idle')
+    if len(set(keys))!=len(keys) or set(keys) not in accepted_setups(config):
+        raise SetupUnavailable('Saved displays are not the active setup; automation idle')
     if config.get('ddc_identifiers'):
         listing=command([config['m1ddc'],'display','list'],deadline=deadline)
         present=set(re.findall(r'\(([A-Fa-f0-9-]+)\)',listing))
@@ -196,7 +201,7 @@ class Debounce:
 
 GEOMETRY = ('width', 'height', 'pixelWidth', 'pixelHeight', 'hz', 'rotation', 'x', 'y')
 
-def derive_baseline(config, profile):
+def derive_baseline(config, profile, lid_online=False):
     """The layout intent for a profile, as a baseline the native helper can apply.
 
     A screen keeps its saved mode when it shows its own desktop. A screen that should
@@ -222,6 +227,13 @@ def derive_baseline(config, profile):
             screens.append(dict(screen, x=0, y=0))
         else:
             screens.append(mirror_row(screen['key'], source))
+    builtin = config.get('builtin')
+    if lid_online and builtin and profile in ('extended', 'pg', 'benq'):
+        # The PG never rotates, so it is the target whenever it shows this Mac; the
+        # BenQ is the target only when the PG is away. The lid has no saved geometry
+        # of its own, so its row carries its target's, like any mirrored row.
+        target = config['keys']['pg'] if profile in ('extended', 'pg') else config['keys']['benq']
+        screens.append(mirror_row(builtin, target))
     return {'screens': screens}
 
 def write_active_baseline(baseline):
@@ -238,7 +250,9 @@ def write_active_baseline(baseline):
 def apply(config, profile, deadline=None):
     if profile in ('away', 'unknown'):
         return False
-    path = write_active_baseline(derive_baseline(config, profile))
+    builtin = config.get('builtin')
+    lid_online = bool(builtin) and any(s['key'] == builtin for s in layout(deadline))
+    path = write_active_baseline(derive_baseline(config, profile, lid_online))
     return json.loads(command([HELPER, 'apply', path], 8, deadline))['changed'] is True
 
 def layout_matches(baseline, deadline=None):
@@ -311,13 +325,15 @@ def apply_rotation(config,profile,angle,inputs,deadline=None):
     select_rotation_baseline(config,current)
     if angle is None or profile not in ('extended','benq') or angle==current:return False
     # Only a confirmed local BenQ may rotate. Release mirroring first.
-    if any(s.get('mirrorOf') for s in screens):
+    # A mirroring lid may stay; only the externals must be extended to rotate.
+    if any(s.get('mirrorOf') for s in screens if s['key']!=config.get('builtin')):
         confirm_inputs(config,inputs,deadline)
         apply(config,'extended',deadline)
     confirm_inputs(config,inputs,deadline)
     rotation_started=time.monotonic()
     try:
-        command([ROTATE,config['keys']['pg'],config['keys']['benq'],str(angle)],6,deadline)
+        command([ROTATE,config['keys']['pg'],config['keys']['benq'],str(angle),
+                 *([config['builtin']] if config.get('builtin') else [])],6,deadline)
     finally:
         actual=next(s for s in layout(deadline) if s['key']==config['keys']['benq'])['rotation']
         rotation_readback(config,actual)

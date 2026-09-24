@@ -385,7 +385,8 @@ def capture_configuration(host, m1ddc):
     if len(screens) != 2 or any(x.get('mirrorOf') for x in screens):
         raise RuntimeError('Capture requires exactly two online, extended displays. Close the laptop lid if applicable.')
     if any(abs(s['hz']-120)>.2 for s in screens):raise RuntimeError('Select fixed 120 Hz on both displays before capture')
-    screens=[dict(s,strictMode=True) for s in screens]
+    # builtin is reported by the helper for enrollment; it is not layout intent.
+    screens=[dict({k:v for k,v in s.items() if k!='builtin'},strictMode=True) for s in screens]
     from hidpi_report import PANEL_IDENTITIES
     keys = {}
     for name in ('pg', 'benq'):

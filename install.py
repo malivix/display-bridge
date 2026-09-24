@@ -409,7 +409,11 @@ def run_install(argv, resources):
                     metadata=json.loads(run([str(bin_dir / "display-mode-info"),"status"],capture_output=True,text=True,check=True,timeout=10).stdout)
                     validate_capture_modes(screens,metadata,previous["keys"])
                     previous["baseline"] = {
-                        "screens": [dict(x, strictMode=True) for x in screens]
+                        # builtin is reported for enrollment; it is not layout intent.
+                        "screens": [
+                            dict({k: v for k, v in x.items() if k != "builtin"}, strictMode=True)
+                            for x in screens
+                        ]
                     }
                     angle = next(
                         s["rotation"]

@@ -17,6 +17,8 @@ struct Screen: Codable {
     let modeID: Int32?
     let ioFlags: UInt32?
     let strictMode: Bool?
+    /// CoreGraphics' own answer; reported only, never part of layout equality.
+    let builtin: Bool?
 }
 struct Layout: Codable { let screens: [Screen] }
 struct ModeDescription: Codable {
@@ -69,7 +71,8 @@ func screen(_ id: CGDirectDisplayID) throws -> Screen {
                   hz: mode.refreshRate, rotation: CGDisplayRotation(id),
                   x: Int(bounds.origin.x), y: Int(bounds.origin.y),
                   mirrorOf: master == 0 ? nil : key(master),
-                  modeID: mode.ioDisplayModeID, ioFlags: mode.ioFlags, strictMode:nil)
+                  modeID: mode.ioDisplayModeID, ioFlags: mode.ioFlags, strictMode:nil,
+                  builtin: CGDisplayIsBuiltin(id) != 0)
 }
 func transaction(_ body: (CGDisplayConfigRef) throws -> Void) throws {
     var reference: CGDisplayConfigRef?
@@ -104,7 +107,7 @@ func runLayoutSelfTests() {
                 modeID: Int32? = 1, strictMode: Bool? = true) -> Screen {
         Screen(key: key, width: w, height: h, pixelWidth: w * 2, pixelHeight: h * 2,
                hz: 120, rotation: rotation, x: x, y: y, mirrorOf: mirrorOf,
-               modeID: modeID, ioFlags: nil, strictMode: strictMode)
+               modeID: modeID, ioFlags: nil, strictMode: strictMode, builtin: nil)
     }
     func expect(_ condition: Bool, _ name: String) {
         if !condition {
@@ -165,6 +168,14 @@ func runLayoutSelfTests() {
     expect(unknownMasters(baseline: [screen("a", 100, 100, mirrorOf: "b"),
                                      screen("b", 100, 100, mirrorOf: "a")]) == ["a", "b"],
            "a display may not mirror another mirror")
+
+    // builtin is reported, and never participates in layout equality.
+    let lid = Screen(key: "lid", width: 1280, height: 853, pixelWidth: 2560, pixelHeight: 1706,
+                     hz: 120, rotation: 0, x: 0, y: 0, mirrorOf: "pg", modeID: 3,
+                     ioFlags: nil, strictMode: true, builtin: true)
+    expect(mismatches(baseline: [pg, screen("lid", 1280, 853, mirrorOf: "pg")],
+                      live: [pg, lid]).isEmpty,
+           "builtin does not affect layout equality")
 
     // The usage string is the contract the controller depends on; it has no source argument.
     expect(!usage.contains("SOURCE_KEY") && usage.contains("apply BASELINE.json") &&

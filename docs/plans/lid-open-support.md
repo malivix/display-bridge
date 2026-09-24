@@ -72,20 +72,22 @@ manifest, so they cannot disagree about the contract.
 
 ## Stage B: enroll and mirror the lid
 
-`config.keys` gains `builtin`, holding the built-in panel's `vendor:model:serial`. Every
-mutation stays gated on a saved identity.
+The configuration gains a top-level `builtin`, holding the built-in panel's
+`vendor:model:serial`. It stays outside `config.keys`, which a dozen readers across six
+modules treat as exactly the two externals, rotation validation among them. Every mutation
+stays gated on a saved identity.
 
 - New installer step `install.py <host> --capture-lid`, run once with the lid open. It records
-  `keys.builtin` only. It does not re-capture the baseline, so it never meets the exactly-two
+  `builtin` only. It does not re-capture the baseline, so it never meets the exactly-two
   requirement that ordinary capture enforces and needs no mode validation.
 - The installer requires `CGDisplayIsBuiltin` for the candidate before saving, so another
   display cannot be enrolled as the lid. `display-layout status` gains a `builtin` field.
-- Absent `keys.builtin` means lid support is not enrolled and behavior is exactly today's.
+- Absent `builtin` means lid support is not enrolled and behavior is exactly today's.
   No migration, and an existing install keeps working untouched.
 - The derived baseline appends `{key, mirrorOf}` for the built-in when it is online, composed
   after the rotation profile is selected. Rotation and lid stay two saved baselines, not four.
-- `validate_config` accepts `{pg, benq}` or `{pg, benq, builtin}` and rejects a `builtin`
-  value equal to either external. Baseline screens stay two.
+- `validate_config` accepts an absent or nonempty `builtin` and rejects one equal to either
+  external. Baseline screens stay two.
 - `doctor` reports lid enrollment, and whether the built-in is online and correctly mirrored.
 
 ## Decisions

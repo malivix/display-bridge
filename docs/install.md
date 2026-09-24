@@ -173,6 +173,28 @@ controller for the capture, and re-requests that pending recovery after writing 
 baseline, so attempts counted against the replaced baseline do not leave its verification
 exhausted. Both services restart when the capture finishes.
 
+## Mirror the built-in display with the lid open
+
+Without enrollment, a third online display idles automation, so an open lid stops
+reconciliation. To mirror the built-in display instead, install the host first with the lid
+closed, then open the lid and run:
+
+```sh
+python3 install.py A --capture-lid
+```
+
+Use `B` for Mac B. This records only the identity CoreGraphics reports as the built-in panel,
+as `builtin` in the configuration. It captures no baseline and no mode, so the saved baseline
+stays the two externals. It refuses when zero or several built-in displays are online, when
+the built-in display is already enrolled as an external, and when this host has no existing
+enrollment.
+
+While the lid is open, the built-in display mirrors the PG in the extended and PG profiles,
+because the PG never rotates. It mirrors the BenQ in the BenQ profile and is left alone when
+both monitors show the other Mac. Any other extra display still idles automation. Rotation
+works with the lid open. Size previews still need the lid closed and refuse otherwise, and
+so do `--capture-fixed-120` and `--capture-rotation`.
+
 ## Upgrade or replace a saved baseline
 
 Run the same installer for the same host to preserve an existing baseline and verify the

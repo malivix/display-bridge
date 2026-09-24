@@ -29,6 +29,11 @@ First put both monitors on the Mac being configured, use an extended desktop, an
 fixed 120 Hz, HDR off, and comfortable sizes. The installer requires exactly these two
 online displays; close the laptop lid if its built-in display is active.
 
+To keep working with the lid open afterwards, enroll the built-in display once with the lid
+open: `python3 install.py A --capture-lid` (or `B`). While the lid is open it then mirrors
+the PG, or the BenQ while the PG shows the other Mac. Without that step an open lid idles
+automation. Captures of the monitors themselves still need the lid closed.
+
 ```sh
 git clone https://github.com/malivix/display-bridge.git
 cd display-bridge

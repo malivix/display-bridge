@@ -6,6 +6,9 @@ Source changes only; installed production activation of the optional Shortcuts
 build remains unqualified. See the [usage guide](docs/shortcuts.md) and
 [qualification limits](docs/qualification.md).
 
+- Mirror an enrolled built-in display while the lid is open instead of idling: onto the PG,
+  or onto the BenQ while the PG is away. Enroll it with `install.py <host> --capture-lid`.
+  Doctor reports the enrollment. Any other extra display still idles automation.
 - Describe each profile's layout, mirroring included, in the applied baseline. The native
   helper alone compares it with the live layout, skips the apply when they already match,
   and verifies its own readback. `display-layout apply` no longer takes a source argument,

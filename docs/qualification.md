@@ -35,6 +35,12 @@ That is a first deployment, one observed transition and a completed rotation enr
 a Mac B switching, listening or rotation qualification. Listening, both-away and both-return
 orders, sleep/wake, and an actual sensor-driven rotation have not been exercised on Mac B.
 
+Lid-open support was then installed on Mac B. With the lid closed, the installer's
+four layout transitions passed on it and on the layout refactor before it, doctor reported ok,
+and the log showed no readback failure. The built-in display has not been enrolled or
+observed with the lid open yet. Mirroring per profile and rotation with the lid open have
+unit coverage only.
+
 A release should record the exact revision, OS, model/connection categories, test commands,
 physical outcomes, and unresolved cases without publishing serials, UUIDs, local paths, or logs.
 

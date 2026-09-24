@@ -311,6 +311,20 @@ func run() throws {
                 try check(CGConfigureDisplayMirrorOfDisplay(config, byKey[saved.key]!, byKey[master]!), "mirror")
             }
         }
+        // CoreGraphics keeps the current main display at the origin when a transaction
+        // also changes mirroring, shifting the requested origins to fit. Opening the lid
+        // can leave a display other than the saved main as main, so position again in a
+        // transaction of origins alone, which does move the main display.
+        if sources.contains(where: { saved in
+            let bounds = CGDisplayBounds(byKey[saved.key]!)
+            return Int(bounds.origin.x) != saved.x || Int(bounds.origin.y) != saved.y
+        }) {
+            try transaction { config in
+                for saved in sources {
+                    try check(CGConfigureDisplayOrigin(config, byKey[saved.key]!, Int32(saved.x), Int32(saved.y)), "position display")
+                }
+            }
+        }
     } catch {
         if releasedMirror {
             do {

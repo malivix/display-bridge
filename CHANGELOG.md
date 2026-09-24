@@ -6,6 +6,10 @@ Source changes only; installed production activation of the optional Shortcuts
 build remains unqualified. See the [usage guide](docs/shortcuts.md) and
 [qualification limits](docs/qualification.md).
 
+- Describe each profile's layout, mirroring included, in the applied baseline. The native
+  helper alone compares it with the live layout, skips the apply when they already match,
+  and verifies its own readback. `display-layout apply` no longer takes a source argument,
+  and the new read-only `display-layout check` backs the preview verifier.
 - Re-request pending recovery after a capture replaces the baseline, so attempts counted
   against the replaced one no longer leave verification exhausted. A rotation capture for
   the orientation that differs from the saved baseline no longer needs manual service

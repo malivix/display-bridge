@@ -8,7 +8,30 @@
 
 static CFTypeRef getCFStringRef(io_service_t service, char* key) {
     CFStringRef cfstring = CFStringCreateWithCString(kCFAllocatorDefault, key, kCFStringEncodingASCII);
-    return IORegistryEntrySearchCFProperty(service, kIOServicePlane, cfstring, kCFAllocatorDefault, kIORegistryIterateRecursively);
+    if (cfstring == NULL) return NULL;
+    CFTypeRef value = IORegistryEntrySearchCFProperty(service, kIOServicePlane, cfstring, kCFAllocatorDefault, kIORegistryIterateRecursively);
+    CFRelease(cfstring);
+    return value;
+}
+
+// Retains a property value only when it has the expected type.
+static NSString *retainedString(NSDictionary *dictionary, NSString *key) {
+    id value = [dictionary objectForKey:key];
+    return [value isKindOfClass:[NSString class]] ? [value retain] : nil;
+}
+
+static void releaseDisplayInfo(DisplayInfos *display) {
+    if (display->adapter != MACH_PORT_NULL) IOObjectRelease(display->adapter);
+    if (display->edid) CFRelease((CFTypeRef)display->edid);
+    [display->productName release];
+    [display->manufacturer release];
+    [display->alphNumSerial release];
+    if (display->info) CFRelease(display->info);
+    memset(display, 0, sizeof(*display));
+}
+
+void releaseDisplayInfos(DisplayInfos *displayInfos, int count) {
+    for (int i = 0; i < count; i++) releaseDisplayInfo(displayInfos + i);
 }
 
 static Boolean isMCDP29XXProxy(io_service_t proxy) {
@@ -37,20 +60,24 @@ static Boolean isMCDP29XXProxy(io_service_t proxy) {
 
 CGDisplayCount getOnlineDisplayInfos(DisplayInfos* displayInfos) {
     // Getting online display list and count
-    CGDisplayCount screenCount;
+    CGDisplayCount screenCount = 0;
     CGDirectDisplayID screenList[MAX_DISPLAYS];
-    CGGetOnlineDisplayList(MAX_DISPLAYS, screenList, &screenCount);
+    memset(displayInfos, 0, sizeof(DisplayInfos) * MAX_DISPLAYS);
+    if (CGGetOnlineDisplayList(MAX_DISPLAYS, screenList, &screenCount) != kCGErrorSuccess) {
+        return 0;
+    }
 
     int validDisplayCount = 0;
     // Fetching each display infos from IOKit
-    for (int i = 0; i < (int)screenCount && validDisplayCount < MAX_DISPLAYS; i++) {
+    for (int i = 0; i < (int)screenCount && i < MAX_DISPLAYS && validDisplayCount < MAX_DISPLAYS; i++) {
         DisplayInfos *currDisplay = displayInfos + validDisplayCount;
         currDisplay->id = screenList[i];
 
         // This is a private API, but it's a shortcut to get the system UUID
-        CFDictionaryRef displayInfoDict = CoreDisplay_DisplayCreateInfoDictionary(currDisplay->id);
-        if (displayInfoDict == NULL) {
+        currDisplay->info = CoreDisplay_DisplayCreateInfoDictionary(currDisplay->id);
+        if (currDisplay->info == NULL) {
             // Skip virtual displays that don't provide info dictionary
+            releaseDisplayInfo(currDisplay);
             continue;
         }
 
@@ -58,32 +85,44 @@ CGDisplayCount getOnlineDisplayInfos(DisplayInfos* displayInfos) {
         currDisplay->model = CGDisplayModelNumber(currDisplay->id);
         currDisplay->vendor = CGDisplayVendorNumber(currDisplay->id);
 
-        currDisplay->uuid = CFDictionaryGetValue(displayInfoDict, CFSTR("kCGDisplayUUID"));
-        currDisplay->ioLocation = CFDictionaryGetValue(displayInfoDict, CFSTR("IODisplayLocation"));
+        CFTypeRef uuid = CFDictionaryGetValue(currDisplay->info, CFSTR("kCGDisplayUUID"));
+        CFTypeRef location = CFDictionaryGetValue(currDisplay->info, CFSTR("IODisplayLocation"));
 
         // Skip virtual displays (like Sidecar/AirPlay) that don't have required properties
-        if (currDisplay->uuid == NULL || currDisplay->ioLocation == NULL) {
+        if (uuid == NULL || location == NULL ||
+            CFGetTypeID(uuid) != CFStringGetTypeID() || CFGetTypeID(location) != CFStringGetTypeID()) {
+            releaseDisplayInfo(currDisplay);
             continue;
         }
+        currDisplay->uuid = (NSString *)uuid;
+        currDisplay->ioLocation = (NSString *)location;
 
         // Retrieving IORegistry entry for display
         currDisplay->adapter = IORegistryEntryCopyFromPath(kIOMainPortDefault, (CFStringRef)currDisplay->ioLocation);
         if (currDisplay->adapter == MACH_PORT_NULL) {
+            releaseDisplayInfo(currDisplay);
             continue;
         }
 
         // If successful, we can retrieve the EDID UUID, and other display attributes
-        currDisplay->edid = getCFStringRef(currDisplay->adapter, "EDID UUID");
-        CFDictionaryRef displayAttrs = getCFStringRef(currDisplay->adapter, "DisplayAttributes");
-        if (displayAttrs) {
-            NSDictionary* displayAttrsNS = (NSDictionary*)displayAttrs;
-            NSDictionary* productAttrs = [displayAttrsNS objectForKey:@"ProductAttributes"];
-            if (productAttrs) {
-                currDisplay->productName = [productAttrs objectForKey:@"ProductName"] ?: @"Unknown Display";
-                currDisplay->manufacturer = [productAttrs objectForKey:@"ManufacturerID"];
-                currDisplay->alphNumSerial = [productAttrs objectForKey:@"AlphanumericSerialNumber"];
+        CFTypeRef edid = getCFStringRef(currDisplay->adapter, "EDID UUID");
+        if (edid != NULL && CFGetTypeID(edid) != CFStringGetTypeID()) {
+            CFRelease(edid);
+            edid = NULL;
+        }
+        currDisplay->edid = (NSString *)edid;
+        CFTypeRef displayAttrs = getCFStringRef(currDisplay->adapter, "DisplayAttributes");
+        if (displayAttrs && CFGetTypeID(displayAttrs) == CFDictionaryGetTypeID()) {
+            NSDictionary* productAttrs = [(NSDictionary*)displayAttrs objectForKey:@"ProductAttributes"];
+            if ([productAttrs isKindOfClass:[NSDictionary class]]) {
+                currDisplay->productName = retainedString(productAttrs, @"ProductName");
+                currDisplay->manufacturer = retainedString(productAttrs, @"ManufacturerID");
+                currDisplay->alphNumSerial = retainedString(productAttrs, @"AlphanumericSerialNumber");
             }
         }
+        if (displayAttrs) CFRelease(displayAttrs);
+        // Standby and hotplug can omit product attributes; listing must not read garbage.
+        if (currDisplay->productName == nil) currDisplay->productName = [@"Unknown Display" retain];
 
         validDisplayCount++;
     }
@@ -139,13 +178,15 @@ NSString *getDisplayIdentifier(DisplayInfos *display, char *identificationMethod
     return NULL;
 }
 
-DisplayInfos* selectDisplay(DisplayInfos *displays, int connectedDisplays, char *displayIdentifier) {
+DisplayInfos* selectDisplay(DisplayInfos *displays, int connectedDisplays, char *displayIdentifier, bool *ambiguous) {
+    *ambiguous = false;
+    if (displayIdentifier[0] == '\0') return NULL;
 
     // Checking if display identifier is a display index from the "list" command
     char *stop;
     long displayNumber = strtol(displayIdentifier, &stop, 10);
     if (*stop == '\0') {
-        return displayNumber <= connectedDisplays ? displays + (displayNumber - 1) : NULL;
+        return displayNumber >= 1 && displayNumber <= connectedDisplays ? displays + (displayNumber - 1) : NULL;
     }
 
     // Checking if an identification method is specified, otherwise defaulting to UUID
@@ -160,22 +201,27 @@ DisplayInfos* selectDisplay(DisplayInfos *displays, int connectedDisplays, char 
         displayIdentifier = delimiter + 1;
     }
 
-    // Searching for display that matchs the identifier for the given identification method
+    // Identical monitors can share basic identifiers, and CoreGraphics order can change
+    // across wake or hotplug, so a value that matches more than one display selects none.
+    DisplayInfos *match = NULL;
     for (int i = 0; i < connectedDisplays; i++) {
         const char *displayValue = getDisplayIdentifier(displays + i, identificationMethod).UTF8String;
         if (displayValue != NULL && STR_EQ(displayIdentifier, displayValue)) {
-            return displays + i;
+            if (match != NULL) {
+                *ambiguous = true;
+                return NULL;
+            }
+            match = displays + i;
         }
     }
-    return NULL;
+    return match;
 }
 
 static kern_return_t getIORegistryRootIterator(io_iterator_t* iter) {
+    *iter = MACH_PORT_NULL;
     io_registry_entry_t root = IORegistryGetRootEntry(kIOMainPortDefault);
     kern_return_t ret = IORegistryEntryCreateIterator(root, kIOServicePlane, kIORegistryIterateRecursively, iter);
-    if (ret != KERN_SUCCESS) {
-        IOObjectRelease(*iter);
-    }
+    IOObjectRelease(root);
     return ret;
 }
 

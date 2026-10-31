@@ -1,5 +1,32 @@
 # Changelog
 
+## Unreleased
+
+Source changes only; not installed. Physical qualification is listed in
+[docs/log/2026-10-31-windowserver-connection-churn.md](docs/log/2026-10-31-windowserver-connection-churn.md).
+
+- Read monitors through one long-lived `display-ddc serve` process instead of starting
+  four or five helpers per poll. Each helper opened and closed its own WindowServer
+  connection, about 270,000 a day, and WindowServer exited after about a day of uptime
+  twice in a row, logging the user out. The reader is recycled every 10 minutes and after
+  any timeout, exit or malformed reply. The per-poll topology check now uses the reader's
+  `display keys`, the same identity the layout helper reports.
+- Tolerate isolated missed DDC replies: two consecutive failures neither report the monitor
+  unavailable nor force a full reconciliation afterwards. Sustained failures (a monitor off
+  or in standby) back off up to 4 s between polls instead of retrying four times a second.
+- A monitor that does not answer during a transition's input confirmation now counts as
+  settling, not as a failed recovery attempt, so a flapping monitor no longer exhausts the
+  retry budget and leaves the controller degraded.
+- `display-layout apply` defers without changing anything while an online display is asleep;
+  the controller reports it under "waiting for monitor response" and retries on a new input
+  state or after 30 s. The apply timeout is 20 s so a slow mode change is not killed between
+  its unmirror and restore transactions.
+- `display-ddc`: refuse an identifier that matches more than one display, validate display
+  indexes, check the online-display list for errors, allow 16 online displays, initialize
+  and release every enumerated field, and terminate any command after 8 s.
+- `display-audio status` skips a device that disappears during enumeration instead of
+  failing the whole inventory; `display-rotate` explains each refusal.
+
 ## 2.11.0 — current source milestone
 
 Source changes only; installed production activation of the optional Shortcuts

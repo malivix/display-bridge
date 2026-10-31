@@ -29,6 +29,19 @@ static NSString *text(AudioObjectID object, AudioObjectPropertySelector selector
     if(result || !value) fail(@"CoreAudio identity read failed");
     return CFBridgingRelease(value);
 }
+// Per-device reads for enumeration: a device that disappears mid-listing (a monitor
+// powered off) is skipped instead of failing the whole inventory.
+static BOOL tryInteger(AudioObjectID object, AudioObjectPropertySelector selector, UInt32 *value) {
+    UInt32 size=sizeof(*value);*value=0;
+    AudioObjectPropertyAddress a=address(selector,kAudioObjectPropertyScopeGlobal);
+    return AudioObjectGetPropertyData(object,&a,0,NULL,&size,value)==noErr;
+}
+static NSString *tryText(AudioObjectID object, AudioObjectPropertySelector selector) {
+    CFStringRef value=NULL; UInt32 size=sizeof(value);
+    AudioObjectPropertyAddress a=address(selector,kAudioObjectPropertyScopeGlobal);
+    if(AudioObjectGetPropertyData(object,&a,0,NULL,&size,&value) || !value) return nil;
+    return CFBridgingRelease(value);
+}
 static Float64 sampleRate(AudioObjectID id);
 static id optionalRate(AudioObjectID id) {
     Float64 value=0;UInt32 size=sizeof(value);
@@ -50,10 +63,14 @@ static NSArray *outputs(void) {
         AudioObjectID id=ids[i]; UInt32 streamBytes=0;
         a=address(kAudioDevicePropertyStreams,kAudioDevicePropertyScopeOutput);
         if(AudioObjectGetPropertyDataSize(id,&a,0,NULL,&streamBytes) || !streamBytes) continue;
-        [rows addObject:@{@"id":@(id), @"name":text(id,kAudioObjectPropertyName),
-            @"uid":text(id,kAudioDevicePropertyDeviceUID), @"sampleRate":optionalRate(id), @"default":@(id==defaultID),
-            @"system":@(id==systemID), @"alive":@(integer(id,kAudioDevicePropertyDeviceIsAlive)!=0),
-            @"builtin":@(integer(id,kAudioDevicePropertyTransportType)==kAudioDeviceTransportTypeBuiltIn)}];
+        NSString *name=tryText(id,kAudioObjectPropertyName),*uid=tryText(id,kAudioDevicePropertyDeviceUID);
+        UInt32 alive=0,transport=0;
+        if(!name || !uid || !tryInteger(id,kAudioDevicePropertyDeviceIsAlive,&alive) ||
+           !tryInteger(id,kAudioDevicePropertyTransportType,&transport)) continue;
+        [rows addObject:@{@"id":@(id), @"name":name,
+            @"uid":uid, @"sampleRate":optionalRate(id), @"default":@(id==defaultID),
+            @"system":@(id==systemID), @"alive":@(alive!=0),
+            @"builtin":@(transport==kAudioDeviceTransportTypeBuiltIn)}];
     }
     free(ids);return rows;
 }

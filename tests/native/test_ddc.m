@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include "i2c.h"
 #include "reply_validation.h"
+#include "ioregistry.h"
 static uint32_t sentLength;
 IOReturn IOAVServiceWriteI2C(IOAVServiceRef service, uint32_t chip, uint32_t offset,
                            void *buffer, uint32_t length) {
@@ -33,6 +34,23 @@ int main(void) {
     assert(!validVCPReply(hdmi2, 0x60));
     uint8_t empty[12] = {0};
     assert(!validVCPReply(empty, 0x60));
-    puts("PASS DDC request checksum, retry, matching VCP, response status, and reply checksum");
+    DisplayInfos twins[3] = {0};
+    for (int i = 0; i < 3; i++) { twins[i].vendor = 2513; twins[i].model = 32963; twins[i].serial = 0; }
+    twins[0].uuid = @"A"; twins[1].uuid = @"B"; twins[2].vendor = 1715; twins[2].uuid = @"C";
+    bool ambiguous = true;
+    char exact[] = "uuid=B";
+    assert(selectDisplay(twins, 3, exact, &ambiguous) == twins + 1 && !ambiguous);
+    char shared[] = "basic=2513:32963:0";
+    assert(selectDisplay(twins, 3, shared, &ambiguous) == NULL && ambiguous); // Identical monitors select none.
+    char unique[] = "basic=1715:32963:0";
+    assert(selectDisplay(twins, 3, unique, &ambiguous) == twins + 2 && !ambiguous);
+    char zero[] = "0", negative[] = "-1", past[] = "4", blank[] = "", first[] = "1", missing[] = "uuid=Z";
+    assert(selectDisplay(twins, 3, zero, &ambiguous) == NULL);
+    assert(selectDisplay(twins, 3, negative, &ambiguous) == NULL);
+    assert(selectDisplay(twins, 3, past, &ambiguous) == NULL);
+    assert(selectDisplay(twins, 3, blank, &ambiguous) == NULL);
+    assert(selectDisplay(twins, 3, missing, &ambiguous) == NULL && !ambiguous);
+    assert(selectDisplay(twins, 3, first, &ambiguous) == twins);
+    puts("PASS DDC request checksum, retry, matching VCP, response status, reply checksum, and display selection");
     return 0;
 }

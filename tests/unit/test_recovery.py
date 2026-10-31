@@ -82,7 +82,7 @@ class RegressionTests(unittest.TestCase):
     def test_ddc_recovery_rearms_exhausted_pending_work(self):
         work=c.Recovery();work.select({'pg':17,'benq':19},'extended')
         for i in range(3):work.failed('offline',i)
-        with patch.object(c,'new_recovery',return_value=work),patch.object(c,'write_health'),patch.object(c,'read_inputs',side_effect=[RuntimeError('DDC offline'),{'pg':17,'benq':19},{'pg':17,'benq':19}]),patch.object(c,'apply',return_value=False),patch.object(c,'sync_audio',side_effect=Finished):
+        with patch.object(c,'new_recovery',return_value=work),patch.object(c,'write_health'),patch.object(c,'read_inputs',side_effect=[*[RuntimeError('DDC offline')]*c.TRANSIENT_DDC_FAILURES,{'pg':17,'benq':19},{'pg':17,'benq':19}]),patch.object(c,'ddc_failure_delay',return_value=0),patch.object(c,'apply',return_value=False),patch.object(c,'sync_audio',side_effect=Finished):
             with self.assertRaises(Finished):c.watch({'host':'A','poll_interval':0})
         self.assertFalse(work.exhausted)
 

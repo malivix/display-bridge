@@ -9,6 +9,7 @@ from logging.handlers import RotatingFileHandler
 import os
 from pathlib import Path
 import re
+import select
 import subprocess
 import sys
 import tempfile
@@ -123,6 +124,93 @@ def command(args, timeout=5, deadline=None):
 def layout(deadline=None):
     return json.loads(command([HELPER, 'status'], deadline=deadline))['screens']
 
+class DDCServer:
+    """One long-lived `display-ddc serve` process for the controller's frequent reads.
+
+    Each short-lived helper opens and closes its own WindowServer connection; at the
+    polling rate that was several hundred thousand connections a day. One reader keeps
+    a single connection. It is recycled periodically and after any failure, so a
+    wedged or stale reader is never trusted for long.
+    """
+    RECYCLE_SECONDS = 600
+    MAX_REPLY = 65536
+
+    def __init__(self, executable):
+        self.executable = str(executable)
+        self.name = Path(self.executable).name
+        self.process, self.started, self.buffer = None, 0.0, b''
+
+    def close(self):
+        process, self.process, self.buffer = self.process, None, b''
+        if process is None:
+            return
+        try:
+            process.stdin.close()
+        except OSError:
+            pass
+        try:
+            process.wait(timeout=.5)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait()
+        process.stdout.close()
+
+    def run(self, args, timeout):
+        args = [str(x) for x in args]
+        if not args or any(not x or any(c.isspace() for c in x) for x in args):
+            raise ValueError('DDC request arguments must be nonempty and contain no whitespace')
+        if self.process is not None and (self.process.poll() is not None or
+                                         time.monotonic() - self.started >= self.RECYCLE_SECONDS):
+            self.close()
+        if self.process is None:
+            self.process = subprocess.Popen([self.executable, 'serve'], stdin=subprocess.PIPE,
+                                            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+            self.started = time.monotonic()
+        try:
+            self.process.stdin.write((' '.join(args) + '\n').encode())
+            self.process.stdin.flush()
+            line = self._read_line(time.monotonic() + timeout)
+        except subprocess.TimeoutExpired:
+            self.close()
+            raise subprocess.TimeoutExpired([self.executable, *args], timeout) from None
+        except OSError as error:
+            self.close()
+            raise RuntimeError(f'{self.name}: reader unavailable: {error}') from error
+        try:
+            reply = json.loads(line)
+            status, out, err = reply['status'], reply['stdout'], reply['stderr']
+            if type(status) is not int or not isinstance(out, str) or not isinstance(err, str):
+                raise TypeError('unexpected reply types')
+        except (ValueError, KeyError, TypeError) as error:
+            self.close()
+            raise RuntimeError(f'{self.name}: invalid reader reply') from error
+        if status:
+            raise RuntimeError(f'{self.name}: {err.strip() or out.strip()}')
+        return out.strip()
+
+    def _read_line(self, deadline):
+        stream = self.process.stdout.fileno()
+        while b'\n' not in self.buffer:
+            left = deadline - time.monotonic()
+            if left <= 0 or not select.select([stream], [], [], left)[0]:
+                raise subprocess.TimeoutExpired(self.executable, 0)
+            chunk = os.read(stream, 4096)
+            if not chunk:
+                raise OSError('reader exited')
+            self.buffer += chunk
+            if len(self.buffer) > self.MAX_REPLY:
+                raise OSError('reader reply too large')
+        line, _, self.buffer = self.buffer.partition(b'\n')
+        return line.decode()
+
+# Set only while the controller watches; one-shot commands keep separate processes.
+DDC_READER = None
+
+def ddc(config, args, timeout=5, deadline=None):
+    if DDC_READER is None:
+        return command([config['m1ddc'], *args], timeout, deadline)
+    return DDC_READER.run(args, remaining(deadline, timeout))
+
 class SetupUnavailable(RuntimeError):
     pass
 
@@ -141,18 +229,27 @@ def accepted_setups(config):
     return [pair]+([pair|{config['builtin']}] if config.get('builtin') else [])
 
 def verify_setup(config, deadline=None):
-    screens=layout(deadline)
-    keys=[s['key'] for s in screens]
+    # The DDC reader reports the same vendor:model:serial keys as the layout helper,
+    # so the per-poll topology check needs no extra process.
+    keys=ddc(config,['display','keys'],deadline=deadline).split()
     if len(set(keys))!=len(keys) or set(keys) not in accepted_setups(config):
         raise SetupUnavailable('Saved displays are not the active setup; automation idle')
     if config.get('ddc_identifiers'):
-        listing=command([config['m1ddc'],'display','list'],deadline=deadline)
+        listing=ddc(config,['display','list'],deadline=deadline)
         present=set(re.findall(r'\(([A-Fa-f0-9-]+)\)',listing))
         if not all(value.removeprefix('uuid=') in present for value in config['ddc_identifiers'].values()):
             raise SetupUnavailable('Saved display identities are absent; automation idle')
 
+class DDCReadFailed(RuntimeError):
+    """A monitor did not answer; nothing is known, so nothing may change."""
+
 def read_inputs(config, deadline=None):
-    verify_setup(config,deadline)
+    try:
+        verify_setup(config,deadline)
+    except SetupUnavailable:
+        raise
+    except (RuntimeError, subprocess.TimeoutExpired, OSError) as error:
+        raise DDCReadFailed(f'display identity: {error}') from error
     values = {}
     ROOT.mkdir(parents=True, exist_ok=True)
     # Status commands and the daemon must not issue DDC requests concurrently.
@@ -160,11 +257,11 @@ def read_inputs(config, deadline=None):
         acquire_lock(lock, remaining(deadline, 2))
         for name in ('pg', 'benq'):
             try:
-                text = command([config['m1ddc'], 'display', config.get('ddc_identifiers',{}).get(name,'basic=' + config['keys'][name]), 'get', 'input'], 3, deadline)
+                text = ddc(config, ['display', config.get('ddc_identifiers',{}).get(name,'basic=' + config['keys'][name]), 'get', 'input'], 3, deadline)
             except (RuntimeError, subprocess.TimeoutExpired, OSError) as error:
-                raise RuntimeError(f'{name}: {error}') from error
+                raise DDCReadFailed(f'{name}: {error}') from error
             if not re.fullmatch(r'[0-9]+', text):
-                raise RuntimeError(f'{name}: invalid DDC response {text!r}')
+                raise DDCReadFailed(f'{name}: invalid DDC response {text!r}')
             values[name] = int(text)
     return values
 
@@ -247,13 +344,23 @@ def write_active_baseline(baseline):
         temporary.replace(path)
     return path
 
+class LayoutDeferred(RuntimeError):
+    """The layout differs but a display is asleep; nothing was changed."""
+
+# Up to three CoreGraphics transactions plus link retraining; killing the helper
+# between its unmirror and restore transactions would leave a half-applied layout.
+APPLY_TIMEOUT = 20
+
 def apply(config, profile, deadline=None):
     if profile in ('away', 'unknown'):
         return False
     builtin = config.get('builtin')
     lid_online = bool(builtin) and any(s['key'] == builtin for s in layout(deadline))
     path = write_active_baseline(derive_baseline(config, profile, lid_online))
-    return json.loads(command([HELPER, 'apply', path], 8, deadline))['changed'] is True
+    result = json.loads(command([HELPER, 'apply', path], APPLY_TIMEOUT, deadline))
+    if result.get('deferred'):
+        raise LayoutDeferred(f"Layout differs but a display is {result['deferred']}; changes deferred until it wakes")
+    return result['changed'] is True
 
 def layout_matches(baseline, deadline=None):
     """Read-only: whether the live layout already satisfies a baseline."""
@@ -267,7 +374,7 @@ def read_rotation(config,profile,deadline=None):
     if not rotation.get('enabled') or profile not in ('extended','benq'):return None
     with (ROOT/'ddc.lock').open('a') as lock:
         acquire_lock(lock,remaining(deadline,2))
-        value=command([config['m1ddc'],'display',config['ddc_identifiers']['benq'],'get','orientation'],3,deadline)
+        value=ddc(config,['display',config['ddc_identifiers']['benq'],'get','orientation'],3,deadline)
     angle=rotation.get('sensor_map',{}).get(value)
     if angle not in (0,90):raise RuntimeError('BenQ orientation is not calibrated: '+value)
     return angle
@@ -526,7 +633,31 @@ def confirm_inputs(config, expected, deadline=None):
     if read_inputs(config,deadline) != expected:
         raise InputsChanged('Inputs changed during layout application; superseding old audio work')
 
+# A monitor that briefly misses one DDC reply is common; only consecutive failures
+# report the monitor as unavailable. Sustained failures (a monitor that is off or in
+# standby) back off, staying under the five-second wake-gap threshold.
+TRANSIENT_DDC_FAILURES = 3
+DDC_BACKOFF_MAX = 4.0
+# How long a layout deferred for a sleeping display waits before it is retried.
+DEFERRED_RETRY_SECONDS = 30
+
+def ddc_failure_delay(poll_interval, failures):
+    if failures < TRANSIENT_DDC_FAILURES:
+        return poll_interval
+    return min(DDC_BACKOFF_MAX, max(poll_interval, .25) * 2 ** (failures - TRANSIENT_DDC_FAILURES + 1))
+
 def watch(config, once=False, interrupt=None):
+    global DDC_READER
+    if once or DDC_READER is not None or not config.get('m1ddc'):
+        return watch_loop(config, once, interrupt)
+    DDC_READER = DDCServer(config['m1ddc'])
+    try:
+        return watch_loop(config, once, interrupt)
+    finally:
+        reader, DDC_READER = DDC_READER, None
+        reader.close()
+
+def watch_loop(config, once=False, interrupt=None):
     deadline = time.monotonic() + ONCE_TIMEOUT if once else None
     recovery_failed=False
     while True:
@@ -551,6 +682,8 @@ def watch(config, once=False, interrupt=None):
     profile, inputs = None, None
     heartbeat = 0
     control_failed=False
+    ddc_failures=0
+    deferred=None  # (state, retry_at) after a layout deferred for a sleeping display
     write_health(config, status)
     LOG.info('Started v%s host=%s backend=m1ddc-read-fix2+CoreGraphics', VERSION, config['host'])
     while True:
@@ -634,17 +767,27 @@ def watch(config, once=False, interrupt=None):
                 if once:raise
                 time.sleep(max(2,config['poll_interval']));continue
             except (RuntimeError, subprocess.TimeoutExpired, OSError) as error:
-                debounce.reset(); last = None; status='waiting-for-ddc'
-                if warned != 'ddc':
-                    LOG.warning('DDC unavailable; no changes: %s', error)
-                    write_health(config, status, error=str(error), recovery=work.data)
-                warned='ddc'
-                if now >= heartbeat:
-                    write_health(config,status,profile,inputs,error=str(error),recovery=work.data)
-                    heartbeat=now+2
+                # A failed read never changes anything, and two fresh samples are
+                # required again either way.
+                debounce.reset()
                 if once: raise
+                ddc_failures+=1
+                if ddc_failures>=TRANSIENT_DDC_FAILURES:
+                    # Only sustained unavailability forgets the verified state; a single
+                    # missed reply must not trigger a full reconciliation afterwards.
+                    last = None; status='waiting-for-ddc'
+                    if warned != 'ddc':
+                        LOG.warning('DDC unavailable; no changes: %s', error)
+                        write_health(config, status, error=str(error), recovery=work.data)
+                    warned='ddc'
+                    if now >= heartbeat:
+                        write_health(config,status,profile,inputs,error=str(error),recovery=work.data)
+                        heartbeat=now+2
+                else:
+                    LOG.debug('Transient DDC failure %s/%s: %s',ddc_failures,TRANSIENT_DDC_FAILURES,error)
                 previous_poll=wall+max(0,time.monotonic()-now)
-                time.sleep(config['poll_interval']); continue
+                time.sleep(ddc_failure_delay(config['poll_interval'],ddc_failures)); continue
+            ddc_failures=0
             if warned == 'setup':
                 work.request('saved setup returned');warned=None
             if warned == 'ddc':
@@ -668,7 +811,8 @@ def watch(config, once=False, interrupt=None):
                         LOG.debug('Audio inventory unavailable: %s', error)
                     next_inventory=now+5
                 due=state != last or work.pending or now-last_check>=30
-                if due and work.eligible(now):
+                if deferred and (deferred[0]!=state or now>=deferred[1]):deferred=None
+                if due and not deferred and work.eligible(now):
                     started=time.monotonic()
                     reason=work.data.get('reason')
                     seconds={};phase='rotation_check';phase_started=started
@@ -711,10 +855,21 @@ def watch(config, once=False, interrupt=None):
                             record(ROOT,{'version':VERSION,'profile':profile,'result':'ready','inputs':inputs,'reason':reason or ('rotation' if rotated else 'layout changed'),'rotated':rotated,'orientation':angle,'seconds':seconds})
                         work.complete()
                         debounce.complete()
-                    except InputsChanged as error:
+                    except (InputsChanged, DDCReadFailed) as error:
+                        # A changed or unanswered confirmation read is not a failed
+                        # recovery attempt; it must not spend the retry budget.
                         debounce.reset();last=None;status='settling'
                         LOG.info('%s',error)
                         if once:remaining(deadline,ONCE_TIMEOUT)
+                    except LayoutDeferred as error:
+                        # Never reconfigure a sleeping display. Retry on a fresh input
+                        # state or after a bounded delay, not on every poll.
+                        deferred=(state,now+DEFERRED_RETRY_SECONDS)
+                        status,layout_status='waiting-for-ddc','deferred-display-asleep'
+                        if warned != 'deferred':LOG.info('%s',error)
+                        warned='deferred'
+                        write_health(config,status,profile,inputs,layout=layout_status,audio=audio_status,error=str(error),recovery=work.data)
+                        if once:raise
                     except (RuntimeError, subprocess.TimeoutExpired, OSError) as error:
                         failed_at=time.monotonic()
                         seconds['total']=round(failed_at-started,3)

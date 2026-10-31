@@ -28,3 +28,23 @@ Set-VCP writes now use the packet header's payload length plus the header/checks
 The earlier last-nonzero-byte scan could truncate a valid zero checksum or include stale
 buffer bytes. The hardware-free native test intercepts the transport write and checks the
 actual transmitted length. Incidental trailing whitespace was also normalized.
+
+## Long-lived reader and enumeration safety
+
+Added `serve`: one command per stdin line, one JSON reply line
+(`{"status":n,"stdout":"…","stderr":"…"}`), exit at end of input. A long-lived process
+keeps one WindowServer connection instead of one per invocation; it pumps the run loop
+before each request so enumeration follows display reconfiguration. Each request runs
+under an 8 s `alarm`, as does every one-shot command.
+
+Added read-only `display keys`: `<vendor>:<model>:<serial>` for every online display,
+including built-in and virtual ones, matching the layout helper's identity.
+
+Enumeration zero-initializes every entry, checks `CGGetOnlineDisplayList`, and bounds
+its loop; MAX_DISPLAYS is 16 so built-in and virtual displays cannot crowd out an
+external. Missing product attributes (standby, hotplug) list as "Unknown Display"
+instead of reading uninitialized pointers. Every enumerated CF/IOKit object, the
+transport service and the registry root are released, so a long-lived reader does not
+grow. An identifier matching more than one display, and indexes below 1 or past the
+list, select nothing. `-v` without a command prints usage instead of reading past
+`argv`. `help` exits 0 and a missing command exits 1 (previously inverted).

@@ -4,7 +4,7 @@
 # import <CoreGraphics/CoreGraphics.h>
 
 # ifndef MAX_DISPLAYS
-#  define MAX_DISPLAYS   4   // Set this to 2 or 4 depending on the Apple Silicon Mac you're using
+#  define MAX_DISPLAYS   16  // Online displays, including built-in and virtual ones that are skipped
 # endif
 
 # define UUID_SIZE      37
@@ -25,6 +25,8 @@ typedef struct
 typedef struct
 {
     CGDirectDisplayID id;
+    // Owned per entry; uuid and ioLocation are borrowed from info.
+    CFDictionaryRef info;
     io_service_t adapter;
     NSString *ioLocation;
     NSString *uuid;
@@ -38,7 +40,9 @@ typedef struct
 } DisplayInfos;
 
 CGDisplayCount  getOnlineDisplayInfos(DisplayInfos* displayInfos);
-DisplayInfos*   selectDisplay(DisplayInfos *displays, int connectedDisplays, char *displayIdentifier);
+void            releaseDisplayInfos(DisplayInfos* displayInfos, int count);
+// Returns NULL when nothing matches; *ambiguous is set when several displays match.
+DisplayInfos*   selectDisplay(DisplayInfos *displays, int connectedDisplays, char *displayIdentifier, bool *ambiguous);
 
 IOAVServiceRef  getDefaultDisplayAVService();
 IOAVServiceRef  getDisplayAVService(DisplayInfos* displayInfos);

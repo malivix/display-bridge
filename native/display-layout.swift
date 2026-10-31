@@ -281,6 +281,11 @@ func run() throws {
     if mismatches(baseline: baseline.screens, live: live).isEmpty {
         print("{\"changed\":false}"); return
     }
+    // A sleeping panel can report fallback modes; reconfiguring it mirrors and
+    // mode-sets hardware that is not drawing. Defer without any change.
+    if ids.contains(where: { CGDisplayIsAsleep($0) != 0 }) {
+        print("{\"changed\":false,\"deferred\":\"asleep\"}"); return
+    }
     // A mirrored screen adopts its master's mode, so only sources are mode-set.
     let sources = baseline.screens.filter { $0.mirrorOf == nil }
     // Preflight every requested mode BEFORE releasing the current mirror.

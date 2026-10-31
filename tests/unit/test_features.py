@@ -156,12 +156,14 @@ class Features(unittest.TestCase):
     def test_other_setup_never_reads_ddc_or_audio(self):
         cfg={'keys':{'pg':'p','benq':'b'},'m1ddc':'ddc','audio':{'enabled':True}}
         for screens in ([{'key':'other'}],[{'key':'p'},{'key':'b'},{'key':'laptop'}],[{'key':'p'},{'key':'p'}]):
-            with patch.object(c,'layout',return_value=screens),patch.object(c,'command') as command:
+            keys='\n'.join(x['key'] for x in screens)
+            with patch.object(c,'ddc',side_effect=lambda config,args,*a,**k:keys if args==['display','keys'] else self.fail(f'unexpected read {args}')),patch.object(c,'command') as command:
                 with self.assertRaises(c.SetupUnavailable):c.read_inputs(cfg)
                 with self.assertRaises(c.SetupUnavailable):c.sync_audio(cfg,'away')
                 command.assert_not_called()
     def test_exact_pair_is_accepted(self):
-        with patch.object(c,'layout',return_value=[{'key':'p'},{'key':'b'}]):c.verify_setup({'keys':{'pg':'p','benq':'b'}})
+        with patch.object(c,'ddc',return_value='p\nb') as ddc:c.verify_setup({'keys':{'pg':'p','benq':'b'}})
+        ddc.assert_called_once_with({'keys':{'pg':'p','benq':'b'}},['display','keys'],deadline=None)
     def test_setup_accepts_the_enrolled_lid_and_idles_on_any_other_display(self):
         enrolled = {'keys': {'pg': 'p', 'benq': 'b'}, 'builtin': 'lid'}
         plain = {'keys': {'pg': 'p', 'benq': 'b'}}
@@ -171,7 +173,7 @@ class Features(unittest.TestCase):
                  (plain, ['p', 'b', 'lid'], False)]
         for config, online, accepted in cases:
             with self.subTest(online=online, enrolled='builtin' in config), \
-                 patch.object(c, 'layout', return_value=[{'key': k} for k in online]):
+                 patch.object(c, 'ddc', return_value='\n'.join(online)):
                 if accepted:
                     c.verify_setup(config)
                 else:

@@ -11,8 +11,18 @@
 
 // -- Generic utility functions
 
+// In serve mode each request's output is captured and returned as one JSON line.
+static NSMutableString *capturedOut = nil;
+static NSMutableString *capturedErr = nil;
+
 static void writeToStdOut(NSString *text) {
+    if (capturedOut) { [capturedOut appendString:text]; return; }
     [text writeToFile:@"/dev/stdout" atomically:NO encoding:NSUTF8StringEncoding error:nil];
+}
+
+static void writeToStdErr(NSString *text) {
+    if (capturedErr) { [capturedErr appendString:text]; return; }
+    fputs(text.UTF8String, stderr);
 }
 
 static void printUsage() {
@@ -69,6 +79,7 @@ static void printUsage() {
     "     volume n            - Changes volume by n and returns the current value (requires current and max reading support).\n"
     "\n"
     " display list [detailed] - Lists displays. If `detailed` is provided, prints display extended attributes.\n"
+    "         keys            - Prints <vendor>:<model>:<serial> for every online display, one per line.\n"
     "         n               - Chooses which display to control (use number 1, 2 etc.)\n"
     "         (method=)<id>   - Chooses which display to control using a specific identification method. (If not set, it defaults to `uuid`).\n"
     "                           Possible values for `method` are:\n"
@@ -80,7 +91,10 @@ static void printUsage() {
     "                           'ext':   <vendor>:<model>:<serial>:<manufacturer>:<alphnum_serial>:<product_name>\n"
     "                           'full':  <vendor>:<model>:<serial>:<manufacturer>:<alphnum_serial>:<product_name>:<io_location>\n"
     "\n"
-    "Tip: You can also use 'l', 'v' instead of 'luminance', 'volume' etc.\n");
+    "Tip: You can also use 'l', 'v' instead of 'luminance', 'volume' etc.\n"
+    "\n"
+    " serve                   - Reads one command per stdin line and answers each with one JSON line\n"
+    "                           {\"status\":n,\"stdout\":\"...\",\"stderr\":\"...\"}. Exits at end of input.\n");
 }
 
 static void printDisplayInfos(DisplayInfos *display, int nbDisplays, bool detailed) {
@@ -102,6 +116,8 @@ static void printDisplayInfos(DisplayInfos *display, int nbDisplays, bool detail
     }
 }
 
+static bool verbose = false;
+
 // Function to handle the reading operation (get, max, chg)
 static DDCValue readingOperation(DDCTransport *transport, DDCPacket *packet) {
     DDCValue failure = {-1, -1};
@@ -119,7 +135,7 @@ static DDCValue readingOperation(DDCTransport *transport, DDCPacket *packet) {
         if (err || !validVCPReply(reply.data, packet->data[2])) continue;
         return convertI2CtoDDC((char *)reply.data);
     }
-    fprintf(stderr, "No valid matching DDC reply after three attempts\n");
+    writeToStdErr(@"No valid matching DDC reply after three attempts\n");
     return failure;
 }
 
@@ -171,32 +187,42 @@ static UInt16 computeAttributeValue(char *command, char *arg, DDCValue displayAt
     return (UInt16)newValue;
 }
 
-int main(int argc, char** argv) {
-
-    bool verbose = false;
-    argv += 1;
-    argc -= 1;
-
-	if (argc < 2) {
-		printUsage();
-		return argc && STR_EQ(argv[0], "help") ? 1 : 0;
-	}
-
-    if (STR_EQ(argv[0], "-v") || STR_EQ(argv[0], "--verbose")) {
-        argv += 1;
-        argc -= 1;
-        verbose = true;
+// Prints the same identity the layout helper uses, for every online display,
+// including built-in and virtual ones, so callers can compare topology.
+static int printDisplayKeys(void) {
+    CGDisplayCount count = 0;
+    CGDirectDisplayID ids[MAX_DISPLAYS];
+    if (CGGetOnlineDisplayList(MAX_DISPLAYS, ids, &count) != kCGErrorSuccess) {
+        writeToStdErr(@"Cannot list online displays\n");
+        return EXIT_FAILURE;
     }
+    for (CGDisplayCount i = 0; i < count && i < MAX_DISPLAYS; i++) {
+        writeToStdOut([NSString stringWithFormat:@"%u:%u:%u\n",
+            CGDisplayVendorNumber(ids[i]), CGDisplayModelNumber(ids[i]), CGDisplaySerialNumber(ids[i])]);
+    }
+    return EXIT_SUCCESS;
+}
 
-    DisplayInfos displayInfos[MAX_DISPLAYS];
+// Runs one command. Enumerated displays and the transport are owned by the caller,
+// which releases them on every path, so a long-lived serve process does not grow.
+static int execute(int argc, char **argv, DisplayInfos *displayInfos, int *enumerated, DDCTransport *transport) {
     DisplayInfos *selectedDisplay = NULL;
+
+    if (argc < 2) {
+        writeToStdOut(@"Missing parameter! Enter 'm1ddc help' for help!\n");
+        return EXIT_FAILURE;
+    }
 
     // Display lister and selection
     if (STR_EQ(argv[0], "display")) {
+        if (STR_EQ(argv[1], "keys")) {
+            return printDisplayKeys();
+        }
 
         int connectedDisplays = getOnlineDisplayInfos(displayInfos);
+        *enumerated = connectedDisplays;
         if (connectedDisplays == 0) {
-            writeToStdOut(@"No external display found, aborting");
+            writeToStdOut(@"No external display found, aborting\n");
             return EXIT_FAILURE;
         }
 
@@ -207,26 +233,27 @@ int main(int argc, char** argv) {
         }
 
         // Selecting display
-        selectedDisplay = selectDisplay(displayInfos, connectedDisplays, argv[1]);
+        bool ambiguous = false;
+        selectedDisplay = selectDisplay(displayInfos, connectedDisplays, argv[1], &ambiguous);
+        if (ambiguous) {
+            writeToStdOut(@"The specified display identifier matches more than one display; use its UUID.\n");
+            return EXIT_FAILURE;
+        }
         if (selectedDisplay == NULL) {
             writeToStdOut(@"The specified display does not exist. Use 'display list' to list displays and use it's number (1, 2...) or its UUID to specify display!\n");
             return EXIT_FAILURE;
         }
 
-		argv += 2;
+        argv += 2;
         argc -= 2;
     }
-
-    DDCTransport transport = {
-        .service = NULL,
-        .chipAddress = DDC_CHIP_ADDRESS_DEFAULT,
-    };
 
     // For unqualified commands, use the main display's matched service only
     // when it is positively identified as MCDP29xx. Otherwise preserve the
     // legacy default IOAVServiceCreate()/0x37 behavior.
     if (selectedDisplay == NULL) {
         int connectedDisplays = getOnlineDisplayInfos(displayInfos);
+        *enumerated = connectedDisplays;
         CGDirectDisplayID mainDisplayID = CGMainDisplayID();
 
         for (int i = 0; i < connectedDisplays; ++i) {
@@ -237,22 +264,22 @@ int main(int argc, char** argv) {
             DDCTransport mainTransport = getDisplayDDCTransport(displayInfos + i);
             if (mainTransport.service != NULL && mainTransport.chipAddress == DDC_CHIP_ADDRESS_MCDP29XX) {
                 selectedDisplay = displayInfos + i;
-                transport = mainTransport;
+                *transport = mainTransport;
             } else if (mainTransport.service != NULL) {
                 CFRelease(mainTransport.service);
             }
             break;
         }
 
-        if (transport.service == NULL) {
-            selectedDisplay = displayInfos;
-            transport.service = getDefaultDisplayAVService();
+        if (transport->service == NULL) {
+            selectedDisplay = connectedDisplays > 0 ? displayInfos : NULL;
+            transport->service = getDefaultDisplayAVService();
         }
     } else {
-        transport = getDisplayDDCTransport(selectedDisplay);
+        *transport = getDisplayDDCTransport(selectedDisplay);
     }
 
-    if (transport.service == NULL) {
+    if (transport->service == NULL) {
         writeToStdOut(@"Could not find a suitable external display.\n");
         return EXIT_FAILURE;
     }
@@ -262,7 +289,7 @@ int main(int argc, char** argv) {
         return EXIT_FAILURE;
     }
 
-    if (verbose) {
+    if (verbose && selectedDisplay != NULL) {
         writeToStdOut([NSString stringWithFormat:@"Using display: %@ [%@]\n", selectedDisplay->productName, selectedDisplay->uuid]);
     }
 
@@ -279,7 +306,7 @@ int main(int argc, char** argv) {
 
     // Reading current
     if (!STR_EQ(argv[0], "set")) {
-        displayAttr = readingOperation(&transport, &packet);
+        displayAttr = readingOperation(transport, &packet);
         if (displayAttr.curValue == -1) {
             return EXIT_FAILURE;
         }
@@ -303,7 +330,7 @@ int main(int argc, char** argv) {
 
         UInt16 writeValue = computeAttributeValue(argv[0], argv[2], displayAttr);
 
-        if (writingOperation(&transport, &packet, writeValue)) {
+        if (writingOperation(transport, &packet, writeValue)) {
             return EXIT_FAILURE;
         }
         writeToStdOut([NSString stringWithFormat:@"Writing %i\n", writeValue]);
@@ -311,4 +338,98 @@ int main(int argc, char** argv) {
     }
     writeToStdOut(@"Use 'set', 'get', 'max', 'chg' as first parameter! Enter 'm1ddc help' for help!\n");
     return EXIT_FAILURE;
+}
+
+static int runCommand(int argc, char **argv) {
+    DisplayInfos displayInfos[MAX_DISPLAYS];
+    memset(displayInfos, 0, sizeof(displayInfos));
+    int enumerated = 0;
+    DDCTransport transport = {
+        .service = NULL,
+        .chipAddress = DDC_CHIP_ADDRESS_DEFAULT,
+    };
+    int status = execute(argc, argv, displayInfos, &enumerated, &transport);
+    if (transport.service != NULL) CFRelease(transport.service);
+    releaseDisplayInfos(displayInfos, enumerated);
+    return status;
+}
+
+// A hung IOAVService call must not keep a process (and its WindowServer
+// connection) alive; the default SIGALRM action terminates the process.
+#define COMMAND_WATCHDOG_SECONDS 8
+#define SERVE_MAX_ARGS 16
+#define SERVE_MAX_LINE 1024
+
+// One long-lived process answers many reads: one WindowServer connection for its
+// lifetime instead of one per short-lived invocation. Blank lines are ignored.
+static int serve(void) {
+    char line[SERVE_MAX_LINE];
+    while (true) {
+        @autoreleasepool {
+            // Let CoreGraphics process display reconfiguration notifications so
+            // enumeration in a long-lived process reflects hotplug and wake.
+            CFRunLoopRunInMode(kCFRunLoopDefaultMode, 0, true);
+            if (fgets(line, sizeof(line), stdin) == NULL) return EXIT_SUCCESS;
+            size_t length = strlen(line);
+            if (length == sizeof(line) - 1 && line[length - 1] != '\n') {
+                writeToStdErr(@"Request line too long\n");
+                return EXIT_FAILURE;
+            }
+            char *args[SERVE_MAX_ARGS];
+            int count = 0;
+            bool tooMany = false;
+            for (char *token = strtok(line, " \t\r\n"); token != NULL; token = strtok(NULL, " \t\r\n")) {
+                if (count == SERVE_MAX_ARGS) { tooMany = true; break; }
+                args[count++] = token;
+            }
+            if (count == 0) continue;
+            capturedOut = [NSMutableString string];
+            capturedErr = [NSMutableString string];
+            int status;
+            if (tooMany) {
+                [capturedErr appendString:@"Too many arguments\n"];
+                status = EXIT_FAILURE;
+            } else if (STR_EQ(args[0], "serve")) {
+                [capturedErr appendString:@"Nested serve is not supported\n"];
+                status = EXIT_FAILURE;
+            } else {
+                alarm(COMMAND_WATCHDOG_SECONDS);
+                status = runCommand(count, args);
+                alarm(0);
+            }
+            NSDictionary *reply = @{@"status": @(status), @"stdout": capturedOut, @"stderr": capturedErr};
+            capturedOut = nil;
+            capturedErr = nil;
+            NSData *json = [NSJSONSerialization dataWithJSONObject:reply options:0 error:nil];
+            if (json == nil) return EXIT_FAILURE;
+            fwrite(json.bytes, 1, json.length, stdout);
+            fputc('\n', stdout);
+            fflush(stdout);
+        }
+    }
+}
+
+int main(int argc, char** argv) {
+    @autoreleasepool {
+        argv += 1;
+        argc -= 1;
+
+        if (argc >= 1 && (STR_EQ(argv[0], "-v") || STR_EQ(argv[0], "--verbose"))) {
+            argv += 1;
+            argc -= 1;
+            verbose = true;
+        }
+
+        if (argc == 1 && STR_EQ(argv[0], "serve")) {
+            return serve();
+        }
+
+        if (argc < 2) {
+            printUsage();
+            return argc && STR_EQ(argv[0], "help") ? EXIT_SUCCESS : EXIT_FAILURE;
+        }
+
+        alarm(COMMAND_WATCHDOG_SECONDS);
+        return runCommand(argc, argv);
+    }
 }

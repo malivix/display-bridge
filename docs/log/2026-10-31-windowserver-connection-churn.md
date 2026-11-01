@@ -57,9 +57,18 @@ Rollback: reinstall the previous release with `rollback.py`; no configuration fo
   0.18 s each (59 succeeded). `display-layout check` on the live baseline matched; the
   rebuilt audio helper's inventory equals the installed one.
 
+## Deployment
+
+Installed 2.11.0 on Mac A with the baseline kept. The first attempt stopped at the build
+phase, before activation, because the installer's native DDC test link list lacked
+`ioregistry.m` and IOKit (fixed in the following commit). After the reinstall the
+controller reported `ready extended`, one `display-ddc serve` process kept the same PID
+across checks, and WindowServer logged 6 new client connections in 80 s, none from
+`display-ddc`.
+
 ## Not done
 
-Not installed; the running controller is still 2.10.2. Not physically exercised: hotplug or
+Not physically exercised: hotplug or
 power-cycling a monitor with the long-lived reader running (enumeration freshness relies on
 the run-loop pump and the 10-minute recycle), the asleep deferral, a full input transition
 and listening check, and whether WindowServer stays up beyond 30 h. Proxy matching by

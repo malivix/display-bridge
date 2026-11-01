@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// Public CoreAudio output discovery and explicit UID selection. No volume changes.
+// Public CoreAudio output discovery, explicit UID selection and sample rate. No volume changes.
 #import <Foundation/Foundation.h>
 #import <CoreAudio/CoreAudio.h>
 #import <sys/file.h>
@@ -98,27 +98,38 @@ static BOOL waitRate(AudioObjectID id, Float64 wanted) {
     }
     return NO;
 }
-static Float64 refreshStream(AudioObjectID id, NSString *uid, NSString *journal) {
-    Float64 original=sampleRate(id);
+static BOOL rateWritable(AudioObjectID id) {
     AudioObjectPropertyAddress a=address(kAudioDevicePropertyNominalSampleRate,kAudioObjectPropertyScopeGlobal);
     Boolean settable=false;
-    if(AudioObjectIsPropertySettable(id,&a,&settable) || !settable) fail(@"Sample rate is not writable; no refresh performed");
-    a=address(kAudioDevicePropertyAvailableNominalSampleRates,kAudioObjectPropertyScopeGlobal);
+    return !AudioObjectIsPropertySettable(id,&a,&settable) && settable;
+}
+static BOOL rateSupported(AudioObjectID id, Float64 rate) {
+    AudioObjectPropertyAddress a=address(kAudioDevicePropertyAvailableNominalSampleRates,kAudioObjectPropertyScopeGlobal);
     UInt32 bytes=0;
-    if(AudioObjectGetPropertyDataSize(id,&a,0,NULL,&bytes) || !bytes) fail(@"No supported audio rates; no refresh performed");
+    if(AudioObjectGetPropertyDataSize(id,&a,0,NULL,&bytes) || !bytes) return NO;
     AudioValueRange *ranges=calloc(1,bytes);
     if(!ranges) fail(@"Cannot allocate rate list");
-    OSStatus result=AudioObjectGetPropertyData(id,&a,0,NULL,&bytes,ranges);
+    BOOL found=NO;
+    if(!AudioObjectGetPropertyData(id,&a,0,NULL,&bytes,ranges))
+        for(UInt32 i=0;i<bytes/sizeof(AudioValueRange) && !found;i++)
+            found=rate>=ranges[i].mMinimum-1 && rate<=ranges[i].mMaximum+1;
+    free(ranges);return found;
+}
+// Restores `restore` when nonzero (the enrolled rate), otherwise the rate found.
+static Float64 refreshStream(AudioObjectID id, NSString *uid, NSString *journal, Float64 restore) {
+    Float64 original=sampleRate(id);
+    if(!restore) restore=original;
+    if(!rateWritable(id)) fail(@"Sample rate is not writable; no refresh performed");
+    if(!rateSupported(id,restore)) fail(@"Requested audio rate is unsupported; no refresh performed");
     Float64 alternative=0;
     Float64 choices[]={44100,48000};
-    if(!result) for(int c=0;c<2 && !alternative;c++) for(UInt32 i=0;i<bytes/sizeof(AudioValueRange);i++)
-        if(fabs(choices[c]-original)>1 && choices[c]>=ranges[i].mMinimum && choices[c]<=ranges[i].mMaximum) alternative=choices[c];
-    free(ranges);
+    for(int c=0;c<2 && !alternative;c++)
+        if(fabs(choices[c]-restore)>1 && rateSupported(id,choices[c])) alternative=choices[c];
     if(!alternative) fail(@"No supported alternate rate; no refresh performed");
     if(integer(kAudioObjectSystemObject,kAudioHardwarePropertyDefaultOutputDevice)!=id) {
         fputs("Audio output changed before refresh; selection preserved\n",stderr);exit(75);
     }
-    NSDictionary *record=@{@"uid":uid,@"original":@(original),@"alternate":@(alternative),
+    NSDictionary *record=@{@"uid":uid,@"original":@(restore),@"alternate":@(alternative),
         @"created":@([[NSDate date] timeIntervalSince1970]),@"attempt":[NSUUID UUID].UUIDString};
     NSError *error=nil;
     NSData *data=[NSJSONSerialization dataWithJSONObject:record options:0 error:&error];
@@ -128,14 +139,14 @@ static Float64 refreshStream(AudioObjectID id, NSString *uid, NSString *journal)
     if(journalFD<0 || fsync(journalFD))fail(@"Could not sync recovery journal; no rate change applied");
     close(journalFD);
     // Always restore the captured rate, including after a failed alternate write.
-    result=setRate(id,alternative);
+    OSStatus result=setRate(id,alternative);
     BOOL changed=!result && waitRate(id,alternative);
     #ifdef DISPLAY_AUDIO_TESTING
     if(changed) raise(SIGSTOP); // Only the separately compiled fault-injection binary.
     #endif
     if(changed) usleep(250000);
-    OSStatus restored=setRate(id,original);
-    BOOL restoredOK=!restored && waitRate(id,original);
+    OSStatus restored=setRate(id,restore);
+    BOOL restoredOK=!restored && waitRate(id,restore);
     if(!changed || !restoredOK) fail([NSString stringWithFormat:@"Audio refresh failed: alternate=%d restored=%d verified=%d",result,restored,restoredOK]);
     if(unlink(journal.fileSystemRepresentation)) fail(@"Rate restored but recovery journal could not be cleared");
     usleep(250000);
@@ -161,10 +172,22 @@ static void recoverJournal(NSString *path, NSArray *rows) {
     AudioObjectID id=[matches[0][@"id"]unsignedIntValue];
     Float64 current=sampleRate(id);
     if(fabs(current-original)>=1) {
+        // A refresh that enforces a rate starts from the alternate, so this also covers it.
         if(fabs(current-alternate)>=1)fail(@"Audio rate changed outside automation; recovery retained without overwriting it");
         if(setRate(id,original) || !waitRate(id,original))fail(@"Interrupted audio rate restoration failed; recovery retained");
     }
     if(unlink(path.fileSystemRepresentation))fail(@"Recovered audio rate but could not clear journal");
+}
+static Float64 parseRate(const char *value) {
+    char *end=NULL;double rate=strtod(value,&end);
+    if(!end || *end || !isfinite(rate) || rate<8000 || rate>384000) fail(@"Invalid audio sample rate");
+    return rate;
+}
+static AudioObjectID uniqueOutput(NSArray *rows, const char *uid, NSString *error) {
+    NSMutableArray *matches=[NSMutableArray array];
+    for(NSDictionary *row in rows) if([row[@"uid"] isEqualToString:@(uid)] && [row[@"alive"] boolValue]) [matches addObject:row];
+    if(matches.count!=1) fail(error);
+    return [matches[0][@"id"] unsignedIntValue];
 }
 int main(int argc,const char **argv) { @autoreleasepool {
     NSArray *rows=outputs();
@@ -177,16 +200,28 @@ int main(int argc,const char **argv) { @autoreleasepool {
     if(argc==3 && strcmp(argv[1],"recover")==0) {
         NSString *journal=@(argv[2]);journalLock(journal);recoverJournal(journal,rows);return 0;
     }
-    if(argc==4 && strcmp(argv[1],"refresh")==0) {
+    if((argc==4 || argc==5) && strcmp(argv[1],"refresh")==0) {
         NSString *journal=@(argv[3]);journalLock(journal);recoverJournal(journal,rows);
-        NSMutableArray *matches=[NSMutableArray array];
-        for(NSDictionary *row in rows) if([row[@"uid"] isEqualToString:@(argv[2])] && [row[@"alive"] boolValue]) [matches addObject:row];
-        if(matches.count!=1) fail(@"Refresh output UID unavailable or ambiguous");
-        Float64 original=refreshStream([matches[0][@"id"] unsignedIntValue],@(argv[2]),journal);
-        printf("{\"original_rate\":%.17g}\n",original);return 0;
+        Float64 restore=argc==5?parseRate(argv[4]):0;
+        AudioObjectID id=uniqueOutput(rows,argv[2],@"Refresh output UID unavailable or ambiguous");
+        Float64 original=refreshStream(id,@(argv[2]),journal,restore);
+        printf("{\"original_rate\":%.17g,\"rate\":%.17g}\n",original,sampleRate(id));return 0;
+    }
+    if(argc==4 && strcmp(argv[1],"rate")==0) {
+        Float64 wanted=parseRate(argv[3]);
+        AudioObjectID id=uniqueOutput(rows,argv[2],@"Audio output UID unavailable or ambiguous");
+        Float64 original=sampleRate(id);
+        BOOL changed=fabs(original-wanted)>=1;
+        if(changed) {
+            if(!rateWritable(id)) fail(@"Sample rate is not writable; rate unchanged");
+            if(!rateSupported(id,wanted)) fail(@"Requested audio rate is unsupported; rate unchanged");
+            OSStatus result=setRate(id,wanted);
+            if(result || !waitRate(id,wanted)) fail([NSString stringWithFormat:@"Audio rate change failed: %d",result]);
+        }
+        printf("{\"changed\":%s,\"original_rate\":%.17g,\"rate\":%.17g}\n",changed?"true":"false",original,sampleRate(id));return 0;
     }
     if((argc!=4 && argc!=6) || strcmp(argv[1],"select") || (strcmp(argv[3],"output") && strcmp(argv[3],"both")))
-        fail(@"Usage: display-audio status | select UID output|both [EXPECTED_OUTPUT EXPECTED_ALERTS] | refresh UID JOURNAL | recover JOURNAL");
+        fail(@"Usage: display-audio status | select UID output|both [EXPECTED_OUTPUT EXPECTED_ALERTS] | refresh UID JOURNAL [RATE] | rate UID RATE | recover JOURNAL");
     NSMutableArray *matches=[NSMutableArray array];
     for(NSDictionary *row in rows) if([row[@"uid"] isEqualToString:@(argv[2])] && [row[@"alive"] boolValue]) [matches addObject:row];
     if(matches.count!=1) fail(@"Audio output UID unavailable or ambiguous");

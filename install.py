@@ -497,6 +497,7 @@ def run_install(argv, resources):
                     previous["audio"]["refresh_on_transition"] = (
                         ["pg", "benq"] if enabled else []
                     )
+                previous["audio"].setdefault("sample_rate", 48000)
                 (root / "config.json").write_text(json.dumps(previous, indent=2) + "\n")
                 (root / "baseline.json").write_text(
                     json.dumps(previous["baseline"], indent=2) + "\n"

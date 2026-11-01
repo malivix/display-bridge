@@ -455,10 +455,42 @@ def capture_audio():
         if len(rows) != 1:
             raise RuntimeError(f'Cannot uniquely identify {label} audio output')
         return rows[0]['uid']
-    return {'enabled': True, 'refresh_on_transition': ['pg','benq'],
+    return {'enabled': True, 'refresh_on_transition': ['pg','benq'], 'sample_rate': SAMPLE_RATE,
             'pg': unique([d for d in devices if d['name'] == 'PG42UQ'], 'PG'),
             'benq': unique([d for d in devices if d['name'] == 'BenQ RD280UG'], 'BenQ'),
             'fallback': unique([d for d in devices if d.get('builtin')], 'built-in')}
+
+SAMPLE_RATE = 48000
+RATE_WARNED = set()
+
+def audio_rate(audio):
+    """Enrolled monitor sample rate; an explicit null leaves rates alone."""
+    return audio.get('sample_rate', SAMPLE_RATE)
+
+def enforce_rates(audio, devices, rate, deadline=None, skip=()):
+    """Hold both monitors at the enrolled rate. A refused change is reported, not fatal."""
+    changed, errors = [], []
+    for monitor in ('pg','benq'):
+        uid=audio[monitor]
+        device=next((d for d in devices if d['uid']==uid and d.get('alive')),None)
+        current=device.get('sampleRate') if device else None
+        if uid in skip or not isinstance(current,(int,float)):
+            continue
+        if abs(current-rate)<1:
+            RATE_WARNED.discard(uid)
+            continue
+        try:
+            command([AUDIO,'rate',uid,str(rate)],timeout=4,deadline=deadline)
+        except (RuntimeError, subprocess.SubprocessError, OSError) as error:
+            errors.append(monitor)
+            if uid not in RATE_WARNED:
+                RATE_WARNED.add(uid)
+                LOG.warning('%s audio rate stays %g Hz; %g Hz refused: %s',monitor,current,rate,error)
+            continue
+        RATE_WARNED.discard(uid)
+        changed.append(monitor)
+        LOG.info('%s audio rate set from %g Hz to %g Hz',monitor,current,rate)
+    return changed, errors
 
 def sync_audio(config, profile, deadline=None, refresh=False):
     verify_setup(config,deadline)
@@ -470,6 +502,8 @@ def sync_audio(config, profile, deadline=None, refresh=False):
     devices=json.loads(command([AUDIO,'status'],deadline=deadline))
     decision=audio_route(audio,profile,devices)
     refreshed=False
+    rate=audio_rate(audio)
+    rates=([],[])
     try:
         if decision:
             uid,scope=decision
@@ -485,12 +519,14 @@ def sync_audio(config, profile, deadline=None, refresh=False):
         if (refresh or decision) and monitor in audio.get('refresh_on_transition',[]) and selected and selected['uid']==audio[monitor]:
             if deadline is not None and remaining(deadline,4)<4:
                 raise TimeoutError('Insufficient time to safely refresh the audio stream')
-            response=json.loads(command([AUDIO,'refresh',audio[monitor],JOURNAL],timeout=4,deadline=deadline))
+            response=json.loads(command([AUDIO,'refresh',audio[monitor],JOURNAL,*([str(rate)] if rate else [])],timeout=4,deadline=deadline))
             if not isinstance(response,dict) or not isinstance(response.get('original_rate'),(float,int)):
                 raise RuntimeError('Invalid native audio restoration receipt')
-            selected=dict(selected,sampleRate=response['original_rate'])
+            selected=dict(selected,sampleRate=response.get('rate',response['original_rate']))
             refreshed=True
-            LOG.info('%s audio stream refreshed after transition; original rate restored',monitor)
+            LOG.info('%s audio stream refreshed after transition; %s rate restored',monitor,'enrolled' if rate else 'original')
+        if rate:
+            rates=enforce_rates(audio,devices,rate,deadline,skip={audio[monitor]} if refreshed else ())
     except AudioSelectionChanged:
         devices=json.loads(command([AUDIO,'status'],deadline=deadline))
         selected=next((d for d in devices if d.get('default')),None)
@@ -498,7 +534,10 @@ def sync_audio(config, profile, deadline=None, refresh=False):
     managed={audio.get(k) for k in ('pg','benq','fallback')}
     state='managed' if selected and selected['uid'] in managed else 'external-selection-preserved'
     if decision and selected:LOG.info('Audio selected for profile=%s: %s',profile,selected['name'])
-    return {'state':state,'selected':selected,'route_changed':bool(decision),'refreshed':refreshed}
+    result={'state':state,'selected':selected,'route_changed':bool(decision),'refreshed':refreshed}
+    if rates[0]:result['rate_changed']=rates[0]
+    if rates[1]:result['rate_refused']=rates[1]
+    return result
 
 
 def capture_configuration(host, m1ddc):
@@ -574,6 +613,16 @@ def write_health(config, status, profile=None, inputs=None, **details):
     temporary.write_text(json.dumps(value) + '\n')
     temporary.replace(HEALTH)
 
+def validate_audio(audio):
+    if not isinstance(audio.get('refresh_on_transition', []), list) or not set(audio.get('refresh_on_transition', [])).issubset({'pg','benq'}):
+        raise RuntimeError('Invalid audio refresh policy')
+    rate = audio.get('sample_rate', SAMPLE_RATE)
+    if rate is not None and (isinstance(rate,bool) or not isinstance(rate,int) or not 8000 <= rate <= 384000):
+        raise RuntimeError('Invalid audio sample rate')
+    uids = [audio.get(k) for k in ('pg','benq','fallback')]
+    if any(not isinstance(uid,str) or not uid for uid in uids) or len(set(uids)) != 3:
+        raise RuntimeError('Invalid audio device mapping; rerun installer')
+
 def validate_config(config):
     if not isinstance(config,dict):raise RuntimeError('Configuration must be a JSON object')
     if not isinstance(config.get('baseline'),dict) or not isinstance(config.get('keys'),dict):
@@ -599,11 +648,7 @@ def validate_config(config):
         raise RuntimeError('Invalid built-in display configuration; rerun the installer with --capture-lid')
     audio = config.get('audio')
     if audio and audio.get('enabled'):
-        if not isinstance(audio.get('refresh_on_transition', []), list) or not set(audio.get('refresh_on_transition', [])).issubset({'pg','benq'}):
-            raise RuntimeError('Invalid audio refresh policy')
-        uids = [audio.get(k) for k in ('pg','benq','fallback')]
-        if any(not isinstance(uid,str) or not uid for uid in uids) or len(set(uids)) != 3:
-            raise RuntimeError('Invalid audio device mapping; rerun installer')
+        validate_audio(audio)
     validate_rotation(config)
     if json.loads(BASELINE.read_text()) != config['baseline']:
         raise RuntimeError('Baseline file differs from configuration; rerun installer to repair')

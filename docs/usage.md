@@ -190,6 +190,11 @@ external headset; **Preserve output for 30 minutes** suspends automatic routing 
 use a manual selection. Resume automatic audio when wanted. Selection readback alone does
 not establish audible sound—listen to verify a repair.
 
+Both monitors are held at 48 kHz (`audio.sample_rate` in `config.json`; `null` leaves
+rates alone). The controller checks every 30 s and after each transition, and changes only
+a monitor whose rate drifted; the post-transition stream refresh ends at that rate too. The
+built-in speakers are not changed. A monitor that refuses the rate is logged once and left as is.
+
 **Pause…** in the main window offers 15, 30 or 60 minutes, or **Pause until resumed**.
 Timed pauses expire automatically; **Resume** ends either kind immediately. These controls
 stop automatic reconciliation without changing the current display layout. The compact

@@ -2,8 +2,14 @@
 
 ## Unreleased
 
-Source changes only; not installed. Physical qualification is listed in
-[docs/log/2026-10-31-windowserver-connection-churn.md](docs/log/2026-10-31-windowserver-connection-churn.md).
+Physical qualification is listed in
+[docs/log/2026-10-31-windowserver-connection-churn.md](docs/log/2026-10-31-windowserver-connection-churn.md)
+and [docs/log/2026-11-01-monitor-sample-rate.md](docs/log/2026-11-01-monitor-sample-rate.md).
+
+- Hold both monitors at 48 kHz. A monitor that macOS or another app moved to another rate
+  is set back within 30 s or at the next transition; the transition stream refresh now
+  restores the enrolled rate instead of whatever rate it found. `display-audio rate UID RATE`
+  sets one output after checking that the rate is writable and supported.
 
 - Read monitors through one long-lived `display-ddc serve` process instead of starting
   four or five helpers per poll. Each helper opened and closed its own WindowServer

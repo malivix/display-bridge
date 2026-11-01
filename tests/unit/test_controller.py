@@ -241,11 +241,64 @@ class ReliabilityTests(unittest.TestCase):
         devices[1]['default']=True;devices[1]['system']=True
         with patch.object(c,'command',side_effect=lambda args,**kw:json.dumps({'original_rate':48000} if 'refresh' in args else devices)) as command:
             c.sync_audio({'audio':audio},'benq',refresh=True)
-            self.assertTrue(any(call.args[0] == [c.AUDIO,'refresh','b',c.JOURNAL] for call in command.call_args_list))
+            self.assertTrue(any(call.args[0] == [c.AUDIO,'refresh','b',c.JOURNAL,'48000'] for call in command.call_args_list))
         devices[1]['default']=False;devices[3]['default']=True
         with patch.object(c,'command',side_effect=lambda args,**kw:json.dumps({'original_rate':48000} if 'refresh' in args else devices)) as command:
             c.sync_audio({'audio':audio},'extended',refresh=True)
             self.assertFalse(any('refresh' in call.args[0] or 'select' in call.args[0] for call in command.call_args_list))
+
+    def test_monitor_rates_are_held_at_enrolled_rate(self):
+        import json
+        audio={'enabled':True,'pg':'p','benq':'b','fallback':'i','refresh_on_transition':['pg','benq']}
+        devices=[dict(uid='p',name='p',alive=True,default=True,system=True,sampleRate=48000),
+                 dict(uid='b',name='b',alive=True,default=False,system=False,sampleRate=44100),
+                 dict(uid='i',name='i',alive=True,default=False,system=False,sampleRate=44100)]
+        def command(args,**kw):
+            if 'refresh' in args:return json.dumps({'original_rate':44100,'rate':48000})
+            if 'rate' in args:return json.dumps({'changed':True,'rate':48000})
+            return json.dumps(devices)
+        with patch.object(c,'command',side_effect=command) as calls:
+            result=c.sync_audio({'audio':audio},'extended',refresh=False)
+        rate_calls=[call.args[0] for call in calls.call_args_list if 'rate' in call.args[0]]
+        self.assertEqual(rate_calls,[[c.AUDIO,'rate','b','48000']],'only the drifted monitor changes; built-in is left alone')
+        self.assertEqual(result['rate_changed'],['benq'])
+        devices[0]['sampleRate']=44100
+        with patch.object(c,'command',side_effect=command) as calls:
+            result=c.sync_audio({'audio':audio},'extended',refresh=True)
+        issued=[call.args[0][1] for call in calls.call_args_list if call.args[0][1] in ('rate','refresh')]
+        self.assertEqual(issued,['refresh','rate'],'the refreshed monitor ends at the enrolled rate without a second write')
+        self.assertEqual(result['selected']['sampleRate'],48000)
+        with patch.object(c,'command',side_effect=command) as calls:
+            c.sync_audio({'audio':dict(audio,sample_rate=None)},'extended',refresh=True)
+        self.assertIn([c.AUDIO,'refresh','p',c.JOURNAL],[call.args[0] for call in calls.call_args_list])
+        self.assertFalse(any(call.args[0][1]=='rate' for call in calls.call_args_list))
+
+    def test_refused_rate_is_reported_once_and_not_fatal(self):
+        import json
+        audio={'enabled':True,'pg':'p','benq':'b','fallback':'i'}
+        devices=[dict(uid='p',name='p',alive=True,default=True,system=True,sampleRate=48000),
+                 dict(uid='b',name='b',alive=True,default=False,system=False,sampleRate=44100),
+                 dict(uid='i',name='i',alive=True,default=False,system=False,sampleRate=48000)]
+        def command(args,**kw):
+            if 'rate' in args:raise RuntimeError('display-audio: Requested audio rate is unsupported; rate unchanged')
+            return json.dumps(devices)
+        c.RATE_WARNED.clear()
+        with patch.object(c,'command',side_effect=command), self.assertLogs(c.LOG,'WARNING') as logs:
+            first=c.sync_audio({'audio':audio},'extended')
+            second=c.sync_audio({'audio':audio},'extended')
+        self.assertEqual(len(logs.records),1)
+        self.assertEqual((first['state'],first['rate_refused']),('managed',['benq']))
+        self.assertEqual(second['rate_refused'],['benq'])
+        c.RATE_WARNED.clear()
+
+    def test_audio_sample_rate_validation(self):
+        for rate,valid in [(48000,True),(None,True),(44100,True),(0,False),(True,False),('48000',False),(48000.5,False)]:
+            with self.subTest(rate=rate):
+                audio={'enabled':True,'pg':'p','benq':'b','fallback':'i','sample_rate':rate}
+                error=None
+                try:c.validate_audio(audio)
+                except RuntimeError as e:error=e
+                self.assertEqual(error is None,valid)
 
     def test_concurrent_audio_selection_is_preserved(self):
         import json

@@ -23,7 +23,7 @@ Rollback: `rollback.py`; an older controller ignores `sample_rate`.
 
 ## Validation
 
-- 347 unit tests, including drifted-monitor, refresh-ends-at-rate, disabled policy,
+- 344 unit tests (3 new), including drifted-monitor, refresh-ends-at-rate, disabled policy,
   refused-once and validation cases; `./scripts/verify --native`.
 - On Mac A with the rebuilt helper: `rate` for PG and BenQ at 48 kHz returned
   `changed:false`; an unknown UID and a malformed rate exited 1.
